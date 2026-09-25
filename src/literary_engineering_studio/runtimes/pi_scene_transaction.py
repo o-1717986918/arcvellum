@@ -17,6 +17,7 @@ from literary_engineering_studio_engine.public.literary import (
     select_active_style_references,
     recent_formal_reference_ids,
     active_style_mount_snapshot_payload,
+    active_style_prompt_text,
     render_style_reference_selection,
 )
 from ..runtime.role_conversation import RoleConversationGateway
@@ -31,7 +32,7 @@ from .scene_performance import (
     fulfill_scene_material_requests, scene_creative_cache_digest,
     scene_expression_snapshot, scene_performance_materials,
 )
-from .scene_performance_ownership import compact_performance_materials, has_actor_entries
+from .scene_performance_ownership import author_handoff_materials, compact_performance_materials, has_actor_entries
 from ..runtime.prompt_recipes import lean_scene_prompt_recipe
 from .scene_source_evidence import scene_source_evidence
 from .pi_scene_review_prompt import render_scene_review_prompt
@@ -76,6 +77,7 @@ class PiSceneTransactionRuntime:
         projection_digest = self._creative_projection_digest(selection, expression)
         initial_sources = self._source_evidence(brief, purpose="create")
         style_reference = self._style_reference(selection)
+        author_style = self._author_style_reference(style_reference)
         creative_digest = scene_creative_cache_digest(projection_digest, brief.to_dict(), initial_sources, self._config)
         cache = self._cache_path(transaction_id, f"creative_result_{creative_digest}.json")
         materials_cache = self._cache_path(transaction_id, f"performance_materials_{creative_digest}.json")
@@ -117,9 +119,11 @@ class PiSceneTransactionRuntime:
         result, materials = self._ask_creator_with_materials(
             transaction_id, brief, expression, initial_sources, style_reference, materials_cache, materials,
             lambda current: render_scene_create_prompt(
-                brief, source_evidence=self._source_evidence(brief, purpose="create", reserve_chars=len(current)),
-                allowed_refs=known_scene_refs(brief), style_reference_block=style_reference,
-                expression_context_block=expression_context, performance_material_block=current,
+                brief, source_evidence=self._source_evidence(
+                    brief, purpose="create", reserve_chars=len(author_handoff_materials(current)) + len(author_style)),
+                allowed_refs=known_scene_refs(brief), style_reference_block=author_style,
+                expression_context_block=expression_context,
+                performance_material_block=author_handoff_materials(current),
                 allow_material_requests=_scene_performance_enabled(self._config),
             ),
         )
@@ -213,13 +217,15 @@ class PiSceneTransactionRuntime:
             self._cache_hits += 1
             return creative_result_from_payload(cached)
         style_reference = self._style_reference(selection)
+        author_style = self._author_style_reference(style_reference)
         expression_context = _expression_context_for_prompt(expression, actor_owned=has_actor_entries(materials))
         revised, materials = self._ask_creator_with_materials(
             transaction_id, brief, expression, initial_sources, style_reference, materials_cache, materials,
             lambda current: render_scene_revision_prompt(
                 brief, result, verification, review,
-                source_evidence=self._source_evidence(brief, purpose="revise", reserve_chars=len(current)),
-                allowed_refs=known_scene_refs(brief), style_reference_block=style_reference,
+                source_evidence=self._source_evidence(
+                    brief, purpose="revise", reserve_chars=len(current) + len(author_style)),
+                allowed_refs=known_scene_refs(brief), style_reference_block=author_style,
                 expression_context_block=expression_context,
                 performance_material_block=compact_performance_materials(current) if current else "",
                 allow_material_requests=_scene_performance_enabled(self._config),
@@ -305,6 +311,15 @@ class PiSceneTransactionRuntime:
             if owner["active"] else ""
         )
         return prefix + render_style_reference_selection(selection)
+
+    def _author_style_reference(self, selected_reference: str) -> str:
+        mounted = active_style_prompt_text(self._project_root)
+        if not mounted:
+            return selected_reference
+        return (
+            "### 项目已挂载文风（约束 prose 表达；交付格式由本场 Output 决定）\n"
+            + mounted + "\n\n" + selected_reference
+        )
 
     def _source_evidence(self, brief: SceneBrief, *, purpose: str, reserve_chars: int = 0,
                          max_chars: int | None = None) -> str:

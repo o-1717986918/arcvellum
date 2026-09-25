@@ -50,6 +50,23 @@ class SceneAuthorContextTests(unittest.TestCase):
             self.assertIn("本场旧信", evidence)
             self.assertNotIn("全篇创作意图", evidence)
 
+    def test_long_previous_draft_does_not_hide_latest_user_direction(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "drafts" / "scenes").mkdir(parents=True)
+            (root / "workflow" / "studio").mkdir(parents=True)
+            (root / "drafts" / "scenes" / "scene_0000.md").write_text(
+                "开篇事实。" + "旧场中段。" * 3000 + "结尾她决定留下。", encoding="utf-8")
+            (root / "workflow" / "studio" / "user_directions.md").write_text(
+                "早期方向。" * 1000 + "最新方向：让她主动提出交易。", encoding="utf-8")
+            brief = replace(_brief(), source_refs=(
+                "drafts/scenes/scene_0000.md", "workflow/studio/user_directions.md"))
+            evidence = scene_source_evidence(root, brief, purpose="create", indexed_style=False)
+            self.assertIn("结尾她决定留下。", evidence)
+            self.assertIn("最新方向：让她主动提出交易。", evidence)
+            self.assertNotIn("旧场中段。" * 500, evidence)
+            self.assertLess(len(evidence), 6_000)
+
 
 if __name__ == "__main__":
     unittest.main()

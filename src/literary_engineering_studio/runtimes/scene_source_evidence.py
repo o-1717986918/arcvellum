@@ -20,7 +20,7 @@ def scene_source_evidence(
     max_chars: int | None = None,
 ) -> str:
     recipe = lean_scene_prompt_recipe(purpose)
-    remaining = max(0, recipe.soft_character_limit - 8_000 - reserve_chars)
+    remaining = _source_budget(purpose, recipe.soft_character_limit, reserve_chars)
     if max_chars is not None:
         remaining = min(remaining, max(0, max_chars))
     north_star = _author_north_star(project_root, brief.scene_id)
@@ -43,6 +43,7 @@ def scene_source_evidence(
         body = path.read_text(encoding="utf-8", errors="replace").strip()
         if not body:
             continue
+        body = _source_excerpt(reference, body, brief.scene_id)
         header = f"### {reference}\n"
         separator = 2 if blocks else 0
         if remaining <= len(header) + separator:
@@ -53,6 +54,32 @@ def scene_source_evidence(
         if remaining <= 0:
             break
     return "\n\n".join(blocks)
+
+
+def _source_budget(purpose: str, soft_limit: int, reserve_chars: int) -> int:
+    return min(9_000 if purpose == "create" else 7_000, max(0, soft_limit - 8_000 - reserve_chars))
+
+
+def _source_excerpt(reference: str, body: str, scene_id: str) -> str:
+    """Share source attention across the current brief, previous ending and latest direction."""
+
+    if reference == f"scenes/{scene_id}.yaml":
+        limit = 900  # Most of this plan is already present in SceneBrief.
+    elif reference.startswith("drafts/scenes/"):
+        limit = 1_800  # The previous scene's ending is the important handoff.
+    elif reference.endswith("user_directions.md"):
+        limit = 1_500  # Later entries supersede earlier direction.
+    elif reference.startswith("characters/"):
+        limit = 850
+    else:
+        limit = 1_000
+    if len(body) <= limit:
+        return body
+    if reference.startswith("drafts/scenes/"):
+        return body[:300] + "\n[…中段已省略…]\n" + body[-(limit - 320):]
+    if reference.endswith("user_directions.md"):
+        return body[-limit:]
+    return body[:limit]
 
 
 def _owner_style_block(project_root: Path, remaining: int) -> str:
@@ -89,10 +116,10 @@ def _north_star_payload(plan: dict[str, object], scene_id: str) -> dict[str, obj
     design = plan.get("narrative_design")
     design = design if isinstance(design, dict) else {}
     return {
-        "premise": str(plan.get("premise") or "")[:250],
+        "premise": str(plan.get("premise") or "")[:180],
         "central_question": str(plan.get("central_question") or "")[:150],
-        "ending_choice": str(plan.get("ending_choice") or "")[:250],
-        "narrative_design": {key: str(value)[:180] for key, value in design.items()},
+        "ending_choice": str(plan.get("ending_choice") or "")[:200],
+        "narrative_design": {key: str(value)[:120] for key, value in design.items()},
         "scene_story_time": str(scene.get("story_time") or "")[:160],
         "current_chapter": {key: str(chapter.get(key) or "")[:150]
                             for key in ("chapter_id", "title", "dramatic_turn", "obligation", "reader_question")},

@@ -194,6 +194,33 @@ def compact_performance_materials(materials: str) -> str:
         compact, ensure_ascii=False, separators=(",", ":"))
 
 
+def author_handoff_materials(materials: str) -> str:
+    """Give the author the playable sequence, keeping the full rehearsal only for provenance."""
+
+    if not materials:
+        return ""
+    try:
+        packet = json.loads(materials.split("\n", 1)[1])
+    except (IndexError, json.JSONDecodeError) as exc:
+        raise ValueError("first-level performance material block is malformed") from exc
+    if not isinstance(packet, dict):
+        raise ValueError("first-level performance material block is malformed")
+    turns = [
+        {key: turn[key] for key in ("turn", "beat_id", "scene_change", "entry_ids") if key in turn}
+        for turn in packet.get("director_turns", []) if isinstance(turn, dict)
+    ]
+    entries = [
+        {key: entry[key] for key in ("entry_id", "beat_id", "speaker", "spoken", "first_person_action", "private_impulse")
+         if key in entry and entry[key]}
+        for entry in _actor_entries(packet)
+    ]
+    compact = {"director_turns": turns, "actor_entries": entries}
+    if "environment_candidates" in packet:
+        compact["environment_candidates"] = packet["environment_candidates"]
+    return "按轮次排列的角色言行、情势变化与环境候选；正文由主创取舍组织。\n" + json.dumps(
+        compact, ensure_ascii=False, separators=(",", ":"))
+
+
 def _actor_entries(packet: Any) -> list[dict[str, Any]]:
     if not isinstance(packet, dict):
         return []
@@ -222,4 +249,4 @@ def _normalize(text: Any) -> str:
     return _LETTERS.sub("", text) if isinstance(text, str) else ""
 
 
-__all__ = ["audit_visible_actions", "compact_performance_materials", "has_actor_entries", "ownership_repair_instruction", "repair_actor_ownership", "unlicensed_scene_dialogue"]
+__all__ = ["audit_visible_actions", "author_handoff_materials", "compact_performance_materials", "has_actor_entries", "ownership_repair_instruction", "repair_actor_ownership", "unlicensed_scene_dialogue"]

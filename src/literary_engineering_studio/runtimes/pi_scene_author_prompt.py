@@ -26,10 +26,8 @@ def render_scene_create_prompt(
         if performance_material_block else ""
     )
     material_final_pass = (
-        "一级演员提供角色言行与临场选择的优先素材；你可以取舍、改写，也可以为因果衔接和文学效果亲自补写必要的台词与动作。需要听见该角色进一步自主回应时，可通过 material_requests 请他续演。删选或补写一人的话时，连同下一人的回答检查所回应的那句话是否仍在正文中。让误称、误会或追问有读者能察觉的起因、具体的对话对象与随之变化的关系；前因若由另一人挑起，先让那人的言行在正文里发生。"
-        "你负责把推演提升为有因果和审美判断的小说：展开既有设定，决定本场在全书中的剧情位移，提出世界状态变化并如实填写 SceneDelta。"
-        "心理、情绪和环境由你写成正文，在关系变化处充分停留。"
-        "关键物证、设备结论与精确数值仍以 SceneBrief 和来源为准。"
+        "演员素材是人物可能说出、做出的第一手选择；你决定哪些成为小说、如何改写、转述或补写。"
+        "需要角色进一步自主回应时可请求续演。让对话对象、回应的前因及关系后果在正文中自然清楚。"
         if performance_material_block else ""
     )
     material_length_priority = (
@@ -48,7 +46,9 @@ def render_scene_create_prompt(
     )
     prompt = f"""# Scene Create
 
-你是本章唯一的主创。依据 SceneBrief.canon_constraints 与 Relevant Sources 中的最新用户方向，写当前场景的完整小说正文，逐字沿用已确定的人名、日期、年份、数量和时间差，再提取正文实际造成的语义变化。直接返回一个 JSON 对象。
+你是本场小说的主创。先看清本场在全书里要改变什么，再选择让读者从谁的感受进入：人物正在渴望、回避或误解什么，眼前的交锋会怎样改变他们和世界。写一场有情绪温度、叙事起伏和人物声音的完整小说，而不是把资料逐项翻译成正文。设定展开、宏观情节推进、世界状态变化、视角心理和场景语言都由你决定。
+
+SceneBrief、已确认来源和最新用户方向规定事实边界；逐字沿用已确定的人名、日期、年份、数量和时间差。最后以 JSON 交付正文和正文实际造成的变化。
 
 ## SceneBrief
 {json.dumps(brief.to_dict(), ensure_ascii=False, separators=(",", ":"))}
@@ -63,14 +63,13 @@ def render_scene_create_prompt(
 {json.dumps(reference_contract, ensure_ascii=False, separators=(",", ":"))}
 
 ## Length Contract
-prose 的目标为 {brief.length.target_hanzi} 个中文正文字符，建议范围 {brief.length.soft_min}-{brief.length.soft_max}。把现有事件分成开场压力、行动阻力、关系反应、选择代价和余波，给各段分配足够篇幅；首轮直接写足完整场景。一次响应不足时，创作阶段会要求在结尾之前补足有因果作用的段落。
+prose 的目标为 {brief.length.target_hanzi} 个中文正文字符，建议范围 {brief.length.soft_min}-{brief.length.soft_max}。按这场戏自身的呼吸安排详略：冲突可以骤起，情绪、记忆与环境也可以占据足够篇幅。首轮写出完整场景；一次响应不足时，创作阶段会要求在结尾之前补足有因果作用的段落。
 {material_length_priority}
-本场实现 SceneBrief 的 objective、participants、scene_function 与 incoming_handoff。章级义务提供方向；Relevant Sources 含上一场正文时，承接其已发生后果。
-句群长度随意义与压力变化。白描只是可用底色之一，语言可随关系、认识和压力变调。写对白前根据人物背景、欲望、身份和关系压力辨认不同声音；speech_style 未填写时从已知事实推导。保留角色 Agent 的不齐整选择，让不同人物有各自语势。当前视角可充分经历情绪。使用中文引号与标点。
+本场实现 SceneBrief 的 objective、participants、scene_function 与 incoming_handoff。章级义务提供方向；上一场已发生的后果进入此场。使用中文引号与标点。
 
 ## Literary Rendering
-情绪主轴：EMOTION_ARC / EMOTION_CONTRADICTION / EMOTION_RESIDUE。辨认此刻谁的欲望最烫、谁把感受藏在话里、哪一次回应改变了亲疏；让情绪在对白语势、身体感受、注意力和空间中展开，并让选择后的余温进入场景结尾。情绪强弱由人物与事件决定，允许热烈、失控、温柔、羞怯或复杂矛盾的表达。
-主创决定情绪表达的力度与位置。开篇抓住正在改变关系的一瞬，让环境从人物知觉里逐渐展开；背景与规则随着选择显形。让当前视角的误读、欲望与记忆在中段的空间里变化，允许有意义地停留和渲染。对白可绕路、说错或沉默，服务眼前的关系。把推演当作人物间正在发生的关系与事件，抓住谁向谁说话、为何此时开口、听者怎样改变。灵活使用直接引语、转述、自由间接引语、连续的心理与空间描写；说话人已清楚时，让声音自然接续。避免反复套用“引号台词—某某说或做—下一句台词”的排列。SceneBrief.rhythm、reflection_ratio 和 description_ratio 是全场软建议；最新用户方向和阅读效果决定心理、环境与语言起伏的篇幅。
+情绪主轴：EMOTION_ARC / EMOTION_CONTRADICTION / EMOTION_RESIDUE。此刻谁最想得到什么，谁在掩饰，哪句话令亲疏发生变化？让欲望、身体感受、误读与记忆进入句子，也让选择留下余温。人物可以热烈、失控、羞怯、幽默或自相矛盾；不同的人在不同关系里会换声调。对白可以绕路，叙述也可转述、贴近内心或长久停留在空间里。让引语、心理和环境跟着人物的注意力自然交织，句群长短随意义和压力变化。
+SceneBrief.rhythm、reflection_ratio 和 description_ratio 是全场软建议；以眼前小说的阅读效果决定篇幅和次序。
 ## Output
 {request_guidance}{{"prose":"完整正文","decision_summary":"不超过三句","scene_delta":{{"character_changes":[],"canon_candidates":[],"continuity_changes":[],"promise_updates":[],"reader_question_updates":[],"next_handoff":[],"new_asset_candidates":[]}},"decision_trace":[],"escalation_reasons":[],"material_requests":[]}}
 
@@ -84,7 +83,7 @@ character_changes、canon_candidates、continuity_changes、promise_updates、re
 只提出正文确实发生的变化；无法确认、需要人工判断的内容放进 escalation_reasons。
 若 SceneBrief.risk.level 为 high，decision_trace 必须用少量条目记录关键创作取舍。
 
-## Final Prose Pass\n挂载参考样例时，确认至少两项可观察技法体现在 prose 中。通读整场破折号，按语义改动重复承担同一种转折的句法；最后重审数词与量化单位。{material_final_pass}{_QUANTITATIVE_DETAIL_RULE}
+## Final Prose Pass\n通读正文，听人物声音和段落节奏；参考样例挂载时，让适合本场的表达技法进入正文。核对破折号、数词和量化单位的实际语义。{material_final_pass}{_QUANTITATIVE_DETAIL_RULE}
 """
     if len(prompt) > recipe.hard_character_limit:
         raise ValueError("lean scene create prompt exceeds hard character limit")
@@ -123,10 +122,8 @@ def render_scene_revision_prompt(
     )
     prompt = f"""# Scene Revision
 
-你是本场景原主创，亲自写出下一版完整正文。依据 Deterministic Issues 与 Review Instructions 的具体证据修订；修订一处后通读全场。可保留有效情节与语言，也可重组句法、人物声音、心理和环境。
-情绪修订轴：EMOTION_ARC / EMOTION_CONTRADICTION / EMOTION_RESIDUE。核对人物在关键话语前后的感受如何变化，心理、对白、环境和选择后果能否让读者经历这次变化；必要时让情绪充分停留、升温或反转。
-一级角色 entries 是可取舍的发言与行为素材。主创可改写已有台词，也可在必要时补写言行或请角色续演。删选一人的话时，连同下一人的回答检查其具体所指，让问答因果在正文中连续。误称、误会和追问应让读者看见其起因、对话对象和关系后果；若前因缺失，由你重排已有言行或补写可信的衔接。当前视角的私念和情绪由你展开；中段允许空间与视角变化。对白在改变关系时重提事实。让发言、转述、感知和情绪在段落中重新编排，使人物关系的变化决定引语出现的位置。避免反复套用“引号台词—某某说或做—下一句台词”的排列。
-检查本场在全书中的情节位移、设定和世界状态的展开，并让持久变化准确进入 SceneDelta。
+你是本场景原主创。读完现有正文和具体审查证据，亲自写出下一版完整小说；让修订首先服务人物、情绪和整场叙事的生长。可以保留有力的片段，也可以重排场景、拓展心理与环境、改写对白的走向。
+情绪修订轴：EMOTION_ARC / EMOTION_CONTRADICTION / EMOTION_RESIDUE。让读者经历人物在关键话语前后的感受变化；情绪可以停留、升温或反转。一级角色 entries 是可取舍的第一手素材，主创可改写和补写言行，也可请角色续演。人物问答应有可辨认的对象与前因。将本场在全书中的情节位移、设定展开和世界变化写进正文，并让 SceneDelta 与之相符。
 SceneBrief、已确认来源和最新用户方向规定人物、事实、时间与数值。修订完成后更新与正文一致的 SceneDelta。直接返回与 Scene Create 相同的 JSON 对象。
 
 ## SceneBrief

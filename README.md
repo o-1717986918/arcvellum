@@ -11,7 +11,7 @@ ArcVellum 面向小说及其他长篇虚构作品。你可以与项目 Agent 讨
 
 长篇创作的困难往往出现在第一段精彩文本之后：人物前后矛盾，情节库存撑不起目标篇幅，文风漂移，审查意见没有落实，最终文件混入工作记录。ArcVellum 把这些问题放进同一个可恢复的文学项目，而不只放进模型的聊天上下文。
 
-**当前版本：v0.99.10 Beta。** [下载 Windows 安装包](https://github.com/o-1717986918/arcvellum/releases/tag/v0.99.10) · [阅读发行说明](docs/releases/v0.99.10.md) · [查看验证记录](docs/releases/v0.99.10-verification.md)
+**当前版本：v0.99.11 Beta。** [下载 Windows 安装包](https://github.com/o-1717986918/arcvellum/releases/tag/v0.99.11) · [阅读发行说明](docs/releases/v0.99.11.md) · [查看验证记录](docs/releases/v0.99.11-verification.md)
 
 ### 界面实拍
 
@@ -90,11 +90,11 @@ ArcVellum 当前同时维护两种场景路径：
 
 ## 当前验证与边界
 
-v0.99.10 的 Windows 生产构建与签名更新包、macOS Apple Silicon 和 Intel **未签名预览包**由同一标签工作流生成。macOS 包尚未经过 Developer ID 签名和 Apple notarization，暂不按普通用户稳定版介绍。
+v0.99.11 的 Windows 生产构建与签名更新包、macOS Apple Silicon 和 Intel **未签名预览包**由同一标签工作流生成。macOS 包尚未经过 Developer ID 签名和 Apple notarization，暂不按普通用户稳定版介绍。
 
 真实端到端样本中，项目 Agent 曾驱动一个 `full_auto`、`lean-v2` 项目从创作目标推进到一场正文正式提交和整书 Markdown/DOCX 交付；该样本完成 91 项后台任务，最终无失败和待处理决策。[验收证据](docs/verification/arcvellum-project-agent-e2e-2026-09-15.md)记录了运行、场景提交与发布清单。这是**单场景链路证明**，还不能代表多题材、几十万字作品都已稳定完成。
 
-发布验证涵盖 Python、Vue、Pi Worker、Prompt Registry、提示词评估、架构审计与版本同步检查。[详细结果](docs/releases/v0.99.10-verification.md)。
+发布验证涵盖 Python、Vue、Pi Worker、Prompt Registry、提示词评估、架构审计与版本同步检查。[详细结果](docs/releases/v0.99.11-verification.md)。
 
 目前仍需积累的证据包括：长期无人值守恢复、不同模型与题材的文学质量、完整 Windows 安装/升级矩阵，以及正式签名的 macOS 发行流程。项目处于 Beta，重要作品建议自行保留备份并定期检查正式交付文件。
 

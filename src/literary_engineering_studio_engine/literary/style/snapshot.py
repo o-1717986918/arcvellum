@@ -188,6 +188,13 @@ def active_style_prompt_path(project_root: Path) -> Path | None:
     return prompt if prompt and prompt.is_file() else None
 
 
+def active_style_prompt_text(project_root: Path) -> str:
+    """Return the verified active prompt for expression-level creative calls."""
+
+    path = active_style_prompt_path(project_root)
+    return path.read_text(encoding="utf-8").strip() if path else ""
+
+
 def active_style_evidence_paths(project_root: Path) -> list[Path]:
     """Return safe active-mount evidence paths for context provenance."""
 
@@ -340,6 +347,7 @@ __all__ = [
     "active_style_mount_snapshot_bytes",
     "active_style_mount_snapshot_payload",
     "active_style_prompt_path",
+    "active_style_prompt_text",
     "artifact_style_mount_snapshot",
     "read_artifact_style_mount_snapshot",
     "style_mount_snapshot_errors",

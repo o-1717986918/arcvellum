@@ -81,10 +81,11 @@ def new_scene_session(
     brief: dict[str, Any], expression: dict[str, Any], plan: dict[str, Any], environment: dict[str, Any] | None,
 ) -> dict[str, Any]:
     participants = list(brief.get("participants") or ())
+    saved_personas = expression.get("actor_personas") if isinstance(expression.get("actor_personas"), dict) else {}
     return {
         "scene_id": brief["scene_id"],
         "initializations": {speaker: render_actor_initialization_prompt({
-            "name": speaker, "roleplay_direction": plan["actor_prompts"][speaker],
+            "name": speaker, "roleplay_direction": saved_personas.get(speaker) or plan["actor_prompts"][speaker],
         }) for speaker in participants},
         "initialization_answers": {speaker: "" for speaker in participants},
         "histories": {speaker: [] for speaker in participants},

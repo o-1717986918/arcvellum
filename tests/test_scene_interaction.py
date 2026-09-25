@@ -11,7 +11,7 @@ from literary_engineering_studio.runtime.role_conversation import RoleConversati
 from literary_engineering_studio.runtimes.pi_scene_transaction import PiSceneTransactionRuntime
 from literary_engineering_studio.runtimes.scene_interaction import perform_scene_interaction, new_scene_session, continue_scene_actor, _character_context, _generate_direction, _actor_turn
 from literary_engineering_studio.runtimes.scene_performance import _cached_payload, _try_interaction, scene_performance_materials
-from literary_engineering_studio.runtimes.scene_performance_ownership import compact_performance_materials
+from literary_engineering_studio.runtimes.scene_performance_ownership import author_handoff_materials, compact_performance_materials
 from literary_engineering_studio_engine.public.literary import (
     parse_interaction_direction, parse_scene_material_requests, render_actor_interaction_prompt,
     render_interaction_direction_prompt, render_interaction_materials,
@@ -258,6 +258,15 @@ class SceneInteractionTests(unittest.TestCase):
         self.assertNotIn("actor_prompts", compact)
         self.assertNotIn("B" * 1000, compact)
 
+        handoff = author_handoff_materials(full)
+        self.assertLess(len(handoff), len(full) // 2)
+        self.assertIn("信是我的。", handoff)
+        self.assertIn("信被打开", handoff)
+        self.assertIn("我害怕", handoff)
+        self.assertIn("桌沿有冷光。", handoff)
+        self.assertNotIn("actor_prompts", handoff)
+        self.assertNotIn("B" * 1000, handoff)
+
     def test_production_runtime_hands_interaction_to_main_creator(self):
         class Gateway(_Gateway):
             def __init__(self):
@@ -321,7 +330,7 @@ class SceneInteractionTests(unittest.TestCase):
             self.assertNotIn('"actor_prompts"', creator_prompts[0])
             self.assertNotIn('"environment_initialization"', creator_prompts[0])
             self.assertIn("设定展开", creator_prompts[0])
-            self.assertIn("对白可绕路、说错或沉默，服务眼前的关系", creator_prompts[0])
+            self.assertIn("对白可以绕路，叙述也可转述", creator_prompts[0])
             self.assertTrue(all("[LANGUAGE_STYLE]\nANTI_PLAIN\nPOLISHED\nANTI_SHORT_SENTENCES" in call[1]
                                 for call in gateway.actor_turns))
             self.assertTrue(all("[LITERATURE_STYLE]" in call[1] and "【角色沉浸要求】" in call[1]
@@ -667,7 +676,7 @@ class SceneInteractionTests(unittest.TestCase):
                          [speakers[1], speakers[0], speakers[2], speakers[1]])
         self.assertEqual(packet["actor_entries"][0]["private_impulse"], "")
 
-    def test_scene_performance_uses_director_authored_initialization_when_saved_persona_exists(self):
+    def test_scene_performance_uses_saved_persona_as_actor_initialization(self):
         brief, plan = _fixture(["character/solo"])
         plan["actor_prompts"]["character/solo"] += "\n\n[LANGUAGE_STYLE]\nVOICE_PLAYFUL_WITH_BARBS"
         directions = iter([""])
@@ -700,8 +709,8 @@ class SceneInteractionTests(unittest.TestCase):
         self.assertIn("actor_entries", block)
         self.assertIn("信是给我的", block)
         self.assertEqual(len(initializations), 1)
-        self.assertIn("VOICE_PLAYFUL_WITH_BARBS", initializations[0])
-        self.assertNotIn("KAFKA_LIKE", initializations[0])
+        self.assertNotIn("VOICE_PLAYFUL_WITH_BARBS", initializations[0])
+        self.assertIn("KAFKA_LIKE", initializations[0])
 
     def test_failed_actor_turn_does_not_resume_whole_scene_task_mode(self):
         brief, plan = _fixture(["character/solo"])

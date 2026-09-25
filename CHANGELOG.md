@@ -2,6 +2,25 @@
 
 All notable ArcVellum changes are documented in this file. Detailed release evidence remains under `docs/releases/`.
 
+## [0.99.11] - 2026-09-25
+
+### Added
+
+- Added persistent, editable actor persona sections, multi-/single-character scene interaction, independent environment candidates, and a live rehearsal viewer.
+- Exposed broader project-asset/style editing and per-scene macro-direction review to the Project Agent, with partial DOCX delivery during an unfinished work.
+
+### Changed
+
+- Prioritized saved character personas at new actor-session initialization and gave the sole scene author a chronological, compact rehearsal handoff.
+- Rebalanced author source excerpts and prompts toward story movement, character emotion and voice while retaining exact facts, revision and provenance contracts.
+- Applied the verified project-level style prompt to lean scene creation and revision; refreshed the bundled elastic-style wording to preserve emotional and atmospheric development.
+
+### Fixed
+
+- Restored visible prose revision marks in the main writing view, retained short-sentence-stack review guidance, and corrected a malformed actor-initialization example.
+
+[0.99.11]: https://github.com/o-1717986918/arcvellum/releases/tag/v0.99.11
+
 ## [0.99.10] - 2026-09-23
 
 ### Added

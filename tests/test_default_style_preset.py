@@ -25,6 +25,7 @@ from literary_engineering_studio_engine.public.literary import (
 from literary_engineering_studio_engine.literary.style.defaults import (
     DEFAULT_STYLE_ID,
     ensure_default_style_mount,
+    refresh_default_style_mount,
 )
 from literary_engineering_studio_engine.literary.style.lab import active_project_style
 from literary_engineering_studio_engine.literary.style.prompt import (
@@ -88,10 +89,10 @@ class DefaultStylePresetTests(unittest.TestCase):
         self.assertIn("白描不能独占全场", prompt)
         self.assertIn("自由间接引语、反讽、借代、通感", prompt)
         self.assertIn("内心语言充分呈现", prompt)
-        self.assertIn("不阻止证据形成前的心理运动", prompt)
+        self.assertIn("人物感受继续变化时，让心理运动", prompt)
         self.assertNotIn("才简短直述", prompt)
-        self.assertIn("证据之后停笔", prompt)
-        self.assertIn("翻译潜台词、概括人物感受、宣布主题", prompt)
+        self.assertIn("已把同一层意思传达清楚时，删去重复解释", prompt)
+        self.assertIn("交付格式由当前创作任务决定", prompt)
         self.assertIn("机械“不是……而是……”", prompt)
         self.assertIn("换皮对照", prompt)
         self.assertIn("中文正文统一使用全角标点", prompt)
@@ -103,7 +104,7 @@ class DefaultStylePresetTests(unittest.TestCase):
         self.assertIn("场景合同和参考语料不自动豁免装饰性数字", prompt)
         self.assertIn("已确定金额、日期、数量和差值必须准确", prompt)
         self.assertIn("普通陈设和日常动作不为显得具体而记账", prompt)
-        self.assertIn("选一篇与本场相合的表达主参照", prompt)
+        self.assertIn("当前任务提供的主参考选段", prompt)
         self.assertIn("至少两项可观察技法", prompt)
         self.assertIn("一张桌、两把椅子、拧两下、看几秒", prompt)
         self.assertIn("version: v15", route_prompt)
@@ -242,6 +243,10 @@ class DefaultStylePresetTests(unittest.TestCase):
             self.assertEqual(selection["status"], "selected")
             self.assertEqual(selection["references"][0]["unit_id"], "R17")
             self.assertIn(selection["references"][0]["text"], render_style_reference_selection(selection))
+            author_style = runtime._author_style_reference(runtime._style_reference(selection))
+            self.assertIn("项目已挂载文风", author_style)
+            self.assertIn("人物感受继续变化时，让心理运动", author_style)
+            self.assertIn("### 主参考 R17", author_style)
 
             config = json.loads(
                 (root / "style" / "default_style.json").read_text(encoding="utf-8")
@@ -302,6 +307,23 @@ class DefaultStylePresetTests(unittest.TestCase):
             self.assertEqual(before["style_id"], after["style_id"])
             self.assertEqual(before["version_id"], after["version_id"])
             self.assertEqual(before["content_hash"], after["content_hash"])
+
+    def test_refresh_rebuilds_the_bundled_default_as_a_new_verified_mount(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            with patch(
+                "literary_engineering_studio.application.project_manager.default_config_path",
+                return_value=base / "studio" / "config.json",
+            ):
+                project = create_project(parent_directory=str(base), title="新版默认文风", folder_name="work")
+            root = Path(project["path"])
+            first = active_project_style(root)
+            refreshed = refresh_default_style_mount(root)
+            current = active_project_style(root)
+            self.assertEqual(refreshed.version_id, current["version_id"])
+            self.assertEqual(first["content_hash"], current["content_hash"])
+            self.assertIn("交付格式由当前创作任务决定", (
+                root / current["prompt"]).read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

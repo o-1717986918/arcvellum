@@ -146,7 +146,7 @@ from ..literary.scene.promotion.revision_contract import (
     revision_source_requires_anti_evasion_rows,
 )
 from ..literary.style.anti_ai import style_lint_gate
-from ..literary.style.defaults import ensure_default_style_mount
+from ..literary.style.defaults import ensure_default_style_mount, refresh_default_style_mount
 from ..literary.style.lab import (
     active_project_style,
     create_author_project,
@@ -183,6 +183,7 @@ from ..literary.style.session import (
 from ..literary.style.snapshot import (
     active_style_evidence_paths,
     active_style_mount_snapshot_payload,
+    active_style_prompt_text,
     artifact_style_mount_snapshot,
     read_artifact_style_mount_snapshot,
     style_version_mount_snapshot,
@@ -244,6 +245,7 @@ __all__ = sorted([
     "active_project_style",
     "active_style_evidence_paths",
     "active_style_mount_snapshot_payload",
+    "active_style_prompt_text",
     "artifact_style_mount_snapshot",
     "analyze_narrative_rhythm_sequence",
     "branch_proposal_contract",
@@ -265,6 +267,7 @@ __all__ = sorted([
     "creative_quality_migration_preview",
     "default_style_library_root",
     "ensure_default_style_mount",
+    "refresh_default_style_mount",
     "ensure_style_library",
     "export_markdown_to_docx",
     "file_sha256",

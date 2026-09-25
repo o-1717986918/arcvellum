@@ -71,7 +71,6 @@ def render_performance_plan_prompt(
         "【PERSONALITY_PUBLIC】\nTRAIT_VISIBLE_PERSONALITY\n\n"
         "[LANGUAGE_STYLE]\n" + "\n".join(DEFAULT_LANGUAGE_STYLE) + "\nVOICE_RELATIONAL_TEMPERAMENT\n\n"
         "[LITERATURE_STYLE]\nAUTHOR_LIKE_SOMEBODY\nMOVEMENT_STYLE_SOMESTYLE\nCADENCE_OWN_LITERARY_RHYTHM"
-        "[MOOD]\nSOME_KIND_OF_MOOD"
     ) for name in brief.get("participants") or ()}
     actor_tasks = {str(name): "此人的兴趣、与他人的关系、眼前已知的事和仍可自行决定的事" for name in brief.get("participants") or ()}
     opening_example = {

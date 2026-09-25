@@ -17,6 +17,7 @@ from .review import style_review_machine_values, style_review_paths
 from .text import source_content_digest
 from .version import build_style_profile_version
 from .reference_projection import build_default_reference_index
+from .snapshot import active_style_prompt_path
 
 
 DEFAULT_STYLE_PRESET_ID = "clear-plain-zh"
@@ -71,29 +72,7 @@ def ensure_default_style_mount(project_root: Path) -> DefaultStyleBootstrapResul
         version_id=version.version_id,
         content_hash=version.content_hash,
     )
-    config_path = root / "style" / "default_style.json"
-    config_path.write_text(
-        _json_text(
-            {
-                "schema": DEFAULT_STYLE_CONFIG_SCHEMA,
-                "preset_id": DEFAULT_STYLE_PRESET_ID,
-                "display_name": DEFAULT_STYLE_DISPLAY_NAME,
-                "style_id": version.style_id,
-                "version_id": version.version_id,
-                "content_hash": version.content_hash,
-                "scope": "project",
-                "priority": "highest",
-                "auto_mounted": True,
-                "replaceable": True,
-                "active_manifest": "style/active_style_skill.json",
-                "prompt": (
-                    f"style/mounted/{version.style_id}/{version.version_id}/prompt.md"
-                ),
-                "created_at": _now(),
-            }
-        ),
-        encoding="utf-8",
-    )
+    config_path = _write_default_config(root, version)
     return DefaultStyleBootstrapResult(
         project_root=root,
         style_id=version.style_id,
@@ -103,6 +82,54 @@ def ensure_default_style_mount(project_root: Path) -> DefaultStyleBootstrapResul
         config_path=config_path,
         mounted=mounted.created,
     )
+
+
+def refresh_default_style_mount(project_root: Path) -> DefaultStyleBootstrapResult:
+    """Publish and mount a revised bundled default without replacing a chosen custom style."""
+
+    root = project_root.expanduser().resolve()
+    config_path = root / "style" / "default_style.json"
+    config = json.loads(config_path.read_text(encoding="utf-8")) if config_path.is_file() else {}
+    active = active_project_style(root)
+    if (not isinstance(config, dict) or config.get("auto_mounted") is not True
+            or not active or active.get("style_id") != DEFAULT_STYLE_ID):
+        raise ValueError("refresh requires the bundled default as the active project style")
+    current_prompt = active_style_prompt_path(root)
+    template = engine_root() / "templates" / "style" / "default-clear-plain"
+    current_profile = current_prompt.parent / "style-profile.md" if current_prompt else None
+    if (current_prompt and current_profile and current_profile.is_file()
+            and current_prompt.read_text(encoding="utf-8").strip() == _template_text(template / "prompt.md")
+            and current_profile.read_text(encoding="utf-8").startswith(_template_text(template / "profile.md"))):
+        return DefaultStyleBootstrapResult(root, str(active["style_id"]), str(active["version_id"]),
+                                           str(active["content_hash"]), root / "style" / "active_style_skill.json",
+                                           config_path, False, "bundled default is already current")
+    profile = _materialize_curated_profile(root)
+    version = build_style_profile_version(root, profile, target_id=DEFAULT_STYLE_TARGET_ID)
+    mounted = mount_style_profile_version(
+        root, style_id=version.style_id, version_id=version.version_id, content_hash=version.content_hash)
+    _write_default_config(root, version)
+    return DefaultStyleBootstrapResult(root, version.style_id, version.version_id, version.content_hash,
+                                       mounted.active_manifest_path, config_path, mounted.created)
+
+
+def _write_default_config(root: Path, version: Any) -> Path:
+    config_path = root / "style" / "default_style.json"
+    config_path.write_text(_json_text({
+        "schema": DEFAULT_STYLE_CONFIG_SCHEMA,
+        "preset_id": DEFAULT_STYLE_PRESET_ID,
+        "display_name": DEFAULT_STYLE_DISPLAY_NAME,
+        "style_id": version.style_id,
+        "version_id": version.version_id,
+        "content_hash": version.content_hash,
+        "scope": "project",
+        "priority": "highest",
+        "auto_mounted": True,
+        "replaceable": True,
+        "active_manifest": "style/active_style_skill.json",
+        "prompt": f"style/mounted/{version.style_id}/{version.version_id}/prompt.md",
+        "created_at": _now(),
+    }), encoding="utf-8")
+    return config_path
 
 
 def _materialize_curated_profile(root: Path) -> Path:
