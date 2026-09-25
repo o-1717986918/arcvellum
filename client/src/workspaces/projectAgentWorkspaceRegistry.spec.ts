@@ -7,6 +7,7 @@ describe("projectAgentWorkspaces", () => {
       "projects",
       "reader",
       "live",
+      "rehearsal",
       "archive",
       "style",
       "quality",
@@ -20,7 +21,7 @@ describe("projectAgentWorkspaces", () => {
   });
 
   it("protects every project-bound showcase entry", () => {
-    const protectedEntries = ["reader", "live", "archive", "style", "quality", "delivery"];
+    const protectedEntries = ["reader", "live", "rehearsal", "archive", "style", "quality", "delivery"];
     for (const id of protectedEntries) {
       const workspace = projectAgentWorkspaces.get(id);
       expect(workspace, id).toBeDefined();
@@ -30,7 +31,7 @@ describe("projectAgentWorkspaces", () => {
   });
 
   it("separates project-bound tools from application workspaces", () => {
-    expect(projectAgentWorkspaces.forScope("project")).toHaveLength(7);
+    expect(projectAgentWorkspaces.forScope("project")).toHaveLength(8);
     expect(projectAgentWorkspaces.forScope("application").map((item) => item.id)).toEqual([
       "projects",
       "settings",

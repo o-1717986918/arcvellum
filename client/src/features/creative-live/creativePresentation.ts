@@ -34,6 +34,16 @@ export function sessionDisplayName(session?: CreativeSession | null, index = 0):
   if (!session) return "等待主创 Agent";
   const role = String(session.role || "").trim();
   if (role && !["worker", "agent", "assistant"].includes(role.toLowerCase())) return role;
+  const value = parseJsonObjects(String(session.transcript || "")).at(-1);
+  if (value) {
+    if (value.speaker && Array.isArray(value.entries)) return `角色演出 · ${value.speaker}`;
+    if (Array.isArray(value.passages)) return "环境描写";
+    if (value.next_speaker || value.scene_change) return "导演调度";
+    if (Array.isArray(value.beats)) return "场景推演设计";
+    if (typeof value.prose === "string") return value.decision_summary ? "主创修订" : "主创成稿";
+    if (value.decision && value.summary) return "独立审读";
+    if (value.premise || value.central_question) return "全书规划";
+  }
   const route = ROUTE_LABELS[session.route] || "创作 Agent";
   return index > 0 ? `${route} ${index + 1}` : route;
 }
@@ -74,6 +84,15 @@ export function transcriptPresentation(source?: string): TranscriptPresentation 
   const value = values.at(-1);
   if (value) {
     const lines = ["**结构化创作结果**"];
+    appendPerformance(lines, value);
+    appendFact(lines, "场景变化", value.scene_change);
+    appendFact(lines, "下一位角色", value.next_speaker);
+    appendFact(lines, "导演提示", value.cue);
+    appendFact(lines, "导演补充", value.director_note);
+    appendFact(lines, "主创修订说明", value.decision_summary);
+    appendFact(lines, "审读结论", value.decision);
+    appendFact(lines, "审读意见", value.summary);
+    appendRows(lines, "场景节拍", value.beats, ["beat_id", "event"]);
     appendFact(lines, "故事前提", value.premise);
     appendFact(lines, "中心问题", value.central_question);
     appendFact(lines, "终局选择", value.ending_choice);
@@ -85,6 +104,24 @@ export function transcriptPresentation(source?: string): TranscriptPresentation 
     return { source: lines.join("\n\n"), raw, structured: true };
   }
   return { source: raw, raw: "", structured: false };
+}
+
+function appendPerformance(lines: string[], value: Record<string, unknown>): void {
+  const speaker = String(value.speaker || "").trim();
+  if (speaker && Array.isArray(value.entries)) {
+    lines.push(`**${speaker}的演出**`);
+    for (const entry of value.entries.slice(0, 12)) {
+      const row = entry && typeof entry === "object" ? entry as Record<string, unknown> : {};
+      appendFact(lines, "发言", row.spoken);
+      appendFact(lines, "动作", row.first_person_action);
+    }
+  }
+  if (Array.isArray(value.passages)) {
+    for (const passage of value.passages.slice(0, 12)) {
+      const row = passage && typeof passage === "object" ? passage as Record<string, unknown> : {};
+      appendFact(lines, `环境片段 ${String(row.beat_id || "").trim()}`.trim(), row.description);
+    }
+  }
 }
 
 function parseJsonObjects(source: string): Array<Record<string, unknown>> {

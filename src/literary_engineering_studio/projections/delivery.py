@@ -33,14 +33,18 @@ def build_delivery(
         {},
     )
     files = _delivery_files(project_root)
+    formal_files = [item for item in files if item["source"] != "当前稿快照"]
     blocking = int(route.get("blocking_count") or 0)
     pending = int(route.get("pending_task_count") or 0)
-    if files and not blocking and not pending:
+    if formal_files and not blocking and not pending:
         status = "ready"
         headline = "作品已经具备可下载的正式交付文件。"
-    elif files:
+    elif formal_files:
         status = "attention"
         headline = "已有交付文件，但正式路线仍有待处理事项。"
+    elif files:
+        status = "partial"
+        headline = "当前稿快照可下载；作品仍在创作中。"
     else:
         status = "pending"
         headline = "还没有正式交付文件，需要继续完成导出路线。"
@@ -98,7 +102,11 @@ def _delivery_files(project_root: Path) -> list[dict[str, Any]]:
                     "title": _display_title(path),
                     "path": relative,
                     "format": path.suffix.lower().lstrip(".").upper(),
-                    "source": "正式发布" if folder_name == "releases" else "导出文件",
+                    "source": (
+                        "正式发布" if folder_name == "releases"
+                        else "当前稿快照" if "snapshots" in path.relative_to(folder).parts
+                        else "导出文件"
+                    ),
                     "size_bytes": stat.st_size,
                     "modified_at": datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(),
                 }

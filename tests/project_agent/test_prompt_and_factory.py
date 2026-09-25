@@ -18,7 +18,7 @@ class ProjectAgentPromptAndFactoryTests(unittest.TestCase):
         )
 
         self.assertIn("主要人物处境、未决线索、连续性风险和下一步只选与本次成果有关", prompt)
-        self.assertIn("不按固定清单写回执", prompt)
+        self.assertNotIn("不按固定清单写回执", prompt)
         self.assertIn("project_overview", prompt)
         self.assertIn("形式门禁通过也不能代替整书阅读判断", prompt)
         self.assertNotIn("先概括已经发生的故事变化、主要人物处境", prompt)
@@ -27,8 +27,14 @@ class ProjectAgentPromptAndFactoryTests(unittest.TestCase):
         prompt = system_prompt({"name": "严谨总编", "prompt": "优先检查结构。"}, write_enabled=True)
 
         self.assertIn("根据用户是在提问、讨论创作、要求行动还是查看里程碑", prompt)
-        self.assertIn("不强制每次进行编辑审稿", prompt)
+        self.assertNotIn("不强制每次进行编辑审稿", prompt)
         self.assertIn("优先检查结构。", prompt)
+        self.assertIn("记录方向时区分三层", prompt)
+        self.assertIn("用户要求高自由度时", prompt)
+        self.assertIn("不主动把这些口味写进高优先级创作方向", prompt)
+        self.assertIn("不能写成长篇高优先级方向替主创定稿", prompt)
+        self.assertIn("当前作品会话优先使用 catalog 的 current_work_id", prompt)
+        self.assertIn("三到五个能共同塑造此人说话和互动的核心项", prompt)
 
     def test_project_agent_thinking_is_independent_of_worker_thinking(self):
         with tempfile.TemporaryDirectory() as temporary:

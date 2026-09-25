@@ -216,6 +216,8 @@ export interface DeliveryFile {
   name?: string;
   format?: string;
   size?: number;
+  size_bytes?: number;
+  source?: string;
   modified_at?: string;
 }
 

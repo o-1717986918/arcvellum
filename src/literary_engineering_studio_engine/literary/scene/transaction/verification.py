@@ -215,7 +215,7 @@ def _append_language_issues(
     for finding in lint_punctuation(prose, profile=profile, scope=scope):
         severity = (
             IssueSeverity.HARD
-            if punctuation_issue_is_hard(finding)
+            if punctuation_issue_is_hard(finding, prose=prose)
             else IssueSeverity.WARNING
         )
         issues.append(

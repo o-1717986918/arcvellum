@@ -54,14 +54,6 @@ def _volume_budget(
         min_scenes = chapter_count * int(preset["scenes_per_chapter_min"])
         max_scenes = chapter_count * int(preset["scenes_per_chapter_max"])
         scene_count = min(max(scene_count, min_scenes), max_scenes)
-    ratios = {
-        "mainline": float(preset["mainline_ratio"]),
-        "relationship": float(preset["relationship_ratio"]),
-        "world_or_information": float(preset["world_info_ratio"]),
-        "consequence": float(preset["consequence_ratio"]),
-        "breath_or_transition": float(preset["breath_ratio"]),
-    }
-    scene_load = {key: max(round(scene_count * ratio), 1) for key, ratio in ratios.items()}
     return {
         "volume_id": f"volume_{index:02d}",
         "target_words": words,
@@ -69,15 +61,6 @@ def _volume_budget(
         "scene_count": scene_count,
         "avg_chapter_words": round(words / chapter_count),
         "avg_scene_words": round(words / scene_count),
-        "scene_load": scene_load,
-        "required_turning_points": [
-            "opening_hook",
-            "first_commitment",
-            "midpoint_reversal",
-            "cost_or_failure",
-            "volume_crisis",
-            "payoff_and_next_hook",
-        ],
     }
 
 def _chapter_budgets(volume_budgets: list[dict[str, object]]) -> list[dict[str, object]]:
@@ -95,14 +78,6 @@ def _chapter_budgets(volume_budgets: list[dict[str, object]]) -> list[dict[str, 
                     "target_words": words,
                     "scene_count": scene_count,
                     "avg_scene_words": round(words / max(scene_count, 1)),
-                    "scene_load": volume["scene_load"],
-                    "required_functions": [
-                        "mainline_action",
-                        "relationship_pressure",
-                        "information_release",
-                        "consequence_chain",
-                        "setup_or_payoff",
-                    ],
                 }
             )
             chapter_index += 1

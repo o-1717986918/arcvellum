@@ -7,9 +7,11 @@ from literary_engineering_studio_engine.literary.planning.lean_plan import (
     normalize_initial_plan,
     normalize_rhythm_role,
     normalize_scene_window,
+    rebalance_lean_budget,
     render_outline,
 )
 from literary_engineering_studio_engine.literary.planning.service import calculate_word_budget
+from literary_engineering_studio_engine.literary.planning.materialization_rendering import render_scene_yaml
 
 
 def _scene(name: str) -> dict[str, object]:
@@ -102,6 +104,51 @@ class LeanLongformPlanTests(unittest.TestCase):
             [setup, payoff], self.budget["chapter_budgets"][0], start_index=1
         )
         self.assertEqual([scene["rhythm_role"] for scene in scenes], ["setup", "payoff"])
+
+    def test_creator_can_choose_book_shape_chapter_and_scene_lengths(self):
+        answer = {
+            "premise": "旧信使相隔多年的两个人重逢",
+            "central_question": "信是谁写的？",
+            "ending_choice": "烧掉信或公开它",
+            "narrative_design": {
+                "narrative_mode": "书信与现场交替",
+                "temporal_structure": "从终局开场，再回到旧信抵达之日",
+                "viewpoint_design": "两人交替限知",
+                "pacing_design": "中段停留，末段骤缩",
+                "structural_signature": "每章用一封未寄出的信变换叙事角度",
+            },
+            "volume_obligations": ["旧信改变两人的选择"],
+            "chapters": [
+                {"title": "重逢", "dramatic_turn": "旧信现身", "obligation": "建立疑问",
+                 "reader_question": "谁写了信？", "length_weight": 3},
+                {"title": "寄出", "dramatic_turn": "信被公开", "obligation": "做出选择",
+                 "reader_question": "谁承担后果？", "length_weight": 1},
+            ],
+            "first_window": [{**_scene("终局"), "story_time": "三年后", "length_weight": 1},
+                             {**_scene("来信"), "story_time": "三年前", "length_weight": 3}],
+        }
+        budget = rebalance_lean_budget(self.budget, answer)
+        plan = normalize_initial_plan(answer, budget, project_digest="abc")
+        chapter_rows = budget["chapter_budgets"]
+        self.assertGreater(chapter_rows[0]["target_words"], chapter_rows[1]["target_words"])
+        self.assertEqual(sum(row["target_words"] for row in chapter_rows), 6000)
+        self.assertGreater(plan["scenes"][1]["target_chars"], plan["scenes"][0]["target_chars"])
+        self.assertEqual(sum(scene["target_chars"] for scene in plan["scenes"]), chapter_rows[0]["target_words"])
+        self.assertEqual(plan["scenes"][0]["story_time"], "三年后")
+        self.assertIn('story_time: "三年后"', render_scene_yaml(plan["scenes"][0], {"reader_question": "谁写了信？"}))
+        self.assertIn("书信与现场交替", render_outline(plan))
+
+    def test_creator_can_redistribute_length_across_volumes(self):
+        budget = calculate_word_budget(self.root, target_words=6000, volumes=2,
+                                       target_chapters=2, target_scenes=4)
+        revised = rebalance_lean_budget(budget, {
+            "volume_length_weights": [1, 3],
+            "chapters": [{"length_weight": 1}, {"length_weight": 1}],
+        })
+        self.assertEqual([row["target_words"] for row in revised["volume_budgets"]], [1500, 4500])
+        self.assertEqual([row["target_words"] for row in revised["chapter_budgets"]], [1500, 4500])
+        self.assertEqual([row["target_words"] for row in revised["scene_inventory_binding"]["chapter_rows"]], [1500, 4500])
+        self.assertNotEqual(budget["volume_budgets"][0]["target_words"], 1500)
 
 
 if __name__ == "__main__":

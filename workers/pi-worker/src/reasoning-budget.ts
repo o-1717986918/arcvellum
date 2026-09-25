@@ -35,10 +35,12 @@ export function reasoningThinkingBudgets(budget: ReasoningBudget): Record<"minim
 }
 
 export function safeThinkingLevel(
-	model: Pick<Model<any>, "reasoning" | "thinkingLevelMap">,
+	model: Pick<Model<any>, "reasoning" | "thinkingLevelMap"> & { provider?: string },
 	requested: ThinkingLevel,
 ): ThinkingLevel {
 	const supported = getSupportedThinkingLevels(model as Model<any>) as ThinkingLevel[];
+	// DeepSeek maps a requested medium effort to high; its Pi catalog has no medium entry.
+	if (model.provider === "deepseek" && requested === "medium" && supported.includes("high")) return "high";
 	const requestedIndex = levelIndex(requested);
 	for (let index = requestedIndex; index >= 0; index -= 1) {
 		const candidate = LEVELS[index];

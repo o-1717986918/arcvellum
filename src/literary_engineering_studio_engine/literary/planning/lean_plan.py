@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
+import math
 from typing import Any
 
 
@@ -13,6 +15,90 @@ _SCENE_FIELDS = (
     "name", "function", "conflict", "information_release", "consequence",
     "setup_payoff_role", "obligation",
 )
+_NARRATIVE_FIELDS = (
+    "narrative_mode", "temporal_structure", "viewpoint_design",
+    "pacing_design", "structural_signature",
+)
+
+
+def rebalance_lean_budget(budget: dict[str, Any], answer: dict[str, Any]) -> dict[str, Any]:
+    """Apply the creator's relative length choices while preserving book totals and IDs."""
+    revised = deepcopy(budget)
+    volumes = revised.get("volume_budgets") or []
+    chapters = revised.get("chapter_budgets") or []
+    proposed_chapters = answer.get("chapters")
+    if not isinstance(proposed_chapters, list) or len(proposed_chapters) != len(chapters):
+        return revised
+    proposed_volumes = answer.get("volume_length_weights")
+    _rebalance_volumes(revised, volumes, proposed_volumes)
+    _rebalance_chapters(chapters, volumes, proposed_chapters, proposed_volumes)
+    _sync_chapter_binding(revised, chapters)
+    return revised
+
+
+def _rebalance_chapters(
+    chapters: list[dict[str, Any]], volumes: list[dict[str, Any]],
+    proposed_chapters: list[object], proposed_volumes: Any,
+) -> None:
+    for volume in volumes:
+        members = [row for row in chapters if row["volume_id"] == volume["volume_id"]]
+        proposed = [proposed_chapters[index] for index, row in enumerate(chapters) if row["volume_id"] == volume["volume_id"]]
+        if not any(isinstance(item, dict) and "length_weight" in item for item in proposed) and not isinstance(proposed_volumes, list):
+            continue
+        weights = [item.get("length_weight", 1) if isinstance(item, dict) else 1 for item in proposed]
+        targets = _weighted_targets(int(volume["target_words"]), weights)
+        for row, target in zip(members, targets):
+            row["target_words"] = target
+            row["avg_scene_words"] = round(target / int(row["scene_count"]))
+
+
+def _rebalance_volumes(revised: dict[str, Any], volumes: list[dict[str, Any]], proposed: Any) -> None:
+    if not isinstance(proposed, list) or len(proposed) != len(volumes):
+        return
+    totals = _weighted_targets(int(revised["totals"]["target_words"]), proposed)
+    for volume, target in zip(volumes, totals):
+        volume["target_words"] = target
+        volume["avg_chapter_words"] = round(target / int(volume["chapter_count"]))
+        volume["avg_scene_words"] = round(target / int(volume["scene_count"]))
+
+
+def _sync_chapter_binding(revised: dict[str, Any], chapters: list[dict[str, Any]]) -> None:
+    binding = revised.get("scene_inventory_binding")
+    if not isinstance(binding, dict):
+        return
+    by_id = {str(row["chapter_id"]): row for row in chapters}
+    for row in binding.get("chapter_rows") or []:
+        if not isinstance(row, dict) or str(row.get("chapter_id")) not in by_id:
+            continue
+        chapter = by_id[str(row["chapter_id"])]
+        row["target_words"] = chapter["target_words"]
+        row["avg_scene_words"] = chapter["avg_scene_words"]
+        row["word_shortfall"] = max(int(chapter["target_words"]) - int(row.get("actual_draft_chinese_chars") or 0), 0)
+    binding["word_shortfall"] = sum(int(row.get("word_shortfall") or 0) for row in binding.get("chapter_rows") or [])
+
+
+def _weighted_targets(total: int, raw_weights: list[object]) -> list[int]:
+    if not raw_weights:
+        return []
+    weights = []
+    for value in raw_weights:
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            number = 1.0
+        weights.append(number if math.isfinite(number) and number > 0 else 1.0)
+    exact = [total * weight / sum(weights) for weight in weights]
+    targets = [int(value) for value in exact]
+    for index in sorted(range(len(weights)), key=lambda i: exact[i] - int(exact[i]), reverse=True)[:total - sum(targets)]:
+        targets[index] += 1
+    for index, value in enumerate(targets):
+        if value < 1:
+            donor = max(range(len(targets)), key=lambda i: targets[i])
+            if targets[donor] <= 1:
+                raise ValueError("length target cannot cover every planned unit")
+            targets[donor] -= 1
+            targets[index] = 1
+    return targets
 
 
 def normalize_initial_plan(
@@ -44,6 +130,7 @@ def normalize_initial_plan(
         "premise": _text(answer.get("premise"), "premise"),
         "central_question": _text(answer.get("central_question"), "central question"),
         "ending_choice": _text(answer.get("ending_choice"), "ending choice"),
+        "narrative_design": _narrative_design(answer.get("narrative_design")),
         "volume_obligations": clean_volumes,
         "chapters": clean_chapters,
         "event_budget": _event_budget(clean_chapters, first_window),
@@ -90,6 +177,13 @@ def _chapters(rows: list[dict[str, Any]], chapters: list[object]) -> list[dict[s
     return clean
 
 
+def _narrative_design(value: object) -> dict[str, str]:
+    if not isinstance(value, dict):
+        return {}
+    return {field: str(value.get(field) or "").strip()[:500]
+            for field in _NARRATIVE_FIELDS if str(value.get(field) or "").strip()}
+
+
 def _characters(characters: object) -> list[dict[str, str]]:
     if characters is not None and not isinstance(characters, list):
         raise ValueError("planning characters must be a list")
@@ -123,7 +217,8 @@ def normalize_scene_window(
     if expected < 1 or not isinstance(answer, list) or len(answer) != expected:
         raise ValueError(f"chapter window requires exactly {expected} scenes")
     target = int(chapter_budget["target_words"])
-    base, extra = divmod(target, expected)
+    weights = [item.get("length_weight", 1) if isinstance(item, dict) else 1 for item in answer]
+    targets = _weighted_targets(target, weights)
     normalized: list[dict[str, Any]] = []
     for offset, item in enumerate(answer):
         if not isinstance(item, dict):
@@ -136,7 +231,8 @@ def normalize_scene_window(
             "scene_id": f"scene_{start_index + offset:04d}",
             "chapter_id": str(chapter_budget["chapter_id"]),
             "volume_id": str(chapter_budget["volume_id"]),
-            "target_chars": base + (1 if offset < extra else 0),
+            "target_chars": targets[offset],
+            "story_time": str(item.get("story_time") or "").strip()[:200],
             "participants": people,
             **{field: _text(item.get(field), f"scene {field}") for field in _SCENE_FIELDS},
             "rhythm_role": normalize_rhythm_role(
@@ -166,6 +262,9 @@ def render_outline(plan: dict[str, Any]) -> str:
         f"中心问题：{plan['central_question']}",
         f"终局选择：{plan['ending_choice']}",
     ]
+    design = plan.get("narrative_design") or {}
+    if isinstance(design, dict):
+        lines.extend(f"{field}：{value}" for field, value in design.items() if value)
     previous_volume = ""
     for chapter in plan["chapters"]:
         volume_id = str(chapter["volume_id"])
@@ -213,5 +312,5 @@ def _text(value: object, label: str) -> str:
 
 __all__ = [
     "PLAN_SCHEMA", "RHYTHM_ROLES", "chapter_obligations", "normalize_initial_plan",
-    "normalize_rhythm_role", "normalize_scene_window", "render_outline",
+    "normalize_rhythm_role", "normalize_scene_window", "rebalance_lean_budget", "render_outline",
 ]

@@ -3,7 +3,7 @@ import { Activity } from "lucide-vue-next";
 import type { CreativeActivity } from "../types";
 import { activityMessage, activityTitle, hasTechnicalDetail } from "../creativePresentation";
 
-defineProps<{ items?: CreativeActivity[] }>();
+defineProps<{ items?: CreativeActivity[]; limit?: number }>();
 
 function eventTime(value: string): string {
   const date = new Date(value);
@@ -15,7 +15,7 @@ function eventTime(value: string): string {
   <section class="creative-execution-timeline">
     <header><Activity :size="13" /><strong>推进轨迹</strong></header>
     <ol v-if="items?.length">
-      <li v-for="item in items.slice(-6).reverse()" :key="item.event_id">
+      <li v-for="item in (limit ? items.slice(-limit) : items).slice().reverse()" :key="item.event_id">
         <i></i><div><strong>{{ activityTitle(item) }}</strong><small>{{ activityMessage(item) }}</small><details v-if="hasTechnicalDetail(item)"><summary>查看技术详情</summary><code>{{ item.message }}</code></details></div><time>{{ eventTime(item.at) }}</time>
       </li>
     </ol>

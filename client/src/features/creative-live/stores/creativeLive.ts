@@ -3,6 +3,7 @@ import { defineStore } from "pinia";
 import type { EventStreamConnection } from "@/services/api";
 import { friendlyError } from "@/stores/app";
 import { applyCreativeEvent } from "../projection";
+import { inheritedTextChange } from "../revisionComparison";
 import { creativeLiveClient } from "../services/creativeLiveClient";
 import type { ArtifactRevision, ArtifactRevisionSummary, CreativeContextSummary, CreativeLiveSnapshot } from "../types";
 
@@ -16,10 +17,12 @@ export const useCreativeLiveStore = defineStore("creative-live", () => {
   const error = ref("");
   const revisions = ref<ArtifactRevisionSummary[]>([]);
   const selectedRevision = shallowRef<ArtifactRevision | null>(null);
+  const comparisonRevision = shallowRef<ArtifactRevision | null>(null);
   const sessionContexts = ref<Record<string, CreativeContextSummary | null>>({});
   let selectionPinned = false;
   let connection: EventStreamConnection | null = null;
   let connectionGeneration = 0;
+  let revisionGeneration = 0;
   let frame = 0;
   let pendingEvents: Parameters<typeof applyCreativeEvent>[1][] = [];
 
@@ -77,6 +80,7 @@ export const useCreativeLiveStore = defineStore("creative-live", () => {
       events: Array.isArray(value.events) ? value.events : [],
       usage: value.usage || { total_tokens: 0, cost_usd: 0, updates: 0 },
       cursor: Number(value.cursor || 0),
+      live_cursor: Number(value.live_cursor || 0),
     };
     snapshot.value = normalized;
     connected.value = true;
@@ -89,10 +93,12 @@ export const useCreativeLiveStore = defineStore("creative-live", () => {
   }
 
   function selectArtifact(artifactId: string): void {
+    revisionGeneration += 1;
     selectionPinned = true;
     selectedArtifactId.value = artifactId;
     revisions.value = [];
     selectedRevision.value = null;
+    comparisonRevision.value = null;
   }
 
   async function selectSession(sessionId: string): Promise<void> {
@@ -116,12 +122,25 @@ export const useCreativeLiveStore = defineStore("creative-live", () => {
   async function loadRevision(revisionId: string): Promise<void> {
     const artifact = activeArtifact.value;
     if (!artifact || !projectRoot.value) return;
-    const response = await creativeLiveClient.revision(projectRoot.value, artifact.artifact_id, revisionId);
+    const generation = ++revisionGeneration;
+    const root = projectRoot.value;
+    comparisonRevision.value = null;
+    const response = await creativeLiveClient.revision(root, artifact.artifact_id, revisionId);
+    if (generation !== revisionGeneration) return;
     selectedRevision.value = response.revision;
+    const inherited = inheritedTextChange(revisions.value, response.revision);
+    if (!inherited) return;
+    try {
+      const prior = await creativeLiveClient.revision(root, artifact.artifact_id, inherited.revision_id);
+      if (generation === revisionGeneration && prior.revision.diff.trim()) comparisonRevision.value = prior.revision;
+    } catch (cause) {
+      if (generation === revisionGeneration) error.value = friendlyError(cause, "修订对照暂时无法读取。正文版本仍可阅读。");
+    }
   }
 
   function disconnect(): void {
     connectionGeneration += 1;
+    revisionGeneration += 1;
     connection?.close();
     connection = null;
     if (frame) window.cancelAnimationFrame(frame);
@@ -153,6 +172,7 @@ export const useCreativeLiveStore = defineStore("creative-live", () => {
     selectedSessionId.value = "";
     revisions.value = [];
     selectedRevision.value = null;
+    comparisonRevision.value = null;
     sessionContexts.value = {};
     selectionPinned = false;
     error.value = "";
@@ -160,7 +180,7 @@ export const useCreativeLiveStore = defineStore("creative-live", () => {
 
   return {
     snapshot, projectRoot, selectedArtifactId, selectedSessionId, loading, connected, error,
-    revisions, selectedRevision, activeArtifact, activeSession, proseIsStreaming,
+    revisions, selectedRevision, comparisonRevision, activeArtifact, activeSession, proseIsStreaming,
     connect, reconnect, selectArtifact, selectSession, loadRevisions, loadRevision, disconnect, reset,
   };
 });

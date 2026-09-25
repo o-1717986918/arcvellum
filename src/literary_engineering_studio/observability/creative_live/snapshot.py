@@ -29,9 +29,10 @@ def build_creative_live_snapshot(
     run: dict[str, Any] | None = None,
     scene_transactions: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
+    source_events = list(raw_events)
     projected = _unique_events(
         project_runtime_event(item, project_root, source=str(item.get("source") or "runtime"))
-        for item in raw_events
+        for item in source_events
     )
     visible = [item for item in projected if item.get("visibility") != "restricted"]
     visible.extend(project_review_artifacts(project_root, visible))
@@ -84,7 +85,15 @@ def build_creative_live_snapshot(
         "style_provenance": style_provenance,
         "events": visible[-240:],
         "cursor": max((int(item.get("sequence") or 0) for item in visible), default=0),
+        "live_cursor": _live_cursor(source_events),
     }
+
+
+def _live_cursor(events: list[dict[str, Any]]) -> int:
+    return max(
+        (int(item.get("sequence") or 0) for item in events if item.get("source") == "project-live"),
+        default=0,
+    )
 
 
 def _unique_events(events: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:

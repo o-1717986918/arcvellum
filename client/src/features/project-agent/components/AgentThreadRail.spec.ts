@@ -41,7 +41,7 @@ describe("AgentThreadRail", () => {
 
     const projectButtons = wrapper.findAll(".pa-workspace-links:not(.pa-application-links) button");
     const appButtons = wrapper.findAll(".pa-application-links button");
-    expect(projectButtons).toHaveLength(7);
+    expect(projectButtons).toHaveLength(8);
     expect(appButtons).toHaveLength(4);
 
     await projectButtons[0].trigger("click");

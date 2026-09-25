@@ -160,6 +160,17 @@ def _identity(event: str, data: dict[str, Any]) -> str:
 
 
 def _title(event: str, data: dict[str, Any]) -> str:
+    process_titles = {
+        "scene.performance.plan": "场景推演已编排",
+        "scene.performance.environment": "环境描写已形成",
+        "scene.performance.interaction.turn": "角色完成一轮对戏",
+        "scene.performance.fallback": "场景素材已调整",
+        "style.projection.selected": "本场文风参考已选择",
+    }
+    if event in process_titles:
+        return process_titles[event]
+    if event == "route.entered":
+        return "开始" + _route_label(str(data.get("route") or "创作任务"))
     scene_titles = {
         "scene.prepared": "场景资料已经就绪",
         "scene.created": "本场正文已经形成",
@@ -192,11 +203,12 @@ def _title(event: str, data: dict[str, Any]) -> str:
 
 
 def _message(event: str, data: dict[str, Any]) -> str:
+    if event in {"scene.performance.plan", "scene.performance.environment", "scene.performance.interaction.turn"}:
+        return _performance_message(event, data)
+    if event == "route.entered":
+        return f"进入{_route_label(str(data.get('route') or '创作任务'))}阶段。"
     if event.startswith("scene."):
-        scene_id = str(data.get("scene_id") or "当前场景")
-        status = str(data.get("status") or "")
-        detail = str(data.get("review_summary") or data.get("message") or "").strip()
-        return detail or f"{scene_id} 已推进到 {status or '下一阶段'}。"
+        return _scene_message(data)
     if event.startswith("artifact.preview"):
         return "候选内容仍在生成，尚未成为正式正文。"
     fixed = {
@@ -211,6 +223,35 @@ def _message(event: str, data: dict[str, Any]) -> str:
         tool = data.get("tool") or "当前工具"
         return f"{tool_actions[event]} {tool}。"
     return str(data.get("message") or data.get("detail") or "项目状态已有新变化。")
+
+
+def _performance_message(event: str, data: dict[str, Any]) -> str:
+    if event == "scene.performance.plan":
+        return f"已编排 {_non_negative_int(data.get('beats'))} 个场景节拍，正在组织人物与环境素材。"
+    if event == "scene.performance.environment":
+        return f"环境 Agent 写出 {_non_negative_int(data.get('passages'))} 段候选描写，供主创取舍。"
+    if event == "scene.performance.interaction.turn":
+        return f"{str(data.get('speaker') or '角色')}完成第 {_non_negative_int(data.get('turn'))} 轮发言与行动。"
+    return str(data.get("message") or "场景素材已有新变化。")
+
+
+def _scene_message(data: dict[str, Any]) -> str:
+    scene_id = str(data.get("scene_id") or "当前场景")
+    status = str(data.get("status") or "")
+    detail = str(data.get("review_summary") or data.get("message") or "").strip()
+    return detail or f"{scene_id} 已推进到 {status or '下一阶段'}。"
+
+
+def _route_label(route: str) -> str:
+    return {
+        "source-ingest": "创作方向整理",
+        "longform-planning": "全书规划",
+        "style-engineering": "文风设计",
+        "character-and-world-assets": "人物与世界设定",
+        "scene-development": "场景创作",
+        "review-and-audit": "审查复核",
+        "export-and-release": "作品交付",
+    }.get(route, "创作任务")
 
 
 def _format(path: str) -> str:

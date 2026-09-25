@@ -15,12 +15,12 @@ class ProseLanguageContourPromptTests(unittest.TestCase):
         preview = resolve_prompt_asset("route.scene-development.prose.generate.v1")
         self.assertIsNotNone(preview.asset)
         assert preview.asset is not None
-        self.assertEqual(preview.asset.version, "v13")
+        self.assertEqual(preview.asset.version, "v15")
         self.assertIn("本场选中的完整参考", str(preview.asset.metadata))
         self.assertTrue(any("本场选中的完整参考" in item for item in preview.asset.metadata["style_constraints"]))
         self.assertFalse(any("本场选中的完整参考" in item for item in preview.asset.metadata["hard_constraints"]))
         self.assertIn("句法、叙述距离、对白与意象要随本场", preview.asset.body)
-        self.assertIn("人物选择、物证或关系后果", preview.asset.body)
+        self.assertIn("正文的情节选择和语义变化须可追溯", preview.asset.body)
         self.assertIn("Style Lint 与 AgentReview 继续核验违禁表达", str(preview.asset.metadata))
         self.assertNotIn("像给朋友讲一件真实发生的事", str(preview.asset.metadata))
 
@@ -31,7 +31,8 @@ class ProseLanguageContourPromptTests(unittest.TestCase):
 
         self.assertIn("长短句随压力与认识变化", STYLE_GENERATION_STANDARD)
         self.assertIn("当下对话对象共同决定言语行动", STYLE_GENERATION_STANDARD)
-        self.assertIn("停在后果，不替读者解释", STYLE_GENERATION_STANDARD)
+        self.assertIn("停在后果", STYLE_GENERATION_STANDARD)
+        self.assertNotIn("不替读者解释", STYLE_GENERATION_STANDARD)
         self.assertNotIn("像日记里会写的句子", STYLE_GENERATION_STANDARD)
         self.assertIn("## 本场参考选段", user)
         self.assertIn("软审美问题在生成时解决", system)

@@ -10,9 +10,9 @@ from literary_engineering_studio_engine.literary.review.creative_quality import 
 
 PUNCTUATION_STANDARD_TITLE = "标准中文标点约束"
 
-# Typography correctness is deterministic.  Rhythm findings below are
-# editorial evidence for generation/review and must not silently become a
-# second hard gate just because a profile asks the linter to surface them.
+# Typography correctness is deterministic. Dash density is the one rhythm
+# rule whose explicit blocking profile mode also bars promotion; the other
+# literary-rhythm observations remain editorial evidence.
 PUNCTUATION_CORRECTNESS_RULES = frozenset(
     {
         "ascii-punctuation-in-chinese",
@@ -71,10 +71,13 @@ class PunctuationIssue:
     sample: str
 
 
-def punctuation_issue_is_hard(issue: PunctuationIssue) -> bool:
-    """Keep typography rules hard and literary rhythm findings advisory."""
+def punctuation_issue_is_hard(issue: PunctuationIssue, *, prose: str = "") -> bool:
+    """Keep typography hard and honor the configured dash-density block."""
 
-    return issue.rule in PUNCTUATION_CORRECTNESS_RULES
+    return issue.rule in PUNCTUATION_CORRECTNESS_RULES or (
+        issue.rule == "dash-overuse" and issue.severity not in {"", "low"}
+        and prose.count("——") >= 2
+    )
 
 
 CHINESE_RANGE = r"\u3400-\u4dbf\u4e00-\u9fff"

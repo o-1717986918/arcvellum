@@ -40,7 +40,7 @@ DEFAULT_RULE_MODES: dict[str, str] = {
     "repeated-punctuation": "blocking",
     "staccato-period-overuse": "note",
     "comma-chain-overload": "note",
-    "dash-overuse": "note",
+    "dash-overuse": "blocking",
     "mechanical-transition-overuse": "note",
     "custom-banned-phrase": "blocking",
 }
@@ -51,7 +51,6 @@ SOFT_RULE_MIGRATION = (
     "explanatory-psychology-overuse",
     "staccato-period-overuse",
     "comma-chain-overload",
-    "dash-overuse",
     "mechanical-transition-overuse",
 )
 
@@ -120,9 +119,9 @@ def default_creative_quality_profile(*, preset: str = "balanced") -> dict[str, A
         },
         "custom_banned_phrases": [],
         "preferred_habits": [
-            "用动作、事实顺序、信息差和人物选择制造转折",
-            "过场简写，高潮依靠准确细节而不是形容词堆叠",
-            "情绪通过选择、语气和后果呈现",
+            "让人物选择、心理转念、对白语势与信息差共同制造转折",
+            "过场随阅读兴趣舒缩；关键处让空间、动作过程和人物感受充分停留",
+            "情绪从人物的词语、关系试探、感官经验与选择后果中逐层展开",
         ],
         "exceptions": [],
     }

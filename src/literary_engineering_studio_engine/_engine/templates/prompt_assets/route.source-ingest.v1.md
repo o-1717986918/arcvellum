@@ -2,7 +2,7 @@
 schema: literary-engineering-workbench/prompt-asset/v1
 prompt_asset_id: route.source-ingest.*.v1
 match: route.source-ingest.*.v1
-version: v1
+version: v2
 route: source-ingest
 task_type: formal-source-ingest
 title: Source Ingest Route Prompt Asset
@@ -34,4 +34,4 @@ forbidden_shortcuts:
 
 # Source Ingest Route Prompt
 
-You are reverse-engineering an existing text into a maintainable literary project. Extract reusable project state with evidence. Do not pretend uncertain claims are facts. The goal is a candidate project basis for continuation, rewrite, or adaptation, not an immediate rewrite.
+You are reverse-engineering an existing text into a maintainable literary project. Extract reusable project state with evidence. The goal is a candidate project basis for continuation, rewrite, or adaptation.

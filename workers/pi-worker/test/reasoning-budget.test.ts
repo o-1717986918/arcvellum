@@ -56,6 +56,16 @@ describe("reasoning budget", () => {
 		expect(safeThinkingLevel(sparseGatewayModel as never, "low")).toBe("off");
 	});
 
+	it("uses DeepSeek's documented medium-to-high thinking mapping", () => {
+		const deepSeek = {
+			provider: "deepseek", reasoning: true,
+			thinkingLevelMap: { minimal: null, low: null, medium: null, high: "high", max: "max" },
+		};
+		expect(safeThinkingLevel(deepSeek as never, "medium")).toBe("high");
+		expect(safeThinkingLevel(deepSeek as never, "off")).toBe("off");
+		expect(safeThinkingLevel(deepSeek as never, "low")).toBe("off");
+	});
+
 	it("uses the nearest supported lower level when an exact level is absent", () => {
 		const bounded = {
 			reasoning: true,

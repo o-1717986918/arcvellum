@@ -35,7 +35,7 @@ function toolLabel(value?: string): string {
       <summary>查看机器校验原文</summary>
       <pre>{{ presentation.raw }}</pre>
     </details>
-    <div v-else class="creative-live-empty compact"><Bot :size="21" /><p>Agent 的可见说明会在这里流式出现。</p></div>
+    <div v-if="!session?.transcript" class="creative-live-empty compact"><Bot :size="21" /><p>Agent 的可见说明会在这里流式出现。</p></div>
     <section v-if="session?.tools?.length" class="creative-tool-list">
       <header><TerminalSquare :size="13" /><strong>最近工具活动</strong></header>
       <ol>

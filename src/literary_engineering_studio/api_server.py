@@ -49,6 +49,7 @@ from .config import default_projects_root, save_config
 from .core_read_models import build_activity, build_dashboard, build_task_summary, current_choices
 from .core_read_models import record_choice, record_ui_note, save_display_field
 from .delivery import delivery_content_type, resolve_delivery_file
+from .projections.partial_delivery import create_partial_docx
 from .infrastructure.composition import resolve_application_container
 from .live_events import coalesce_live_events
 from .model_connections import model_connection_status
@@ -228,18 +229,7 @@ def create_app(
     )
     api_token = os.environ.get("LES_API_TOKEN", "").strip()
     startup_nonce = os.environ.get("LES_STARTUP_NONCE", "").strip()
-    desktop_session_token = secrets.token_urlsafe(32) if api_token else ""
-    if api_token:
-        @app.middleware("http")
-        async def desktop_auth(request: Request, call_next):
-            path = request.url.path
-            if request.method == "OPTIONS" or path == "/" or path.startswith("/ui/") or path == "/desktop/session":
-                return await call_next(request)
-            supplied = request.headers.get("Authorization", "")
-            session_cookie = request.cookies.get("les_desktop_session", "")
-            if supplied == f"Bearer {api_token}" or secrets.compare_digest(session_cookie, desktop_session_token):
-                return await call_next(request)
-            return JSONResponse(status_code=401, content={"detail": "Studio desktop session is not authenticated"})
+    desktop_session_token = _register_desktop_auth(app, api_token)
     app.state.lifecycle = lifecycle
     app.state.bootstrap = bootstrap
     app.state.autopilot = autopilot
@@ -359,6 +349,7 @@ def create_app(
                 context_ledgers=lifecycle.persistence.context_ledgers,
                 scene_transactions=autopilot.scene_transactions,
                 sse=_sse,
+                data_root=Path(str(config.get("application", {}).get("data_root") or ".")).expanduser().resolve(),
             )
         )
     )
@@ -433,6 +424,8 @@ def create_app(
                 delivery_snapshot=delivery_snapshot,
                 resolve_delivery_file=lambda root, relative: resolve_delivery_file(root, relative),
                 delivery_content_type=lambda target: delivery_content_type(target),
+                create_partial_docx=create_partial_docx,
+                invalidate_project=read_models.invalidate,
                 stream_read_model=_stream_read_model,
             )
         )
@@ -470,3 +463,22 @@ def create_app(
     app.include_router(build_worker_router(worker_dependencies))
 
     return app
+
+
+def _register_desktop_auth(app, api_token: str) -> str:
+    if not api_token:
+        return ""
+    desktop_session_token = secrets.token_urlsafe(32)
+
+    @app.middleware("http")
+    async def desktop_auth(request: Request, call_next):
+        path = request.url.path
+        if request.method == "OPTIONS" or path == "/" or path.startswith("/ui/") or path == "/desktop/session":
+            return await call_next(request)
+        supplied = request.headers.get("Authorization", "")
+        session_cookie = request.cookies.get("les_desktop_session", "")
+        if supplied == f"Bearer {api_token}" or secrets.compare_digest(session_cookie, desktop_session_token):
+            return await call_next(request)
+        return JSONResponse(status_code=401, content={"detail": "Studio desktop session is not authenticated"})
+
+    return desktop_session_token

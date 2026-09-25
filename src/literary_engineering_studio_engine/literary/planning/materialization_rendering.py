@@ -22,7 +22,7 @@ word_count_min: {lower}
 word_count_max: {upper}
 
 time:
-  story_time: ""
+  story_time: {story_time}
   timeline_order: {timeline_order}
 
 location: ""
@@ -136,6 +136,7 @@ def render_scene_yaml(
         "lower": max(1, round(target * 0.9)),
         "upper": max(1, round(target * 1.1)),
         "timeline_order": int(number(str(scene["scene_id"]))),
+        "story_time": yaml_text(scene.get("story_time", "")),
         "participants": json.dumps(scene["participants"], ensure_ascii=False),
         "scene_goal": yaml_text(scene["obligation"] or scene["name"]),
         "conflict": yaml_text(scene["conflict"]),

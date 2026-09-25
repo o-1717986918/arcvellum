@@ -33,6 +33,13 @@ const PROJECT_CREATE_TOOL = "project_create";
 const PROJECT_GOAL_MANAGE_TOOL = "project_goal_manage";
 const PROJECT_CHAPTER_EXTEND_TOOL = "project_chapter_extend";
 const PROJECT_FUTURE_REPLAN_TOOL = "project_future_replan";
+const PROJECT_ACTOR_PERSONAS_TOOL = "project_actor_personas";
+const PROJECT_ACTOR_PERSONA_UPDATE_TOOL = "project_actor_persona_update";
+const PROJECT_ARCHIVE_READ_TOOL = "project_archive_read";
+const PROJECT_ARCHIVE_CHANGE_TOOL = "project_archive_change";
+const PROJECT_OWNER_STYLE_READ_TOOL = "project_owner_style_read";
+const PROJECT_OWNER_STYLE_WRITE_TOOL = "project_owner_style_write";
+const PROJECT_STYLE_VERSIONS_TOOL = "project_style_versions";
 const SUPPORTED_TOOLS = new Set([
 	WORKSPACE_CATALOG_TOOL,
 	PROJECT_OVERVIEW_TOOL,
@@ -51,6 +58,13 @@ const SUPPORTED_TOOLS = new Set([
 	PROJECT_GOAL_MANAGE_TOOL,
 	PROJECT_CHAPTER_EXTEND_TOOL,
 	PROJECT_FUTURE_REPLAN_TOOL,
+	PROJECT_ACTOR_PERSONAS_TOOL,
+	PROJECT_ACTOR_PERSONA_UPDATE_TOOL,
+	PROJECT_ARCHIVE_READ_TOOL,
+	PROJECT_ARCHIVE_CHANGE_TOOL,
+	PROJECT_OWNER_STYLE_READ_TOOL,
+	PROJECT_OWNER_STYLE_WRITE_TOOL,
+	PROJECT_STYLE_VERSIONS_TOOL,
 ]);
 
 export interface ProjectAgentStart {
@@ -275,6 +289,78 @@ function projectToolDefinition(name: string): {
 			])),
 		}),
 	};
+	if (name === PROJECT_ACTOR_PERSONAS_TOOL) return {
+		label: "Read Actor Persona Tags",
+		description: "List established characters and their complete project-level actor initialization tags. Pass character_id to focus on one character.",
+		parameters: Type.Object({
+			work_id: workId(),
+			character_id: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+		}),
+	};
+	if (name === PROJECT_ARCHIVE_READ_TOOL) return {
+		label: "Read Archive Assets",
+		description: "Read the same registered archive tree, asset detail, history, creation options, or recycle bin exposed in the editor. Detail content is paged; use offset until has_more is false.",
+		parameters: Type.Object({
+			work_id: workId(),
+			section: Type.Union([Type.Literal("tree"), Type.Literal("detail"), Type.Literal("history"), Type.Literal("creation_options"), Type.Literal("recycle_bin")]),
+			asset_id: Type.Optional(Type.String({ maxLength: 300 })),
+			offset: Type.Optional(Type.Integer({ minimum: 0 })),
+		}),
+	};
+	if (name === PROJECT_ARCHIVE_CHANGE_TOOL) return {
+		label: "Change Archive Asset",
+		description: "Use the editor's audited owner transaction for a registered asset. Read its revision first. Replace requires the full new content and exact base_revision; create requires asset_type and local_id. Archive and restore use the editor's recycle-bin rules. All changes return receipts and may stale dependent work.",
+		parameters: Type.Object({
+			work_id: workId(),
+			operation: Type.Union([Type.Literal("create"), Type.Literal("replace"), Type.Literal("archive"), Type.Literal("restore")]),
+			asset_id: Type.Optional(Type.String({ maxLength: 300 })),
+			asset_type: Type.Optional(Type.String({ maxLength: 100 })),
+			local_id: Type.Optional(Type.String({ maxLength: 200 })),
+			base_revision: Type.Optional(Type.String({ maxLength: 100 })),
+			entry_id: Type.Optional(Type.String({ maxLength: 200 })),
+			content: Type.Optional(Type.String({ maxLength: 50000 })),
+			reason: Type.String({ minLength: 6, maxLength: 2000 }),
+		}),
+	};
+	if (name === PROJECT_OWNER_STYLE_READ_TOOL) return {
+		label: "Read Author Style Directive",
+		description: "Read the current author-written project style layer and revision. This layer is separate from immutable reviewed style versions.",
+		parameters: Type.Object({ work_id: workId() }),
+	};
+	if (name === PROJECT_STYLE_VERSIONS_TOOL) return {
+		label: "List Style Versions",
+		description: "List the same version identities and mountability states as the Style Atelier, or inspect one version by style_id and version_id. Use exact identity and hash with project_style_mount.",
+		parameters: Type.Object({
+			work_id: workId(), offset: Type.Optional(Type.Integer({ minimum: 0 })),
+			style_id: Type.Optional(Type.String({ maxLength: 200 })),
+			version_id: Type.Optional(Type.String({ maxLength: 200 })),
+		}),
+	};
+	if (name === PROJECT_OWNER_STYLE_WRITE_TOOL) return {
+		label: "Write Author Style Directive",
+		description: "Attach or replace the project's own style direction for future scenes using the revision from project_owner_style_read. Empty content detaches this layer. It does not forge a reviewed style version or override canon.",
+		parameters: Type.Object({
+			work_id: workId(),
+			base_revision: Type.String({ minLength: 64, maxLength: 64 }),
+			content: Type.String({ maxLength: 3500 }),
+			reason: Type.String({ minLength: 6, maxLength: 2000 }),
+		}),
+	};
+	if (name === PROJECT_ACTOR_PERSONA_UPDATE_TOOL) return {
+		label: "Update Actor Persona Tags",
+		description: "Replace the actor initialization tag sections for one established character. Read the current profile first; each array is freely editable. LITERATURE_STYLE holds broad author-like or literary-movement tags. Tags use uppercase English letters and underscores. Changes affect future scene transactions.",
+		parameters: Type.Object({
+			work_id: workId(),
+			character_id: Type.String({ minLength: 1, maxLength: 200 }),
+			sections: Type.Object({
+				PERSONA_LOAD: Type.Array(Type.String({ minLength: 1, maxLength: 80 }), { maxItems: 16 }),
+				PERSONALITY_CORE: Type.Array(Type.String({ minLength: 1, maxLength: 80 }), { maxItems: 16 }),
+				PERSONALITY_PUBLIC: Type.Array(Type.String({ minLength: 1, maxLength: 80 }), { maxItems: 16 }),
+				LANGUAGE_STYLE: Type.Array(Type.String({ minLength: 1, maxLength: 80 }), { maxItems: 16 }),
+				LITERATURE_STYLE: Type.Array(Type.String({ minLength: 1, maxLength: 80 }), { maxItems: 16 }),
+			}),
+		}),
+	};
 	if (name === PROJECT_RECORD_DIRECTION_TOOL) return {
 		label: "Record Creative Direction",
 		description: "Record a durable creative direction for the current project when it advances the user's stated goal.",
@@ -367,6 +453,7 @@ function projectToolDefinition(name: string): {
 			]),
 			objective: Type.Optional(Type.String({ maxLength: 8000 })),
 			stop_after_formal_units: Type.Optional(Type.Integer({ minimum: 0, maximum: 100000 })),
+			expected_stop_reason: Type.Optional(Type.String({ maxLength: 100 })),
 		}),
 	};
 	if (name === PROJECT_CHAPTER_EXTEND_TOOL) return {
@@ -382,7 +469,7 @@ function projectToolDefinition(name: string): {
 	};
 	if (name === PROJECT_FUTURE_REPLAN_TOOL) return {
 		label: "Replan Unwritten Story",
-		description: "Replace only the uncommitted future scene suffix from irreversible event anchors, revise chapter scene counts, and preserve all committed prose and the book character target. Use this when capacity-first planning causes repeated plot beats. This does not resume creation.",
+		description: "Replan all scenes before the first commit, or replace only the unwritten suffix afterward. Revise chapter scene counts, reading versus story-time order, narrative design, events, and relative scene length while preserving committed prose and the book character target. This does not resume creation.",
 		parameters: Type.Object({
 			work_id: workId(),
 			chapter_scene_counts: Type.Record(

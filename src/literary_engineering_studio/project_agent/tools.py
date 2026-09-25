@@ -21,6 +21,10 @@ READ_TOOLS = (
     "creation_observe",
     "project_controls",
     "project_diagnose",
+    "project_actor_personas",
+    "project_archive_read",
+    "project_owner_style_read",
+    "project_style_versions",
 )
 ACTION_TOOLS = (
     "project_record_direction",
@@ -33,6 +37,9 @@ ACTION_TOOLS = (
     "project_goal_manage",
     "project_chapter_extend",
     "project_future_replan",
+    "project_actor_persona_update",
+    "project_archive_change",
+    "project_owner_style_write",
 )
 TOOL_RISKS = {
     **{name: ToolRisk.READ for name in READ_TOOLS},
@@ -41,6 +48,7 @@ TOOL_RISKS = {
     "project_create": ToolRisk.FORMAL_WRITE,
     "project_chapter_extend": ToolRisk.FORMAL_WRITE,
     "project_future_replan": ToolRisk.FORMAL_WRITE,
+    "project_archive_change": ToolRisk.FORMAL_WRITE,
     # Protocol compatibility only. New Agent turns use project_goal_manage.
     "creation_control": ToolRisk.REVERSIBLE_WRITE,
 }
@@ -55,6 +63,10 @@ def available_read_tools(dependencies: ProjectAgentDependencies) -> tuple[str, .
             ("creation_observe", dependencies.creation_observe),
             ("project_controls", dependencies.project_controls),
             ("project_diagnose", dependencies.project_diagnose),
+            ("project_actor_personas", dependencies.actor_personas),
+            ("project_archive_read", dependencies.archive_read),
+            ("project_owner_style_read", dependencies.owner_style_read),
+            ("project_style_versions", dependencies.style_versions),
         )
         if handler is not None
     )
@@ -75,6 +87,9 @@ def available_action_tools(actions: ProjectAgentActionDependencies | None) -> tu
             ("project_goal_manage", actions.manage_goal),
             ("project_chapter_extend", actions.extend_chapter),
             ("project_future_replan", actions.replan_future),
+            ("project_actor_persona_update", actions.update_actor_persona),
+            ("project_archive_change", actions.archive_change),
+            ("project_owner_style_write", actions.owner_style_write),
         )
         if handler is not None
     )
@@ -114,6 +129,10 @@ class ProjectAgentToolDispatcher:
             "creation_observe": self.dependencies.creation_observe,
             "project_controls": self.dependencies.project_controls,
             "project_diagnose": self.dependencies.project_diagnose,
+            "project_actor_personas": self.dependencies.actor_personas,
+            "project_archive_read": self.dependencies.archive_read,
+            "project_owner_style_read": self.dependencies.owner_style_read,
+            "project_style_versions": self.dependencies.style_versions,
         }
         handler = read_handlers.get(call.name)
         if risk is ToolRisk.READ:
@@ -135,6 +154,9 @@ class ProjectAgentToolDispatcher:
             "project_goal_manage": self.actions.manage_goal,
             "project_chapter_extend": self.actions.extend_chapter,
             "project_future_replan": self.actions.replan_future,
+            "project_actor_persona_update": self.actions.update_actor_persona,
+            "project_archive_change": self.actions.archive_change,
+            "project_owner_style_write": self.actions.owner_style_write,
         }
         handler = action_handlers.get(call.name)
         if handler is None:

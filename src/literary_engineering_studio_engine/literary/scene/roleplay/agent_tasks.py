@@ -24,8 +24,8 @@ def world_agent_task() -> str:
 
 def branch_agent_task() -> str:
     return """基于角色行动提案和 World Agent 后果记录，补全 Branch A/B/C：
-1. Branch A 优先人物最合理，不追求便利剧情。
-2. Branch B 优先戏剧冲突最强，但不能突破 canon 和人物道德边界。
+1. Branch A 优先人物最合理。
+2. Branch B 优先戏剧冲突最强。
 3. Branch C 优先文学余味最强，强调选择后的关系余波和主题回声。
 每个分支都要填写行动链、代价、新事实候选和后续钩子，并遵守标准中文标点。"""
 
@@ -49,7 +49,7 @@ def canon_agent_task() -> str:
 
 
 def merge_agent_task() -> str:
-    return """基于 Director Agent 评分表，选择推荐分支并给出理由。如果不只选一个，说明保留哪些另一分支的元素。不要把推荐分支当作自动决定；合并前必须列出需要用户确认的事项。"""
+    return """基于 Director Agent 评分表，选择推荐分支并给出理由。如果不只选一个，说明保留哪些另一分支的元素。合并前必须列出需要用户确认的事项。"""
 
 
 def writeback_agent_task() -> str:

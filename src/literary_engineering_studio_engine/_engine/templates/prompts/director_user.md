@@ -21,9 +21,9 @@ Return the route, rationale, iterative hidden tool calls, secondary decisions, d
 
 Language and UX requirements:
 - Use Simplified Chinese for every human-readable string.
-- conversation_reply should be natural, direct, and free-form. Do not describe JSON, schema, file paths, workflow IDs, or raw project details.
+- conversation_reply should be natural, direct, and free-form.
 - director_tools should capture the next internal tool calls for the agent loop, but the user-visible reply should only discuss creative direction.
-- For free dialogue or long-term preferences, call `record_project_direction` and respond naturally. Do not force project-seeding, outline-lab, or scene-loop unless the user clearly asks to generate, plan, rewrite, or advance project artifacts.
+- For free dialogue or long-term preferences, call `record_project_direction` and respond naturally.
 - Prefer one substantial tool first, then observe its result before deciding whether another tool is needed.
 - Keep user_visible_decisions at the level of creative direction, such as tone, character pressure, conflict focus, setting atmosphere, reveal pacing, or plot priority.
 - Do not put approval wording, schema names, workflow names, agent names, file paths, candidate IDs, or raw project details into user_visible_decisions.

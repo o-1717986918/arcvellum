@@ -1,4 +1,6 @@
 import unittest
+import hashlib
+import json
 from pathlib import Path
 import tempfile
 
@@ -90,6 +92,26 @@ class ProjectAgentReadModelTests(unittest.TestCase):
         self.assertEqual(story["recent_changes"][0]["summary"], "林澈决定公开旧物")
         self.assertEqual(story["open_threads"][0]["title"], "旧物来源仍未知")
         self.assertEqual(story["continuity_status"]["state"], "tracked")
+
+    def test_scene_checkpoint_overview_reads_verified_prose_and_macro_plan(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            plan = root / "plot" / "lean_project_plan.json"
+            plan.parent.mkdir()
+            plan.write_text(json.dumps({"central_question": "她会留下吗？", "chapters": [
+                {"chapter_id": "chapter_0001", "title": "开端", "obligation": "相遇"},
+            ]}, ensure_ascii=False), encoding="utf-8")
+            prose = root / "drafts" / "scenes" / "scene_0001.md"
+            prose.parent.mkdir(parents=True)
+            prose.write_text("她推开了门。\n", encoding="utf-8")
+            receipt = root / "workflow" / "scene_commits" / "scene_0001.json"
+            receipt.parent.mkdir(parents=True)
+            receipt.write_text(json.dumps({
+                "prose_sha256": hashlib.sha256("她推开了门。".encode()).hexdigest(),
+            }), encoding="utf-8")
+            value = self.dependencies.project_overview(root, {"focus": "scene-checkpoint"})
+            self.assertEqual(value["macro_plan"]["central_question"], "她会留下吗？")
+            self.assertEqual(value["latest_formal_scene"]["prose"], "她推开了门。")
 
     def test_search_returns_bounded_index_hits(self):
         value = self.dependencies.project_search(_root(), {"query": "地图", "limit": 5})

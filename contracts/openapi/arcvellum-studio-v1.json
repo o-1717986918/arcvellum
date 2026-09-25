@@ -1004,6 +1004,24 @@
         "title": "RunnerProbeRequest",
         "type": "object"
       },
+      "ScenePerformancePreferenceRequest": {
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "max_actor_calls": {
+            "title": "Max Actor Calls",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "enabled",
+          "max_actor_calls"
+        ],
+        "title": "ScenePerformancePreferenceRequest",
+        "type": "object"
+      },
       "StyleAdvanceRequest": {
         "properties": {
           "author_id": {
@@ -3730,6 +3748,89 @@
         "summary": "Creative Run Snapshot"
       }
     },
+    "/creative-live/scene-rehearsals": {
+      "get": {
+        "operationId": "scene_rehearsals_creative_live_scene_rehearsals_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Scene Rehearsals"
+      }
+    },
+    "/creative-live/scene-rehearsals/{transaction_id}": {
+      "get": {
+        "operationId": "scene_rehearsal_creative_live_scene_rehearsals__transaction_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "transaction_id",
+            "required": true,
+            "schema": {
+              "title": "Transaction Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Scene Rehearsal"
+      }
+    },
     "/creative-live/sessions/{session_id}": {
       "get": {
         "operationId": "creative_session_creative_live_sessions__session_id__get",
@@ -4046,6 +4147,56 @@
           }
         },
         "summary": "Select"
+      }
+    },
+    "/model-connections/pi-worker/scene-performance": {
+      "get": {
+        "operationId": "scene_performance_model_connections_pi_worker_scene_performance_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Scene Performance"
+      },
+      "put": {
+        "operationId": "select_scene_performance_model_connections_pi_worker_scene_performance_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScenePerformancePreferenceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Select Scene Performance"
       }
     },
     "/model-connections/pi-worker/thinking": {
@@ -5214,6 +5365,43 @@
           }
         },
         "summary": "Project Delivery Download"
+      }
+    },
+    "/project/delivery/snapshot": {
+      "post": {
+        "operationId": "project_delivery_snapshot_project_delivery_snapshot_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Project Delivery Snapshot"
       }
     },
     "/project/delivery/stream": {

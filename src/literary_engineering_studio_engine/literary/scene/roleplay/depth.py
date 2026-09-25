@@ -40,12 +40,12 @@ def roleplay_depth_contract(roleplay_depth: str) -> str:
         return (
             "light：只分析本场直接参与者与即时因果，但 character_actions、"
             "world_consequences、branch_pressures、canon_risks 和 writeback_candidates "
-            "仍必须形成非占位证据；不得把 light 理解为跳过 RP。"
+            "仍必须形成非占位证据。"
         )
     if depth == "full":
         return (
             "full：覆盖所有正式人物中与本场事实相关的压力，加入反事实选择、关系代价、"
-            "世界后果与 Canon 冲突复核；不得只扩写同一结论。"
+            "世界后果与 Canon 冲突复核。"
         )
     return (
         "targeted：完整分析直接参与者与主要角色，明确被拒绝的便利行动、下一场代价、"

@@ -1,33 +1,40 @@
 import { describe, expect, it } from "vitest";
-import { conversationSystemPrompt } from "../src/conversation.ts";
+import { actorHistoryMessages, actorTurnEnvelope, conversationMessages, conversationSystemPrompt } from "../src/conversation.ts";
 
 describe("bounded scene performance profiles", () => {
-	it("gives a character actor a distinct roleplay identity without project tools", () => {
-		const prompt = conversationSystemPrompt("character-actor");
-		expect(prompt).toContain("你在这一轮就是任务单指定的那个人");
-		expect(prompt).toContain("只经历当前请求覆盖的时刻");
-		expect(prompt).toContain("持续以“我”感受并回应");
-		expect(prompt).toContain("已发生的公共言行");
-		expect(prompt).not.toContain("从本场第一个时刻到最后一个时刻");
-		expect(prompt).toContain("你自己决定何时开口、回避、反问、沉默、行动");
-		expect(prompt).toContain("同一处境下连续说话或行动");
-		expect(prompt).toContain("不为填格制造手势或流程解释");
-		expect(prompt).toContain("可挣脱的惯性");
-		expect(prompt).toContain("普通可弃的现场细节可作为候选");
-		expect(prompt).toContain("固定结果是整场戏的底线，不是下一句的命令");
-		expect(prompt).toContain("不能把同一防御换词重播直到场景结束");
-		expect(prompt).toContain("不靠突然抛出无来源的另一桩秘密制造新的跨场承诺");
-		expect(prompt).toContain("no tools and no project write access");
-		expect(prompt).not.toContain("You are an ArcVellum character actor");
+	it("gives the character actor no competing system prompt", () => {
+		expect(conversationSystemPrompt("character-actor")).toBe("");
 	});
 
-	it("gives an environment writer a distinct bounded prose role", () => {
-		const prompt = conversationSystemPrompt("environment-writer");
-		expect(prompt).toContain("你自己决定注意什么、略过什么");
-		expect(prompt).toContain("不必逐项写五感、铺满每拍");
-		expect(prompt).toContain("一旦某处痕迹、器物状态或声音会被读者当成线索，就必须有来源");
-		expect(prompt).toContain("不替人物说话、行动或解释心理");
-		expect(prompt).toContain("no tools and no project write access");
+	it("keeps initialization and any later messages in one ordered conversation", () => {
+		const messages = ["你是甲。", "# 本场角色任务单", "# 继续扮演并回答追问"];
+		const payload = JSON.stringify({ schema: "arcvellum/actor-conversation/v1", messages });
+		expect(conversationMessages("character-actor", payload)).toEqual(messages);
+		expect(() => conversationMessages("character-actor", "你是甲。\n# 本场角色任务单")).toThrow("conversation envelope");
+		expect(() => conversationMessages("character-actor", JSON.stringify({ schema: "arcvellum/actor-conversation/v1", messages: ["你是甲。"] }))).toThrow("initialization and subsequent");
+		expect(conversationMessages("environment-writer", "环境任务")).toEqual(["环境任务"]);
+	});
+
+	it("initializes an environment writer before its scene request without a competing system prompt", () => {
+		expect(conversationSystemPrompt("environment-writer")).toBe("");
+		const initialization = "【SCENE_LOAD】\nSCENE_CLAIM_LANDSCAPE_DESCRIBER\n\n[NOW_TO_DO]\nSTAND_BY";
+		const prompt = "# Independent Environment Writing\n场景资料";
+		const envelope = JSON.stringify({ schema: "arcvellum/environment-conversation/v1", initialization, prompt });
+		expect(conversationMessages("environment-writer", envelope)).toEqual([initialization, prompt]);
+		expect(() => conversationMessages("environment-writer", JSON.stringify({ schema: "arcvellum/environment-conversation/v1", initialization })))
+			.toThrow("initialization and scene prompt");
+	});
+
+	it("keeps the persona in the system layer and replays only scene turns", () => {
+		const payload = JSON.stringify({ schema: "arcvellum/actor-conversation/v2",
+			initialization: "【PERSONA_LOAD】\nSELF_CLAIM_LIN", initialization_answer: "",
+			history: [{ prompt: "第一轮", answer: "我等你。" }], prompt: "第二轮" });
+		expect(actorTurnEnvelope(payload)?.history).toEqual([{ prompt: "第一轮", answer: "我等你。" }]);
+		const transcript = actorHistoryMessages(actorTurnEnvelope(payload)!, { api: "openai-completions", provider: "openai", id: "fixture" });
+		expect(transcript.map((message) => message.role)).toEqual(["user", "assistant"]);
+		expect(actorTurnEnvelope("not json")).toBeNull();
+		expect(() => actorTurnEnvelope(JSON.stringify({ schema: "arcvellum/actor-conversation/v2", history: [] })))
+			.toThrow("actor turn requires");
 	});
 
 	it("retains the legacy conversation identity for other roles", () => {

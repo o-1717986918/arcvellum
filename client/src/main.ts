@@ -14,5 +14,6 @@ import "./styles/creativeLive.css";
 import "./styles/projectAgent.css";
 import "./styles/agentWorkspaces.css";
 import "./styles/conversationFirstFinish.css";
+import "./styles/sceneRehearsal.css";
 
 createApp(App).use(createPinia()).use(router).mount("#app");

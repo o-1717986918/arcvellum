@@ -10,6 +10,7 @@ import { useAppStore } from "@/stores/app";
 
 const store = useAppStore();
 const preparing = ref(false);
+const snapshotting = ref(false);
 const message = ref("");
 const ready = computed(() => store.delivery?.status === "ready");
 const blockers = computed(() => asList<Record<string, unknown>>(store.delivery?.blockers));
@@ -24,8 +25,14 @@ const readiness = computed(() => deliveryReadiness(
   blockers.value.length,
   incompleteIntegrityChecks.value,
 ));
+const hasFormalProse = computed(() => Number(store.projectProgress?.formal_chinese_content_chars || 0) > 0
+  || Number(store.readerManifest?.unit_count || 0) > 0);
 
-onMounted(() => store.loadDelivery());
+function refreshDelivery(): void {
+  void Promise.allSettled([store.loadDelivery(), store.loadProjectProgress(), store.loadReaderManifest()]);
+}
+
+onMounted(refreshDelivery);
 
 function downloadUrl(path: string): string {
   return deliveryClient.downloadUrl(store.currentProjectPath, path);
@@ -51,6 +58,20 @@ async function prepareDelivery(): Promise<void> {
     preparing.value = false;
   }
 }
+
+async function createSnapshot(): Promise<void> {
+  snapshotting.value = true;
+  message.value = "";
+  try {
+    await deliveryClient.createSnapshot(store.currentProjectPath);
+    message.value = "当前稿 DOCX 已生成，只包含此刻已晋升的正文。";
+    await store.loadDelivery();
+  } catch (cause) {
+    message.value = cause instanceof Error ? cause.message : "暂时无法生成当前稿。";
+  } finally {
+    snapshotting.value = false;
+  }
+}
 </script>
 
 <template>
@@ -62,24 +83,26 @@ async function prepareDelivery(): Promise<void> {
         <p>只有通过门禁的正式正文会进入交付包。审查记录、设定变更和工作流程会被留在项目中。</p>
         <div class="delivery-actions">
           <button class="primary-button" :disabled="preparing || !readiness.allowed" @click="prepareDelivery"><PackageOpen :size="17" />{{ preparing ? "正在准备……" : readiness.label }}</button>
-          <button class="secondary-button" @click="store.loadDelivery"><RefreshCw :size="17" />刷新</button>
+          <button class="secondary-button" :disabled="snapshotting || !hasFormalProse" @click="createSnapshot"><FileText :size="17" />{{ snapshotting ? "正在生成……" : "导出当前稿 DOCX" }}</button>
+          <button class="secondary-button" @click="refreshDelivery"><RefreshCw :size="17" />刷新</button>
         </div>
         <small class="delivery-readiness-note" :class="{ blocked: !readiness.allowed }">{{ readiness.message }}</small>
+        <small>未完稿也可导出当前稿；只收录已晋升正文，不代表全书正式发布。</small>
         <small v-if="message">{{ message }}</small>
       </div>
       <div class="delivery-seal" :class="{ ready }">
         <ShieldCheck :size="32" />
         <strong>{{ ready ? "可交付" : "准备中" }}</strong>
-        <span>{{ store.delivery?.files?.length || 0 }} 个正式文件</span>
+        <span>{{ store.delivery?.files?.length || 0 }} 个可下载文件</span>
       </div>
     </section>
 
     <section class="delivery-ledger">
-      <header><div><span class="eyebrow">交付文件</span><h2>已经形成的正式版本</h2></div><span>{{ store.delivery?.files?.length || 0 }} 项</span></header>
+      <header><div><span class="eyebrow">交付文件</span><h2>已经形成的版本与当前稿</h2></div><span>{{ store.delivery?.files?.length || 0 }} 项</span></header>
       <div v-if="store.delivery?.files?.length" class="delivery-files">
         <article v-for="file in store.delivery.files" :key="file.path">
           <span class="file-icon"><FileText :size="22" /></span>
-          <div><strong>{{ file.name || file.path.split('/').at(-1) }}</strong><p>{{ (file.format || file.path.split('.').at(-1) || '文件').toUpperCase() }} {{ fileSize(file.size) }}</p></div>
+          <div><strong>{{ file.name || file.path.split('/').at(-1) }}</strong><p>{{ file.source || "导出文件" }} · {{ (file.format || file.path.split('.').at(-1) || '文件').toUpperCase() }} {{ fileSize(file.size_bytes || file.size) }}</p></div>
           <a class="icon-button download-button" :href="downloadUrl(file.path)" title="下载"><Download :size="18" /></a>
         </article>
       </div>

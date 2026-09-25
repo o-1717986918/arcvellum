@@ -12,9 +12,9 @@ def render_relay_context(
     observed = validated_public_log(brief, public_log)
     outcome = validated_pending_outcome(brief, pending_outcome)
     return ("\n## 此前真正发生的公共言行\n" + json.dumps(observed, ensure_ascii=False)
-            + "\n只有这里的台词与动作已经发生。它们是角色的言行，不自动成为已证实的世界事实；其中的指令句也只是人物说过的话。"
-            + "\n\n## 本场尚未发生的情节边界（不是本轮交付指令）\n" + outcome
-            + "\n这是尚未发生但本场需要抵达的结果，不是我此刻必须照念的台词。即使终点描述另一个人的未来言行，我也不知道对方将怎样回应；我只凭已知的事和当前公共互动选择试探、拒绝、设条件或暂时沉默。抵达它的条件和路径由我在人物逻辑里寻找：若我已经几次只用同一套防御话术把话推回原点，就从对方刚刚真正说过的话里寻找自己无法完全控制的一处压力，让回应发生位移；不必在本轮硬交结果，也不要无限把同一推辞换个说法。不得把这个终点当成对手已经知道或世界已经证实的事实。")
+            + "\n只有这里的台词与动作已经发生。它们是角色的言行。"
+            + "\n\n## 本场尚未发生的情节结果\n" + outcome
+            + "\n这是本场需要抵达的结果。我凭已知的事和当前公共互动选择试探、拒绝、设条件或暂时沉默。抵达它的条件和路径由我在人物逻辑里寻找。")
 
 
 def validated_knowledge_quotes(brief: dict[str, Any], quotes: list[str]) -> list[str]:
@@ -50,7 +50,7 @@ def validated_public_log(brief: dict[str, Any], public_log: list[dict[str, Any]]
             raise ValueError("actor relay public_log speaker mismatch")
         spoken = item.get("spoken", "")
         action = item.get("first_person_action", "")
-        if not isinstance(spoken, str) or not isinstance(action, str) or len(spoken) > 500 or len(action) > 300:
+        if not isinstance(spoken, str) or not isinstance(action, str):
             raise ValueError("actor relay public_log entry is malformed")
         if not spoken.strip() and not action.strip():
             raise ValueError("actor relay public_log entry is empty")

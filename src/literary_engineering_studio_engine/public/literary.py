@@ -46,6 +46,7 @@ from ..literary.planning.lean_plan import (
     chapter_obligations,
     normalize_initial_plan,
     normalize_scene_window,
+    rebalance_lean_budget,
     render_outline,
 )
 from ..literary.planning.service import calculate_word_budget
@@ -79,16 +80,25 @@ from ..literary.scene.branching.proposals import branch_proposal_contract
 from ..literary.scene.context.broker import context_trace_status
 from ..literary.scene.facts import SceneFacts, load_scene_facts, load_scene_mapping
 from ..literary.scene.composition.creative_plan import project_brief_expression_context
+from ..literary.scene.roleplay.actor_personas import actor_personas_for_participants, list_actor_personas, save_actor_persona
 from ..literary.scene.roleplay.performance import (
     render_performance_plan_prompt,
     parse_performance_plan,
     render_actor_prompt,
+    render_actor_initialization_prompt,
     render_actor_scene_prompt,
     parse_actor_material,
     parse_actor_scene_material,
     render_environment_prompt,
     parse_environment_material,
     render_performance_materials,
+)
+from ..literary.scene.roleplay.interaction import (
+    parse_interaction_direction,
+    parse_scene_material_requests,
+    render_actor_interaction_prompt,
+    render_interaction_direction_prompt,
+    render_interaction_materials,
 )
 from ..literary.scene.roleplay.relay_plan import parse_relay_plan, render_relay_plan_prompt
 from ..literary.scene.roleplay.relay_scene_check import parse_relay_scene_check, render_relay_scene_check_prompt
@@ -213,6 +223,7 @@ __all__ = sorted([
     "materialize_lean_window",
     "normalize_initial_plan",
     "normalize_scene_window",
+    "rebalance_lean_budget",
     "render_outline",
     "StyleMountPriority",
     "StyleMountRef",
@@ -316,6 +327,13 @@ __all__ = sorted([
     "recent_formal_reference_ids",
     "render_style_reference_selection",
     "project_brief_expression_context",
+    "parse_interaction_direction",
+    "render_actor_interaction_prompt",
+    "render_interaction_direction_prompt",
+    "render_interaction_materials",
+    "actor_personas_for_participants",
+    "list_actor_personas",
+    "save_actor_persona",
     "parse_relay_plan",
     "parse_relay_scene_check",
     "render_relay_plan_prompt",

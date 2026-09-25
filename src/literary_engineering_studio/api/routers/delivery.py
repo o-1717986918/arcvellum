@@ -17,6 +17,8 @@ class DeliveryRouterDependencies:
     delivery_snapshot: Callable[[Path], dict[str, Any]]
     resolve_delivery_file: Callable[[Path, str], Path]
     delivery_content_type: Callable[[Path], str]
+    create_partial_docx: Callable[[Path], dict[str, Any]]
+    invalidate_project: Callable[[Path, str], int]
     stream_read_model: Callable[[str, Callable[[], dict[str, Any]], float, int], Any]
 
 
@@ -32,6 +34,15 @@ def build_delivery_router(deps: DeliveryRouterDependencies) -> APIRouter:
     def project_delivery_stream(project_root: str, interval_seconds: float = 5.0, max_events: int = 0):
         root = resolve_project_root(project_root)
         return deps.stream_read_model("delivery", lambda: deps.delivery_snapshot(root), interval_seconds, max_events)
+
+    @router.post("/project/delivery/snapshot")
+    def project_delivery_snapshot(project_root: str):
+        root = resolve_project_root(project_root)
+        def create():
+            result = deps.create_partial_docx(root)
+            deps.invalidate_project(root, "partial-delivery-snapshot")
+            return result
+        return call_handler(create)
 
     @router.get("/project/delivery/download")
     def project_delivery_download(project_root: str, path: str):

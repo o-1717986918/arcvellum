@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import json
 import threading
 import time
-from typing import Any, Callable
+from typing import Any, Callable, Sequence
 
 from ..runtimes import build_runtime
 from .runtime_selection import runtime_for_role
@@ -18,6 +19,7 @@ class RoleConversationResult:
     run_id: str
     model: str
     answer: str
+    initialization_answer: str = ""
 
 
 class RoleConversationGateway:
@@ -36,6 +38,47 @@ class RoleConversationGateway:
         timeout: int,
         event_sink: Callable[[str, dict[str, Any]], None] | None = None,
         cancel_event: threading.Event | None = None,
+    ) -> RoleConversationResult:
+        if role == "character-actor":
+            raise ValueError("character actor requires an initialized conversation")
+        turns = _environment_turn_count(prompt) if role == "environment-writer" else 1
+        return self._execute(workspace, prompt, role=role, timeout=timeout,
+                             event_sink=event_sink, cancel_event=cancel_event, turns=turns)
+
+    def run_sequence(
+        self, workspace: Path, messages: Sequence[str], *, role: str, timeout: int,
+        event_sink: Callable[[str, dict[str, Any]], None] | None = None,
+        cancel_event: threading.Event | None = None,
+    ) -> RoleConversationResult:
+        if role != "character-actor" or len(messages) < 2 or any(not message.strip() for message in messages):
+            raise ValueError("actor conversation requires initialization followed by nonempty messages")
+        payload = json.dumps({"schema": "arcvellum/actor-conversation/v1",
+                              "messages": list(messages)}, ensure_ascii=False)
+        return self._execute(workspace, payload, role=role, timeout=timeout,
+                             event_sink=event_sink, cancel_event=cancel_event, turns=len(messages))
+
+    def run_actor_turn(
+        self, workspace: Path, *, initialization: str, initialization_answer: str,
+        history: Sequence[tuple[str, str]], prompt: str, timeout: int,
+        event_sink: Callable[[str, dict[str, Any]], None] | None = None,
+    ) -> RoleConversationResult:
+        """Continue one actor's scene transcript without regenerating prior replies."""
+
+        if not initialization.strip() or not prompt.strip():
+            raise ValueError("actor turn requires initialization and preserved prior answers")
+        payload = json.dumps({
+            "schema": "arcvellum/actor-conversation/v2", "initialization": initialization,
+            "initialization_answer": initialization_answer,
+            "history": [{"prompt": question, "answer": answer} for question, answer in history],
+            "prompt": prompt,
+        }, ensure_ascii=False)
+        return self._execute(workspace, payload, role="character-actor", timeout=timeout,
+                             event_sink=event_sink, cancel_event=None, turns=1)
+
+    def _execute(
+        self, workspace: Path, prompt: str, *, role: str, timeout: int,
+        event_sink: Callable[[str, dict[str, Any]], None] | None,
+        cancel_event: threading.Event | None, turns: int,
     ) -> RoleConversationResult:
         runtime_id = runtime_for_role(self.config, role)
         if runtime_id != "pi-worker":
@@ -60,12 +103,13 @@ class RoleConversationGateway:
             worker_mode="conversation",
             conversation_role=(role if role in {"character-actor", "environment-writer"} else "default"),
             reasoning_policy=str(settings.get("thinking") or "medium"),
-            max_turns=1,
+            max_turns=turns,
             max_tool_calls=1,
             max_repairs=0,
         )
         worker_result = _worker_result(result.metadata)
-        answer = "".join(pieces).strip() or str(worker_result.get("answer") or "").strip()
+        final_answer = str(worker_result.get("answer") or "").strip()
+        answer = final_answer if role == "character-actor" or (role == "environment-writer" and turns > 1) else "".join(pieces).strip() or final_answer
         if result.status != "completed":
             raise RuntimeError(result.message or f"{role} conversation failed")
         if not answer:
@@ -75,6 +119,7 @@ class RoleConversationGateway:
             run_id=str(worker_result.get("taskId") or run_root.name),
             model=model,
             answer=answer,
+            initialization_answer=str(worker_result.get("initializationAnswer") or ""),
         )
 
 
@@ -100,4 +145,16 @@ def _worker_result(metadata: dict[str, Any] | None) -> dict[str, Any]:
     values = metadata if isinstance(metadata, dict) else {}
     result = values.get("worker_result")
     return result if isinstance(result, dict) else {}
+
+
+def _environment_turn_count(prompt: str) -> int:
+    try:
+        payload = json.loads(prompt)
+    except json.JSONDecodeError:
+        return 1
+    if not isinstance(payload, dict) or payload.get("schema") != "arcvellum/environment-conversation/v1":
+        return 1
+    if any(not isinstance(payload.get(key), str) or not payload[key].strip() for key in ("initialization", "prompt")):
+        raise ValueError("environment conversation requires initialization and scene prompt")
+    return 2
 __all__ = ["RoleConversationGateway", "RoleConversationResult"]

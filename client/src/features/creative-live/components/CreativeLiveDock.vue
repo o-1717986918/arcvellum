@@ -1,21 +1,21 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from "vue";
-import { Activity, GitCompareArrows, RefreshCw, Radio, ScrollText, UsersRound } from "lucide-vue-next";
+import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
+import { Activity, GitCompareArrows, RefreshCw, Radio, ScrollText } from "lucide-vue-next";
 import { useAppStore } from "@/stores/app";
 import { useCreativeLiveStore } from "../stores/creativeLive";
 import ArtifactStatusRail from "./ArtifactStatusRail.vue";
-import ExecutionTimeline from "./ExecutionTimeline.vue";
+import CreativeProcessView from "./CreativeProcessView.vue";
+import CreativeRevisionView from "./CreativeRevisionView.vue";
 import LiveManuscript from "./LiveManuscript.vue";
 import ReviewRail from "./ReviewRail.vue";
-import RevisionDiff from "./RevisionDiff.vue";
-import SessionTranscript from "./SessionTranscript.vue";
 import SceneTransactionPulse from "./SceneTransactionPulse.vue";
 import { artifactKindLabel, artifactStatusLabel, artifactTitle } from "../artifactPresentation";
-import { activityTitle, sessionDisplayName } from "../creativePresentation";
+import { activityTitle } from "../creativePresentation";
 
 const app = useAppStore();
 const live = useCreativeLiveStore();
-const sideMode = ref<"review" | "session" | "revision">("review");
+const mainMode = ref<"process" | "manuscript" | "revision">("process");
+const mainCanvas = ref<HTMLElement | null>(null);
 const artifacts = computed(() => live.snapshot?.artifacts || []);
 const sessions = computed(() => live.snapshot?.sessions || []);
 const latestActivity = computed(() => {
@@ -26,17 +26,27 @@ const latestActivity = computed(() => {
 watch(() => app.currentProjectPath, (root) => { if (root) void live.connect(root); }, { immediate: true });
 onBeforeUnmount(() => live.disconnect());
 
-async function openSessionMode(): Promise<void> {
-  sideMode.value = "session";
-  const session = live.activeSession;
-  if (session) await live.selectSession(session.session_id);
+function openArtifact(artifactId: string): void {
+  live.selectArtifact(artifactId);
+  showMain("manuscript");
 }
 
 async function openRevisionMode(): Promise<void> {
-  sideMode.value = "revision";
+  showMain("revision");
   await live.loadRevisions();
-  const latest = live.revisions[0];
+  const latest = live.revisions.at(-1);
   if (latest) await live.loadRevision(latest.revision_id);
+  if (window.matchMedia("(max-width: 620px)").matches) {
+    await nextTick();
+    mainCanvas.value?.querySelector(".revision-diff-scroll p.added, .revision-diff-scroll p.removed")?.scrollIntoView({ block: "nearest" });
+  }
+}
+
+function showMain(mode: "process" | "manuscript" | "revision"): void {
+  mainMode.value = mode;
+  if (window.matchMedia("(max-width: 620px)").matches) {
+    void nextTick(() => mainCanvas.value?.scrollIntoView({ block: "start" }));
+  }
 }
 
 </script>
@@ -76,7 +86,7 @@ async function openRevisionMode(): Promise<void> {
         </section>
         <nav class="creative-artifact-list" aria-label="创作产物">
           <header><ScrollText :size="13" /><strong>创作内容</strong><span>{{ artifacts.length }}</span></header>
-          <button v-for="artifact in artifacts" :key="artifact.artifact_id" :class="{ active: live.activeArtifact?.artifact_id === artifact.artifact_id }" @click="live.selectArtifact(artifact.artifact_id)">
+          <button v-for="artifact in artifacts" :key="artifact.artifact_id" :class="{ active: live.activeArtifact?.artifact_id === artifact.artifact_id }" @click="openArtifact(artifact.artifact_id)">
             <i :data-identity="artifact.identity" :data-kind="artifact.kind"></i><span><strong>{{ artifactTitle(artifact) }}</strong><small>{{ artifactKindLabel(artifact) }} · {{ artifactStatusLabel(artifact) }}</small></span>
           </button>
           <p v-if="!artifacts.length">人物、世界观、规划、审查意见和正文形成后，都会在这里留下可阅读的现场记录。</p>
@@ -84,31 +94,21 @@ async function openRevisionMode(): Promise<void> {
         <ArtifactStatusRail :identity="live.activeArtifact?.identity" :characters="live.activeArtifact?.characters || live.activeArtifact?.content.length" :kind="live.activeArtifact?.kind" />
       </aside>
 
-      <LiveManuscript :artifact="live.activeArtifact" />
+      <main ref="mainCanvas" class="creative-live-main">
+        <nav class="creative-main-tabs" aria-label="创作现场主视图">
+          <button :class="{ active: mainMode === 'process' }" @click="showMain('process')"><Activity :size="14" />创作过程</button>
+          <button :class="{ active: mainMode === 'manuscript' }" @click="showMain('manuscript')"><ScrollText :size="14" />正文与资料</button>
+          <button :class="{ active: mainMode === 'revision' }" @click="openRevisionMode"><GitCompareArrows :size="14" />正文修订</button>
+        </nav>
+        <CreativeProcessView v-if="mainMode === 'process'" :activity="live.snapshot?.activity" :events="live.snapshot?.events" :sessions="sessions" :selected-session="live.activeSession" :project-root="app.currentProjectPath" :transaction-id="live.snapshot?.active_scene_transaction?.transaction_id" @select-session="live.selectSession" />
+        <LiveManuscript v-else-if="mainMode === 'manuscript'" :artifact="live.activeArtifact" />
+        <CreativeRevisionView v-else :artifact="live.activeArtifact" :revisions="live.revisions" :selected-revision="live.selectedRevision" :comparison-revision="live.comparisonRevision" @select-revision="live.loadRevision" />
+      </main>
 
       <aside class="creative-live-right">
-        <nav class="creative-live-tabs">
-          <button :class="{ active: sideMode === 'review' }" @click="sideMode = 'review'"><Activity :size="13" />审查</button>
-          <button :class="{ active: sideMode === 'session' }" @click="openSessionMode"><UsersRound :size="13" />会话</button>
-          <button :class="{ active: sideMode === 'revision' }" @click="openRevisionMode"><GitCompareArrows :size="13" />修订</button>
-        </nav>
+        <header class="creative-live-side-heading"><Activity :size="13" />审查与复核</header>
         <div class="creative-live-side-scroll">
-          <template v-if="sideMode === 'review'">
-            <ReviewRail :reviews="live.snapshot?.reviews" />
-            <ExecutionTimeline :items="live.snapshot?.activity" />
-          </template>
-          <template v-else-if="sideMode === 'session'">
-            <div v-if="sessions.length > 1" class="creative-session-selector">
-              <button v-for="(session, index) in sessions" :key="session.session_id" :class="{ active: live.activeSession?.session_id === session.session_id }" @click="live.selectSession(session.session_id)">{{ sessionDisplayName(session, index) }}</button>
-            </div>
-            <SessionTranscript :session="live.activeSession" />
-          </template>
-          <template v-else>
-            <div v-if="live.revisions.length" class="creative-revision-selector">
-              <button v-for="revision in live.revisions" :key="revision.revision_id" :class="{ active: live.selectedRevision?.revision_id === revision.revision_id }" @click="live.loadRevision(revision.revision_id)">{{ revision.identity === 'promoted' ? '正式晋升' : '候选修订' }} · {{ revision.characters.toLocaleString('zh-CN') }}</button>
-            </div>
-            <RevisionDiff :revision="live.selectedRevision" />
-          </template>
+          <ReviewRail :reviews="live.snapshot?.reviews" />
         </div>
       </aside>
     </div>

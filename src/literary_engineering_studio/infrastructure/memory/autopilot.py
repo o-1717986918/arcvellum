@@ -194,13 +194,17 @@ class InMemoryAutopilotRepository:
     def recover_autopilot_runs(self) -> int:
         recovered = 0
         with self._state.lock:
+            now = iso_now(self._clock)
             for run_id, record in self._state.autopilot_runs.items():
                 if record["status"] not in {"running", "stopping"}:
+                    continue
+                lease = self._state.autopilot_leases.get(run_id)
+                if lease and lease["lease_expires_at"] >= now:
                     continue
                 record.update(
                     status="paused",
                     stop_reason="application-restart",
-                    updated_at=iso_now(self._clock),
+                    updated_at=now,
                 )
                 self._append_event(
                     run_id,

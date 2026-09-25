@@ -21,6 +21,7 @@ from literary_engineering_studio_engine.public.literary import (
 from .comparison_projection import project_style_version_comparison
 from .impact_projection import project_style_mount_impact
 from .version_service import StyleVersionProjectionService
+from .owner_directive import read_owner_style_directive
 
 
 class StyleMountChoiceError(ValueError):
@@ -40,6 +41,7 @@ class StyleMountApplicationService:
 
     def status(self, project_root: Path) -> dict[str, object]:
         active = inspect_active_style_mount(project_root)
+        owner = read_owner_style_directive(project_root)
         integrity = _object(active.get("integrity"))
         return {
             "schema": "arcvellum/style-mount-status/v1",
@@ -54,6 +56,7 @@ class StyleMountApplicationService:
                 else "conflict"
             ),
             "active_mount": _safe_active_mount(active),
+            "owner_directive": {"active": owner["active"], "revision": owner["revision"]},
         }
 
     def mount(

@@ -18,7 +18,7 @@ from .contracts import (
 )
 from .factory import build_project_agent_runtime
 from .delegated_goal import DelegatedGoal, DelegatedGoalObserver, goal_snapshot
-from .prompt_policy import delegated_goal_followup_prompt, system_prompt, turn_prompt
+from .prompt_policy import delegated_goal_followup_prompt, delegated_scene_checkpoint_prompt, system_prompt, turn_prompt
 from .runtime import ProjectAgentRuntime
 from .session_state import active_turn_payload, turn_reference
 from .tools import ProjectAgentToolDispatcher, available_action_tools, available_read_tools
@@ -388,10 +388,14 @@ class ProjectAgentService:
                 )
             emit("project_agent.goal.terminal", goal_snapshot(terminal_run))
             emit("project_agent.goal.followup.started", {"run_id": current_goal.run_id})
+            checkpoint = str(terminal_run.get("stop_reason") or "") == "scene-editorial-checkpoint"
             followup = ProjectAgentTurnRequest(
                 session_id=request.session_id,
                 turn_id=request.turn_id,
-                prompt=delegated_goal_followup_prompt(message, result.answer, terminal_run),
+                prompt=(
+                    delegated_scene_checkpoint_prompt(message, terminal_run, current_goal.work_id)
+                    if checkpoint else delegated_goal_followup_prompt(message, result.answer, terminal_run)
+                ),
                 system_prompt=request.system_prompt,
                 allowed_tools=request.allowed_tools,
             )

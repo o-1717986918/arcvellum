@@ -131,6 +131,28 @@ export interface SceneTransactionSummary {
   version: number;
 }
 
+export interface SceneRehearsalSummary {
+  transaction_id: string;
+  scene_id: string;
+  status: string;
+  objective: string;
+  turn_count: number;
+  updated_at: string;
+}
+
+export interface SceneRehearsalTurn {
+  turn: number;
+  speaker: string;
+  beat_id: string;
+  source: string;
+  entries: Array<{ entry_id: string; spoken: string; first_person_action: string }>;
+}
+
+export interface SceneRehearsalDetail extends SceneRehearsalSummary {
+  turns: SceneRehearsalTurn[];
+  environment: Array<{ beat_id: string; description: string }>;
+}
+
 export interface StyleProvenance {
   source: "lean-runtime" | "formal-manifest";
   scene_id: string;
@@ -162,6 +184,7 @@ export interface CreativeLiveSnapshot {
   style_provenance: StyleProvenance | null;
   events: CreativeLiveEvent[];
   cursor: number;
+  live_cursor?: number;
 }
 
 export interface ArtifactRevisionSummary {

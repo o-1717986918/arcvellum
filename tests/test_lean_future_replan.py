@@ -164,6 +164,42 @@ class LeanFutureReplanTests(unittest.TestCase):
             self.assertEqual(gateway.calls, 1)
             self.assertTrue(all("均不得重演" in prompt for prompt in gateway.prompts))
 
+    def test_replans_entire_uncommitted_book_and_narrative_design(self):
+        class PrecommitGateway(_Gateway):
+            def run(self, workspace, prompt, *, role, timeout):
+                self.prompts.append(prompt)
+                self.calls += 1
+                chapters = [
+                    {"chapter_id": f"chapter_{index:04d}", "irreversible_change": f"第{index}章之后关系改变",
+                     "scenes": [{**_scene(f"第{index}章场景"), "story_time": f"第{4-index}日",
+                                 "length_weight": index,
+                                 "consequence": f"第{index}章之后林昭获得不同的选择"}]}
+                    for index in range(1, 4)
+                ]
+                answer = {"chapters": chapters, "narrative_design": {
+                    "narrative_mode": "三日倒叙", "temporal_structure": "阅读顺序与故事日期相反",
+                }}
+                return type("Response", (), {"answer": json.dumps(answer, ensure_ascii=False)})()
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            plan_path, budget_path = self._project(root)
+            for scene_id in ("scene_0001", "scene_0002"):
+                (root / "workflow" / "scene_commits" / f"{scene_id}.json").unlink()
+                (root / "drafts" / "scenes" / f"{scene_id}.md").unlink()
+            gateway = PrecommitGateway()
+            result = replan_lean_future(root, gateway, chapter_scene_counts={
+                "chapter_0001": 1, "chapter_0002": 1, "chapter_0003": 1,
+            }, direction="重排为三日倒叙，每章一场。")
+            plan = json.loads(plan_path.read_text(encoding="utf-8"))
+            budget = json.loads(budget_path.read_text(encoding="utf-8"))
+            self.assertEqual(result["committed_prefix_count"], 0)
+            self.assertEqual(result["future_scene_count"], 3)
+            self.assertEqual(plan["narrative_design"]["narrative_mode"], "三日倒叙")
+            self.assertEqual([scene["story_time"] for scene in plan["scenes"]], ["第3日", "第2日", "第1日"])
+            self.assertEqual(budget["totals"]["scene_count"], 3)
+            self.assertIn("story_time: \"第3日\"", (root / "scenes" / "scene_0001.yaml").read_text(encoding="utf-8"))
+
 
 if __name__ == "__main__":
     unittest.main()

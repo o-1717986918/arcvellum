@@ -71,6 +71,7 @@ def default_policy(
             "stop_after_formal_units": 0,
         },
         "release_policy": "delegated" if normalized == "full_auto" else "require_user",
+        "editorial_scene_checkpoint": False,
     }
 
 
@@ -86,6 +87,7 @@ def normalize_policy(value: dict[str, Any] | None) -> dict[str, Any]:
         "release_policy",
         "literary_kernel",
         "scene_execution_mode",
+        "editorial_scene_checkpoint",
     ):
         if key in incoming:
             policy[key] = incoming[key]
@@ -106,6 +108,7 @@ def normalize_policy(value: dict[str, Any] | None) -> dict[str, Any]:
         raise ValueError("literary_kernel must be strict-v1 or lean-v2")
     if policy["scene_execution_mode"] not in SCENE_EXECUTION_MODES:
         raise ValueError("scene_execution_mode must be draft, standard, or publication")
+    policy["editorial_scene_checkpoint"] = policy["editorial_scene_checkpoint"] is True
     return policy
 
 
@@ -128,6 +131,10 @@ class DelegationPolicy:
     @property
     def stop_after_formal_units(self) -> int:
         return int(self.payload["limits"]["stop_after_formal_units"])
+
+    @property
+    def editorial_scene_checkpoint(self) -> bool:
+        return bool(self.payload["editorial_scene_checkpoint"])
 
     def permits(self, route: str, decision_type: str) -> bool:
         if self.mode == "collaborative" or route not in self.payload["delegated_routes"]:

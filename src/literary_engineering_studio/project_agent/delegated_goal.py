@@ -110,6 +110,8 @@ def goal_snapshot(run: Mapping[str, Any]) -> dict[str, Any]:
         snapshot["chapter_update"] = chapter
     if revisions := _revision_summary(run.get("revision_summary")):
         snapshot["revision_summary"] = revisions
+    if performance := _scene_performance_summary(run.get("scene_performance_summary")):
+        snapshot["scene_performance_summary"] = performance
     return snapshot
 
 
@@ -131,6 +133,19 @@ def _revision_summary(value: Any) -> dict[str, int]:
         "total_attempts": int(value.get("total_attempts") or 0),
         "scene_count": int(value.get("scene_count") or 0),
         "max_attempts": int(value.get("max_attempts") or 0),
+    }
+
+
+def _scene_performance_summary(value: Any) -> dict[str, Any]:
+    if not isinstance(value, Mapping) or not value.get("committed_interaction_scenes"):
+        return {}
+    speakers = value.get("speakers")
+    return {
+        "committed_interaction_scenes": int(value.get("committed_interaction_scenes") or 0),
+        "interaction_turns": int(value.get("interaction_turns") or 0),
+        "actor_entries": int(value.get("actor_entries") or 0),
+        "speakers": [str(speaker) for speaker in speakers[:8]] if isinstance(speakers, list) else [],
+        "environment_passages": int(value.get("environment_passages") or 0),
     }
 
 

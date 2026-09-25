@@ -64,6 +64,37 @@ class CreativeLiveApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["revisions"][0]["artifact_id"], artifact["artifact_id"])
 
+    def test_durable_promotion_follows_earlier_live_preview_on_reconnect(self) -> None:
+        store = self.client.app.state.lifecycle.persistence.facade
+        run = store.create_autopilot_run(
+            str(self.project), mode="full_auto", runtime="pi-worker",
+            policy={"mode": "full_auto"},
+        )
+        self._publish_preview("候选正文。", revision=1)
+        store.append_autopilot_event(run["run_id"], "mutation.receipt", {
+            "attempt_id": "attempt-1",
+            "receipt": {
+                "target": "drafts/scenes/scene_0001_candidate.md",
+                "action": "formal_promoted",
+                "formal_effect": "formal",
+                "preflight_status": "pass",
+            },
+        })
+
+        snapshot = self.client.get(
+            "/creative-live", params={"project_root": str(self.project)},
+        ).json()
+        artifact = snapshot["artifacts"][0]
+        revisions = self.client.get(
+            f"/creative-live/artifacts/{artifact['artifact_id']}/revisions",
+            params={"project_root": str(self.project)},
+        ).json()["revisions"]
+
+        self.assertEqual(artifact["identity"], "promoted")
+        self.assertEqual(artifact["content"], "候选正文。")
+        self.assertEqual(revisions[-1]["identity"], "promoted")
+        self.assertGreater(snapshot["live_cursor"], 0)
+
     def test_snapshot_api_survives_legacy_redacted_usage_events(self) -> None:
         store = self.client.app.state.lifecycle.persistence.facade
         run = store.create_autopilot_run(

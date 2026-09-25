@@ -18,6 +18,9 @@ export function createDeliveryClient(transport: ApiTransport = featureTransport)
   return {
     library: (projectRoot: string) => transport.request<LibraryResponse>(`/project/library?${q({ project_root: projectRoot })}`),
     delivery: (projectRoot: string) => transport.request<DeliveryResponse>(`/project/delivery?${q({ project_root: projectRoot })}`),
+    createSnapshot: (projectRoot: string) => transport.request<{ ok: boolean; docx_path: string }>(
+      `/project/delivery/snapshot?${q({ project_root: projectRoot })}`, { method: "POST" },
+    ),
     readerManifest: (projectRoot: string) => transport.request<ReaderManifest>(`/reader/manifest?${q({ project_root: projectRoot })}`),
     progress: (projectRoot: string) => transport.request<ProjectProgress>(`/project/progress?${q({ project_root: projectRoot })}`),
     readerUnit: (projectRoot: string, unitId: string) => transport.request<ReaderUnitResponse>(

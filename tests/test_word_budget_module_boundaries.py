@@ -6,6 +6,7 @@ import tempfile
 import unittest
 
 from literary_engineering_studio_engine.literary.planning.contracts import (
+    ensure_scene_word_budget_ready,
     load_word_budget_summary,
     scene_word_budget_contract,
     word_budget_adherence_for_body,
@@ -144,6 +145,46 @@ class WordBudgetModuleBoundaryTests(unittest.TestCase):
             self.assertEqual(adherence["status"], "pass")
             self.assertNotIn("字数预算门禁未通过", rendered)
             self.assertIn("目标中文内容字符：4", rendered)
+
+    def test_short_scene_can_use_explicit_target_before_optional_budget_is_materialized(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            scene = root / "scenes" / "scene_0001.yaml"
+            scene.parent.mkdir(parents=True)
+            (root / "project.yaml").write_text("target_length: 3000\n", encoding="utf-8")
+            scene.write_text(
+                "scene_id: scene_0001\nchapter_id: chapter_0001\n"
+                "word_count_target: 3000\nword_count_min: 2700\nword_count_max: 3300\n",
+                encoding="utf-8",
+            )
+            budget_path = root / "plot" / "word_budget" / "word_budget.json"
+            budget_path.parent.mkdir(parents=True)
+            budget_path.write_text(
+                json.dumps(
+                    {
+                        "status": "needs_expansion",
+                        "target": {"target_words": 3000},
+                        "chapter_budgets": [
+                            {
+                                "chapter_id": "chapter_0001",
+                                "target_words": 3000,
+                                "scene_count": 1,
+                                "avg_scene_words": 3000,
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            contract = scene_word_budget_contract(root, scene)
+
+            self.assertEqual(contract["status"], "pass")
+            self.assertFalse(contract["required"])
+            self.assertEqual(contract["target_chinese_chars"], 3000)
+            self.assertEqual(contract["min_chinese_chars"], 2700)
+            self.assertEqual(contract["max_chinese_chars"], 3300)
+            self.assertEqual(ensure_scene_word_budget_ready(root, scene)["status"], "pass")
 
 
 if __name__ == "__main__":

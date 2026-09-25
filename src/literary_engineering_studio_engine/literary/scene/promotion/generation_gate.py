@@ -49,7 +49,7 @@ def candidate_language_gate(
     blocking = [
         {"category": "punctuation", **item}
         for issue, item in zip(punctuation_issues, punctuation)
-        if punctuation_issue_is_hard(issue)
+        if punctuation_issue_is_hard(issue, prose=body)
     ]
     style_rows = style.get("blocking")
     if isinstance(style_rows, list):

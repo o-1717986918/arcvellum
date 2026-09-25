@@ -39,10 +39,8 @@ def replan_lean_future(
     plan_bytes, budget_bytes = plan_path.read_bytes(), budget_path.read_bytes()
     plan, budget = json.loads(plan_bytes), json.loads(budget_bytes)
     committed = _committed_prefix(project, list(plan.get("scenes") or []))
-    if not committed:
-        raise ValueError("future replan requires at least one committed scene")
     counts, active_chapters = _validated_counts(plan, budget, committed, chapter_scene_counts)
-    future, event_budget = _ask_for_future(
+    future, event_budget, narrative_design = _ask_for_future(
         project, gateway, plan, budget, committed, counts, direction,
     )
     revised_budget = _rebalance_budget(budget, counts)
@@ -53,6 +51,7 @@ def replan_lean_future(
         **plan,
         "project_digest": hashlib.sha256(revised_project.encode("utf-8")).hexdigest(),
         "scenes": [*committed, *future],
+        "narrative_design": narrative_design or plan.get("narrative_design", {}),
         "event_budget": [
             *[
                 item for item in plan.get("event_budget") or []
@@ -69,6 +68,7 @@ def replan_lean_future(
         project, project_path, plan_path, budget_path,
         project_bytes, plan_bytes, budget_bytes,
         revised_project, revised_plan, revised_budget,
+        committed_count=len(committed),
     )
     return {
         "committed_prefix_count": len(committed),
@@ -106,10 +106,7 @@ def _validated_counts(
 ) -> tuple[dict[str, int], set[str]]:
     chapter_rows = list(budget.get("chapter_budgets") or [])
     chapter_ids = [str(row.get("chapter_id") or "") for row in chapter_rows]
-    current = str(committed[-1].get("chapter_id") or "")
-    if current not in chapter_ids:
-        raise ValueError("committed scene chapter is absent from word budget")
-    active = chapter_ids[chapter_ids.index(current):]
+    active = _active_chapter_ids(chapter_ids, committed)
     if set(supplied) != set(active):
         raise ValueError("future replan requires one final scene count for every remaining chapter")
     counts, committed_counts = _normalize_chapter_counts(active, committed, supplied)
@@ -120,6 +117,15 @@ def _validated_counts(
     if not set(active).issubset(plan_chapters):
         raise ValueError("future replan chapters are absent from the project spine")
     return counts, set(active)
+
+
+def _active_chapter_ids(chapter_ids: list[str], committed: list[dict[str, Any]]) -> list[str]:
+    if not chapter_ids:
+        raise ValueError("future replan requires a chapter budget")
+    current = str(committed[-1].get("chapter_id") or "") if committed else chapter_ids[0]
+    if current not in chapter_ids:
+        raise ValueError("committed scene chapter is absent from word budget")
+    return chapter_ids[chapter_ids.index(current):]
 
 
 def _normalize_chapter_counts(
@@ -144,7 +150,7 @@ def _normalize_chapter_counts(
 def _ask_for_future(
     root: Path, gateway: RoleConversationGateway, plan: dict[str, Any], budget: dict[str, Any],
     committed: list[dict[str, Any]], counts: dict[str, int], direction: str,
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, str]]:
     prompt = _future_prompt(plan, budget, committed, counts, direction)
     raw_answer = gateway.run(root, prompt, role="worker", timeout=900).answer
     response: dict[str, Any] = {"malformed_answer": raw_answer[-12000:]}
@@ -158,7 +164,12 @@ def _ask_for_future(
         )
         future, events = _normalize_future(plan, budget, committed, counts, repaired)
         _reject_exact_event_replays(committed, future)
-    return future, events
+        response = repaired
+    design = response.get("narrative_design")
+    return future, events, (
+        {key: str(value).strip()[:500] for key, value in design.items() if isinstance(key, str) and str(value).strip()}
+        if isinstance(design, dict) else {}
+    )
 
 
 def _future_prompt(
@@ -192,19 +203,15 @@ def _future_prompt(
     ]
     return "\n".join([
         "# 未写场景后缀重排",
-        "你是作品主创。只返回 JSON 对象，顶层字段 chapters 是按请求顺序排列的数组。",
+        "你是作品主创。只返回 JSON 对象：chapters 是按请求顺序排列的数组；可同时返回 narrative_design，更新全书叙事模式、时间结构、视角、节奏与组织特色。",
         "每章对象只含 chapter_id, irreversible_change, scenes。irreversible_change 必须说明本章结束后哪项人物处境、关系、资源、知识或承诺不能回到章首。",
-        "scenes 数量必须精确匹配 remaining_scene_count。每场只含 name, function, participants(人名数组), conflict, information_release, consequence, setup_payoff_role, rhythm_role, obligation。rhythm_role 使用 setup/escalation/climax/payoff/aftermath/bridge/transition。",
-        "这是完整未来后缀的一次全局事件分配；每个场景字段用一条明确句子，单字段不超过八十个汉字，不重复解释，以确保 JSON 完整。",
-        "这是事件预算，不是字数填槽。先分配不可逆事件、兑现和后果，再形成场景；字数只决定事件展开的厚度。事件不足时宁可让一场承载更复杂的行动—反作用—选择链，不得创造确认场、复述场或让变量复位。",
-        "不得重演已提交场景中的会面、听名、核对、追问、递话、发现、拒绝、沉默或决定；不得把曾经发生过的认知再次写成‘第一次’。悬念只能推进、兑现或改变持有人，不能靠‘仍不拆、不问、不动、不说’维持原状。",
-        "每场 consequence 必须留下可追踪的新状态；相邻场景的人物组合、行动阻力、信息增量和选择代价至少有两项不同。不得更改已提交正文、既有事实、章序和终局位置。",
-        "章节请求内 chapter.dramatic_turn 与 chapter.obligation 是不可删、不可换章的硬义务：本章场景必须在行动层完整实现该 dramatic_turn；兑现锚只能嵌入既定章纲，不能取代章纲。",
-        "先在内部把用户要求的每个不可逆兑现锚分配到唯一章节与唯一场景组，再生成 chapters。一个锚一旦兑现，后续章节只能承接其新后果，绝不能重新拆信、重新核出差额、重新确认姓名、重新过第一次夜或再次做同一交接。输出前逐场比较全书已提交事件和本次所有新场，删除或合并任何语义相同而只换名称的场景。",
-        "全书最后一章若含分手、死亡、永久离开、无重逢等终局动作，终局必须发生在最后一场；所有揭示、取件、交接、核账、归还和导致终局选择的事件必须按因果排在它之前。不得在人物已经各自离开后倒叙补办‘分手前数日’的必要事件，也不得让前一场的 consequence 被下一场时间复位。",
-        "participants 只能逐字复用注册人物姓名；一次性无名路人不列入 participants。不要用无关精确数字制造写实感。",
+        "scenes 数量匹配 remaining_scene_count。每场包含 name, function, participants(人名数组), conflict, information_release, consequence, setup_payoff_role, rhythm_role, obligation；可加 story_time 和 length_weight 重新组织故事时间与相对篇幅。rhythm_role 使用 setup/escalation/climax/payoff/aftermath/bridge/transition。",
+        "统筹完整未来后缀：按用户认可的方向安排各章不同的不可逆转向，承接已提交事件的后果，分配兑现与余波。章节的 dramatic_turn 与 obligation 在本章行动中实现；已提交正文和既定事实保持不变。",
+        "阅读顺序与故事时间可以不同，story_time 标记故事时间；时间调度服务作品的叙事设计。length_weight 表达场景详略，按选择、阻力、人物关系、心理与空间的需要分配。",
+        "participants 逐字复用注册人物姓名；一次性无名路人可用角色称谓。",
         "## 用户认可的重排方向\n" + direction[:5000],
         "## 终局\n" + str(plan.get("ending_choice") or ""),
+        "## 全书叙事设计\n" + json.dumps(plan.get("narrative_design") or {}, ensure_ascii=False),
         "## 注册人物\n" + json.dumps([row["name"] for row in plan.get("characters") or []], ensure_ascii=False),
         "## 章节请求\n" + json.dumps(request, ensure_ascii=False),
         "## 已提交事件（均不得重演）\n" + json.dumps(used, ensure_ascii=False),
@@ -380,7 +387,7 @@ def _history_writes(
 def _commit_replan(
     root: Path, project_path: Path, plan_path: Path, budget_path: Path,
     project_bytes: bytes, plan_bytes: bytes, budget_bytes: bytes,
-    project_text: str, plan: dict[str, Any], budget: dict[str, Any],
+    project_text: str, plan: dict[str, Any], budget: dict[str, Any], *, committed_count: int,
 ) -> None:
     if (
         project_path.read_bytes() != project_bytes
@@ -388,12 +395,24 @@ def _commit_replan(
         or budget_path.read_bytes() != budget_bytes
     ):
         raise ValueError("project contract, chapter plan or budget changed while the future replan was being prepared")
+    scene_root = (root / "scenes").resolve()
+    original_uncommitted = {
+        path: path.read_text(encoding="utf-8")
+        for path in scene_root.glob("scene_*.yaml")
+        if path.resolve().is_relative_to(scene_root)
+        and path.stem.rsplit("_", 1)[-1].isdigit()
+        and int(path.stem.rsplit("_", 1)[-1]) > committed_count
+    }
+    planned_paths = {scene_root / f"{scene['scene_id']}.yaml" for scene in plan["scenes"]}
+    obsolete = set(original_uncommitted) - planned_paths
     atomic_write_batch({
         project_path: project_text,
         plan_path: json.dumps(plan, ensure_ascii=False, indent=2) + "\n",
         budget_path: json.dumps(budget, ensure_ascii=False, indent=2) + "\n",
     })
     try:
+        for path in obsolete:
+            path.unlink()
         materialize_lean_window(
             root,
             scenes=plan["scenes"],
@@ -403,10 +422,14 @@ def _commit_replan(
             replace_uncommitted=True,
         )
     except Exception:
+        for path in scene_root.glob("scene_*.yaml"):
+            if path not in original_uncommitted and path.stem.rsplit("_", 1)[-1].isdigit() and int(path.stem.rsplit("_", 1)[-1]) > committed_count:
+                path.unlink()
         atomic_write_batch({
             project_path: project_bytes.decode("utf-8"),
             plan_path: plan_bytes.decode("utf-8"),
             budget_path: budget_bytes.decode("utf-8"),
+            **original_uncommitted,
         })
         raise
 

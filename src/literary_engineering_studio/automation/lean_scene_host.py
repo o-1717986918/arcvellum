@@ -142,6 +142,7 @@ class LeanSceneAutopilotHost:
             run_id,
             run,
             step,
+            policy=policy,
             ready_route_index=ready_route_index,
         )
 
@@ -179,6 +180,7 @@ class LeanSceneAutopilotHost:
         run: dict[str, Any],
         step: Any,
         *,
+        policy: DelegationPolicy,
         ready_route_index: int | None = None,
     ) -> bool:
         if step.route_ready:
@@ -207,6 +209,12 @@ class LeanSceneAutopilotHost:
                 last_error="",
                 consecutive_revisions=0,
             )
+            if policy.editorial_scene_checkpoint:
+                self._pause(
+                    run_id, "scene-editorial-checkpoint",
+                    f"正式场景 {step.scene_id} 已提交，等待顶层 Agent 复核全书方向。",
+                )
+                return True
         else:
             self._runs.update_autopilot_run(
                 run_id,

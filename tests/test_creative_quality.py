@@ -25,6 +25,11 @@ from literary_engineering_studio_engine.literary.scene.promotion.generation_gate
 
 
 class CreativeQualityProfileTests(unittest.TestCase):
+    def test_default_soft_habits_leave_room_for_literary_expansion(self):
+        habits = "\n".join(default_creative_quality_profile()["preferred_habits"])
+        self.assertIn("空间、动作过程和人物感受充分停留", habits)
+        self.assertNotIn("过场简写", habits)
+
     def test_soft_rule_migration_is_preview_only_and_preserves_hard_language_rules(self):
         saved = default_creative_quality_profile()
         saved["rule_modes"]["comma-chain-overload"] = "blocking"
@@ -34,6 +39,7 @@ class CreativeQualityProfileTests(unittest.TestCase):
         self.assertEqual(len(result["changes"]), 2)
         candidate = result["candidate"]
         self.assertEqual(candidate["rule_modes"]["comma-chain-overload"], "note")
+        self.assertEqual(candidate["rule_modes"]["dash-overuse"], "blocking")
         for rule in ("mechanical-contrast-frame", "custom-banned-phrase", "ascii-punctuation-in-chinese"):
             self.assertEqual(candidate["rule_modes"][rule], "blocking")
 
@@ -68,6 +74,19 @@ class CreativeQualityProfileTests(unittest.TestCase):
         dash = next(item for item in issues if item.rule == "dash-overuse")
         self.assertIn("每 100 个叙事单元", dash.message)
         self.assertIn("0.5", dash.message)
+
+    def test_dash_density_blocks_by_default_without_banning_isolated_dialogue_pause(self):
+        profile = default_creative_quality_profile()
+        dense = "“你先等着——我还没说完。”" * 12
+        gate = candidate_language_gate(dense, profile=profile, scope="scene_0001")
+        self.assertTrue(any(item["rule"] == "dash-overuse" for item in gate["blocking"]))
+        self.assertFalse(any(item["rule"] == "dash-prohibited-in-plain-narration" for item in gate["blocking"]))
+        isolated = "“等一下——我还没说完。”" + "他沿着河岸慢慢走，听见风把树叶吹过石阶。" * 5
+        self.assertFalse(any(item["rule"] == "dash-overuse" for item in candidate_language_gate(
+            isolated, profile=profile, scope="scene_0001")["blocking"]))
+        profile["rule_modes"]["dash-overuse"] = "note"
+        self.assertFalse(any(item["rule"] == "dash-overuse" for item in candidate_language_gate(
+            dense, profile=profile, scope="scene_0001")["blocking"]))
 
     def test_custom_banned_phrase_is_detected(self):
         profile = default_creative_quality_profile()

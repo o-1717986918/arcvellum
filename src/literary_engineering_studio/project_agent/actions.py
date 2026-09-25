@@ -8,10 +8,13 @@ from typing import Any
 
 from ..application.failures import present_run
 from .action_receipts import action_receipt, goal_result
+from .actor_persona_actions import actor_persona_update_action
+from .archive_actions import archive_change_action
 from .contracts import ProjectAgentActionDependencies
 from .chapter_actions import chapter_extension_action
 from .future_plan_actions import future_replan_action
 from .scope import work_reference
+from .style_actions import owner_style_write_action, style_mount_action
 
 
 def dependencies_from_actions(
@@ -32,9 +35,11 @@ def dependencies_from_actions(
     goal_evidence: Callable[[Path], Mapping[str, Any]] | None = None,
     extend_chapter: Callable[..., dict[str, Any]] | None = None,
     replan_future: Callable[..., dict[str, Any]] | None = None,
+    save_actor_persona: Callable[..., dict[str, Any]] | None = None,
+    archive_dependencies: Any | None = None,
+    write_owner_style: Callable[..., dict[str, Any]] | None = None,
 ) -> ProjectAgentActionDependencies:
     settings = config or {}
-
     def save_direction(root: Path, arguments: Mapping[str, Any]) -> Mapping[str, Any]:
         message = str(arguments.get("message") or "").strip()
         if not message:
@@ -48,7 +53,6 @@ def dependencies_from_actions(
             "digest": str(result.get("digest") or ""),
             "receipt": action_receipt("record_direction", record),
         }
-
     def control_creation(root: Path, arguments: Mapping[str, Any]) -> Mapping[str, Any]:
         operation = str(arguments.get("operation") or "").strip().lower()
         if operation not in {"start", "pause", "resume"}:
@@ -131,35 +135,6 @@ def dependencies_from_actions(
             "receipt": action_receipt("update_rhythm", saved),
         }
 
-    def mount_style(root: Path, arguments: Mapping[str, Any]) -> Mapping[str, Any]:
-        if style_mounts is None:
-            raise RuntimeError("Project Agent style mount service is unavailable")
-        identity = {
-            field: str(arguments.get(field) or "").strip()
-            for field in ("style_id", "version_id", "content_hash")
-        }
-        if not all(identity.values()):
-            raise ValueError("project_style_mount requires exact style_id, version_id, and content_hash")
-        preview = style_mounts.preview(root, **identity)
-        result = style_mounts.mount_confirmed(
-            root,
-            **identity,
-            preview_revision=str(preview.get("revision") or ""),
-            scope=str(arguments.get("scope") or "project"),
-            priority=str(arguments.get("priority") or "highest"),
-        )
-        if invalidate_project is not None:
-            invalidate_project(root, "project-agent-style")
-        return {
-            "ok": True,
-            "operation": "mount_style",
-            "style_id": identity["style_id"],
-            "version_id": identity["version_id"],
-            "status": result.get("status"),
-            "impact": result.get("impact") or {},
-            "receipt": action_receipt("mount_style", result),
-        }
-
     def promote_asset(root: Path, arguments: Mapping[str, Any]) -> Mapping[str, Any]:
         if candidate_promotions is None or launch_worker is None:
             raise RuntimeError("Project Agent asset promotion service is unavailable")
@@ -227,19 +202,21 @@ def dependencies_from_actions(
                 "chinese_content_chars": int(reader.get("total_chinese_content_chars") or 0),
             },
         }
-
     return ProjectAgentActionDependencies(
         save_direction,
         control_creation,
         resolve_decision,
         update_quality,
         update_rhythm,
-        mount_style,
+        style_mount_action(style_mounts, invalidate_project) if style_mounts is not None else None,
         promote_asset,
         create_work if create_project is not None else None,
         manage_goal,
         chapter_extension_action(extend_chapter, invalidate_project) if extend_chapter is not None else None,
         future_replan_action(replan_future, invalidate_project) if replan_future is not None else None,
+        actor_persona_update_action(save_actor_persona, invalidate_project) if save_actor_persona is not None else None,
+        archive_change_action(archive_dependencies, invalidate_project) if archive_dependencies is not None else None,
+        owner_style_write_action(write_owner_style, invalidate_project) if write_owner_style is not None else None,
     )
 
 
@@ -343,6 +320,7 @@ def _manage_goal(
         autopilot=autopilot,
         current_choices=current_choices,
         settings=settings,
+        expected_stop_reason=str(arguments.get("expected_stop_reason") or "").strip(),
     )
 
 
@@ -371,6 +349,7 @@ def _start_goal(
         "literary_kernel": kernel,
         "scene_execution_mode": str(current.get("scene_execution_mode") or "standard"),
         "release_policy": "delegated",
+        "editorial_scene_checkpoint": kernel == "lean-v2",
         "limits": {"stop_after_formal_units": stop_after_formal_units},
     }
     start_goal = getattr(autopilot, "start_managed_goal", None)
@@ -391,6 +370,7 @@ def _continue_goal(
     autopilot: Any,
     current_choices: Callable[..., dict[str, Any]] | None,
     settings: dict[str, Any],
+    expected_stop_reason: str = "",
 ) -> Mapping[str, Any]:
     status = autopilot.status(root)
     run = status.get("run") if isinstance(status.get("run"), dict) else {}
@@ -403,10 +383,11 @@ def _continue_goal(
         paused = autopilot.pause(run_id, reason="project-agent-goal-paused")
         return goal_result(root, operation, paused, "accepted")
     run_status = str(run.get("status") or "")
-    if run_status == "complete":
-        return goal_result(root, operation, run, "already_complete")
-    if run_status == "running":
-        return goal_result(root, operation, run, "already_running")
+    terminal_states = {"complete": "already_complete", "running": "already_running"}
+    if run_status in terminal_states:
+        return goal_result(root, operation, run, terminal_states[run_status])
+    if expected_stop_reason and str(run.get("stop_reason") or "") != expected_stop_reason:
+        return goal_result(root, operation, run, "checkpoint_changed")
     if not _is_managed_goal(run):
         return _non_goal_result(root, operation, objective, record_direction, autopilot)
     pending = _pending_choices(settings, root, current_choices) if operation == "recover" else []

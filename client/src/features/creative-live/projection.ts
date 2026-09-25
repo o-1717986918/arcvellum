@@ -11,6 +11,7 @@ const MAX_ARTIFACT_CHARS = 2_000_000;
 const MAX_TRANSCRIPT_CHARS = 120_000;
 
 export function applyCreativeEvent(snapshot: CreativeLiveSnapshot, event: CreativeLiveEvent): CreativeLiveSnapshot {
+  if (event.sequence && event.sequence <= Number(snapshot.live_cursor || 0)) return snapshot;
   if (snapshot.events.some((item) => item.event_id === event.event_id)) return snapshot;
   const artifacts = reduceArtifact(snapshot.artifacts, event);
   const sessions = reduceSession(snapshot.sessions, event);
@@ -37,6 +38,7 @@ export function applyCreativeEvent(snapshot: CreativeLiveSnapshot, event: Creati
     scene_transactions: sceneTransactions,
     events: [...snapshot.events, event].slice(-240),
     cursor: Math.max(snapshot.cursor, Number(event.sequence || 0)),
+    live_cursor: Math.max(Number(snapshot.live_cursor || 0), Number(event.sequence || 0)),
   };
 }
 

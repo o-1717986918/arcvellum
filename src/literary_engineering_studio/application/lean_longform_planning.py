@@ -14,6 +14,7 @@ from literary_engineering_studio_engine.public.literary import (
     materialize_lean_window,
     normalize_initial_plan,
     normalize_scene_window,
+    rebalance_lean_budget,
     render_outline,
 )
 from literary_engineering_studio_engine.public.projects import atomic_write_text
@@ -44,6 +45,7 @@ class LeanLongformPlanningService:
             raise FileNotFoundError("project.yaml is missing")
         digest = _project_contract_digest(root)
         budget = _read_json(budget_path) or calculate_word_budget(root)
+        base_budget = budget
         plan = _read_json(plan_path)
         if plan:
             _check_plan(plan, digest)
@@ -51,6 +53,7 @@ class LeanLongformPlanningService:
             prompt = _initial_prompt(root, budget)
             answer = self._ask(root, prompt, phase="initial")
             try:
+                budget = rebalance_lean_budget(base_budget, answer)
                 plan = normalize_initial_plan(answer, budget, project_digest=digest)
             except ValueError as exc:
                 self._emit_validation_failure("initial", exc)
@@ -59,9 +62,10 @@ class LeanLongformPlanningService:
                     _initial_repair_prompt(answer, budget, exc),
                     phase="initial-repair",
                 )
+                budget = rebalance_lean_budget(base_budget, answer)
                 plan = normalize_initial_plan(answer, budget, project_digest=digest)
             _write_json(plan_path, plan)
-        if not budget_path.is_file():
+        if not budget_path.is_file() or _read_json(budget_path) != budget:
             _write_json(budget_path, budget)
         self._materialize(root, plan, plan_path, budget_path)
         return plan
@@ -160,18 +164,13 @@ def _initial_prompt(root: Path, budget: dict[str, Any]) -> str:
     ]
     return "\n".join([
         "# 长篇创作规划",
-        "你是作品主创。给出能支撑目标篇幅的因果骨架和每章不同的戏剧转向。",
+        "你是作品主创。先设计这部作品独有的组织形式，再安排因果骨架、全书节奏与每章戏剧转向。选择叙事模式、视角组织、事件呈现顺序与故事时间关系；可以顺叙、倒叙、交错或其他与作品相称的形式。高自由度或开放式作品可以把 ending_choice 写成有条件的可能结局，让后来人物的实际选择决定它的形状；开篇挑真正会彼此改变关系的少数人物入场，让第一场早早出现值得回应的称呼、误解、邀约、冒犯、袒露或临场变卦。其他人物可等他们有自己的戏时再出现，职业流程只做生活背景。",
         "只返回一个 JSON 对象；不写任务回执、文件路径、ID、字数或模型说明。",
-        "chapters 必须与下列章节预算顺序相同；first_window 只写第一章场景，数量精确匹配预算。",
-        "用户若指定章序、结局所在章节或最终画面，必须原位保留；除非用户明确要求，不得在结局后追加尾声、第三方视角、续集钩子或新结局。",
-        "场景字段：name, function, participants(人名数组), conflict, information_release, consequence, setup_payoff_role, rhythm_role, obligation。rhythm_role 只能填写 setup、escalation、climax、payoff、aftermath、bridge、transition 之一，不写说明句。",
-        "返回字段：premise, central_question, ending_choice, volume_obligations(每卷一条), chapters(每章含 title, dramatic_turn, obligation, reader_question), first_window(场景数组), characters(主要人物数组), world_facts(稳定世界事实数组)。",
-        "每个人物只写 name, role, importance(major/secondary/cameo), background, desire。只列全书重要人物；first_window 中所有有专名的 participants 必须逐字复用 characters 的 name，临时路人使用无专名角色称谓。不要编造不确定的世界事实，现实题材可返回空数组。用户明确指定的人物白名单、禁止新专名、现实解释等跨场景硬限制，必须逐条保存在 world_facts；不得只写进某一场景后丢失。",
-        "全书采用一致的日期、年份和时间差口径；未知数值保持未知，不得为增强戏剧性另造相互冲突的时间版本。",
-        "每章要有具体且不同的选择、代价或认知改变；禁止用重复事件撑字数。每场只分配一次不可替代的核心事件，function、participants、conflict、information_release、consequence 与 obligation 必须彼此一致；未列入 participants 的重要人物不得在该场提前登场或完成后续场景的职责。相邻场景不得重复首次见面、同一调取/发现/交付、同一问答或同一决定；需要回顾时只写已经造成的新压力，不重演事件。",
-        "先分配事件与不可逆后果，再用字数预算决定展开厚度。场数不是需要填满的空格；不能靠‘仍不问、不拆、不说、不动’保存悬念并把人物处境复位。若一项悬念跨章保留，每章必须改变它的持有人、证据状态、公开范围、人物代价或可选行动中的至少一项。",
-        "无关精确数字默认不用，先区分‘一个又一个’等虚指反复与精确计数。日期、年龄、编号、时长、距离、尺寸、次数、比例或读数若承担当场问答、谈判、身份或债务辨认、选择、因果、连续性或后文核验中的一项实际功能，即可按需要的精度规划；既定数值事实必须准确，不强求所有功能同时成立。普通动作、陈设和停顿用状态、范围或后果表达，不用计件、计次、计时制造伪真实感。",
-        "相邻场景的功能变化应带来可感的节奏变化，除非因果上必须持续施压，不要连续使用相同 rhythm_role。快节奏来自信息、动作和选择的推进，不等于全篇使用短句。后续场景将按章滚动展开。",
+        "chapters 与下列章节容量顺序相同；first_window 只写第一章场景，数量匹配预算。用户指定的章序、终局位置与最终画面优先。",
+        "场景字段：name, function, participants(人名数组), conflict, information_release, consequence, setup_payoff_role, rhythm_role, obligation；可加 story_time 和 length_weight。story_time 写本场在故事时间中的位置，场景排列是阅读顺序。rhythm_role 取 setup、escalation、climax、payoff、aftermath、bridge、transition 之一。",
+        "返回字段：premise, central_question, ending_choice, narrative_design, volume_obligations, volume_length_weights, chapters, first_window, characters, world_facts。narrative_design 可写 narrative_mode、temporal_structure、viewpoint_design、pacing_design、structural_signature。每章写 title、dramatic_turn、obligation、reader_question，并可写 length_weight。volume_length_weights 是按卷排列的相对篇幅权重。长度权重只表达详略，内核按全书目标核算；场景数是容量，事件由你决定。",
+        "每个人物只写 name, role, importance(major/secondary/cameo), background, desire。只列全书重要人物；first_window 中所有有专名的 participants 必须逐字复用 characters 的 name，临时路人使用无专名角色称谓。world_facts 只写当前故事确需成立的虚构世界事实与机制；章场数量、人物出场范围、视角和语言形式留在规划或用户方向中。尚未确定的世界事实保持开放，现实题材可返回空数组。",
+        "用角色选择与后果支撑章节转向；让时间调度、视角切换和章节长短共同服务阅读体验。人物之间的生活语言、玩笑、误会、亲疏与突然改变的看法本身就能支撑戏剧变化；每人有自己的兴趣和词域。给单场保留可供对话、心理、环境生长的中心压力：conflict 写冲突的双方与欲望，consequence 可以写条件性的可能变化；尚待角色在场说出的话、做出的举动及其具体结果留给推演与正文。其他世界信息可以随人物认识逐步展开。相邻场景承接已经发生的变化。既定时间和数值事实保持一致，未知事实保留未知。后续场景按章滚动展开。",
         "\n## 作品约束\n" + (root / "project.yaml").read_text(encoding="utf-8")[:5000],
         "\n## 用户方向\n" + ("\n".join(directions)[-5000:] or "无额外方向"),
         "\n## 已有大纲\n" + (
@@ -196,6 +195,7 @@ def _window_prompt(
         "premise": plan["premise"],
         "central_question": plan["central_question"],
         "ending_choice": plan["ending_choice"],
+        "narrative_design": plan.get("narrative_design", {}),
         "chapter": chapter,
         "chapter_spine": plan["chapters"],
         "registered_characters": plan.get("characters", []),
@@ -229,14 +229,11 @@ def _window_prompt(
     }
     return "\n".join([
         "# 下一章场景窗口",
-        "你是作品主创。承接既有后果，为当前章节设计具体场景。",
+        "你是作品主创。按全书的叙事设计承接既有后果，为当前章节安排阅读顺序、故事时间、场景轻重与具体行动。",
         "只返回 JSON 对象，字段 scenes 是场景数组；不要输出编号、字数、路径或任务协议。",
-        "场景数量必须与目标一致，每场包含 name, function, participants(人名数组), conflict, information_release, consequence, setup_payoff_role, rhythm_role, obligation。rhythm_role 只能填写 setup、escalation、climax、payoff、aftermath、bridge、transition 之一。",
+        "场景数量与目标一致，每场包含 name, function, participants(人名数组), conflict, information_release, consequence, setup_payoff_role, rhythm_role, obligation；可加 story_time、length_weight 表达非线性故事时间与篇幅轻重。rhythm_role 取 setup、escalation、climax、payoff、aftermath、bridge、transition 之一。",
         "有专名的 participants 必须逐字复用 registered_characters；不得用同义姓名替换已登记人物，临时角色保持无专名。严格遵守 chapter_spine 的章序与 ending_choice 位置，除非用户明确要求，不追加尾声或续集钩子。",
-        "沿用 world_facts 和既有后果中的日期、年份、数量与时间差；来源不确定时保持未知，不创建第二套时间口径。",
-        "让场景因果相接，详略随章节转向变化；每场只承担一次核心事件，场景字段必须与 participants 对齐，未列入本场的主要人物不得提前登场或替后续场景完成首次见面、调取、发现、交付、问答或决定。相邻场景只承接后果，不重演同一事件；不要重复上一章的戏剧动作，也不要在功能已经改变时沿用上一场 rhythm_role。",
-        "used_events 是全书已使用事件，不只是最近三场：新场不得复演其中的会面、听名、核对、追问、递话、发现、拒绝或决定，也不得换一种说法把旧认知再次标成‘第一次’。每场 consequence 必须改变人物处境、关系、资源、知识、承诺或可选行动中的至少一项；悬念若暂不兑现，必须改变其证据状态、持有人、公开范围或延迟代价，不能原样放回。",
-        "无关精确数字默认不用，‘一个又一个’等虚指反复不当作精确计数。日期、年龄、编号、时长、距离、尺寸、次数、比例或读数若承担当场问答、谈判、事实辨认、选择、因果、连续性或后文核验中的一项实际功能，即可保留必要精度；沿用既定数值事实，不强求当场有用的值日后再次兑现。普通动作、陈设和停顿改写为状态、范围或结果。快节奏仍需保留句群层次，收束、余波和关系变化应获得相应的呼吸空间。",
+        "沿用已确认的人物、世界事实与时间口径；用 scene.story_time 标清倒叙或交错叙事中的位置。场景详略按事件、人物关系、心理和空间需要分配；每场带来可辨认的新局面。used_events 是已使用事件的摘要，用于安排新的后果与读者认识。",
         "## 最近的用户方向\n" + ("\n".join(directions)[-5000:] or "无额外方向"),
         "## 导入来源片段\n" + (source_context or "无导入来源"),
         json.dumps(context, ensure_ascii=False, separators=(",", ":")),
@@ -261,7 +258,7 @@ def _initial_repair_prompt(
         "上一份规划没有通过机器契约。只返回修正后的完整 JSON 对象，不写解释或代码围栏。",
         "保留有效的创作决策；若场景数量超出契约，请由你合并或重排其戏剧功能，不要简单截断内容。",
         "所有原字段仍必须存在，场景和人物字段要求与上一轮相同。",
-        "返修不得改动用户指定的章序、结局章节或最终画面，不得追加尾声或续集钩子；所有有专名的场景参与者必须复用 characters 中的姓名，并保持单一时间口径。用户明确指定的人物白名单、禁止新专名、现实解释等跨场景硬限制必须继续逐条保存在 world_facts。",
+        "返修保持用户指定的章序、结局章节、最终画面、已登记人物姓名和时间口径。world_facts 只写虚构世界内部的事实与机制；场景与人物范围由既有规划和用户方向承载。",
         "## 精确数量契约",
         json.dumps(contract, ensure_ascii=False, separators=(",", ":")),
         "## 校验错误",

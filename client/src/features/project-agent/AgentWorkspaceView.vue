@@ -9,6 +9,7 @@ import AgentSubworkspace from "@/features/project-agent/components/AgentSubworks
 import AgentThreadRail from "@/features/project-agent/components/AgentThreadRail.vue";
 import NewConversationDialog from "@/features/project-agent/components/NewConversationDialog.vue";
 import CreativeLiveSpatialWindow from "@/components/workspace/CreativeLiveSpatialWindow.vue";
+import SceneRehearsalSpatialWindow from "@/components/workspace/SceneRehearsalSpatialWindow.vue";
 import { useProjectAgentSession } from "@/features/project-agent/composables/useProjectAgentSession";
 import {
   projectAgentWorkspaces,
@@ -35,6 +36,7 @@ const systemDark = ref(false);
 const activeWorkspace = ref<ProjectAgentWorkspaceId | null>(null);
 const workspaceFullscreen = ref(false);
 const liveWindow = ref<SpatialWindow | null>(null);
+const rehearsalWindow = ref<SpatialWindow | null>(null);
 let colorScheme: MediaQueryList | null = null;
 const projectRoot = computed(() => store.currentProjectPath || "");
 const projectTitle = computed(() => store.currentProject?.title || "作品库");
@@ -105,7 +107,6 @@ const progress = computed(() => (
     : null
 ));
 const readerUnits = computed(() => Number(store.readerManifest?.unit_count || 0));
-
 onMounted(() => {
   colorScheme = window.matchMedia("(prefers-color-scheme: dark)");
   systemDark.value = colorScheme.matches;
@@ -115,7 +116,6 @@ onMounted(() => {
   window.addEventListener("focus", recoverAgentOnForeground);
   document.addEventListener("visibilitychange", recoverAgentOnForeground);
 });
-
 let initialSessionLoaded = false;
 watch(() => store.initialized, async (ready) => {
   if (!ready || initialSessionLoaded) return;
@@ -127,20 +127,18 @@ watch(() => store.initialized, async (ready) => {
   if (requestedSessionId && !opened && route.query.session === requestedSessionId) {
     await router.replace({ name: "project-agent", query: { new: "1" } });
   }
-  if (route.query.workspace === "live") openWorkspaceFromQuery(route.query.workspace);
+  if (route.query.workspace === "live" || route.query.workspace === "rehearsal") openWorkspaceFromQuery(route.query.workspace);
   if (projectRoot.value && projectRoot.value === initialRoot) await store.refreshWorkspace();
   if (!store.modelCatalog) await store.loadModelCatalog().catch(() => undefined);
   if (needsModelConnection.value && !route.query.workspace) openWorkspace("settings");
   else if (route.query.new === "1" || (!agent.session.value && !route.query.workspace)) newConversationOpen.value = true;
 }, { immediate: true });
-
 onBeforeUnmount(() => {
   colorScheme?.removeEventListener("change", updateSystemAppearance);
   window.removeEventListener("arcvellum:onboarding", returnToConversation);
   window.removeEventListener("focus", recoverAgentOnForeground);
   document.removeEventListener("visibilitychange", recoverAgentOnForeground);
 });
-
 watch([projectRoot, activeWorkspace], async ([root, visibleWorkspace]) => {
   const boundRoot = agent.session.value?.project_root;
   if (!visibleWorkspace && boundRoot && root !== boundRoot) {
@@ -221,6 +219,10 @@ function openWorkspaceFromQuery(value: unknown): void {
     if (openLiveWindow()) syncWorkspaceQuery(null);
     return;
   }
+  if (requested === "rehearsal") {
+    if (openRehearsalWindow()) syncWorkspaceQuery(null);
+    return;
+  }
   if (projectAgentWorkspaces.has(requested)) {
     openWorkspace(requested);
     return;
@@ -236,7 +238,12 @@ function openWorkspace(next: ProjectAgentWorkspaceId): void {
     openLiveWindow();
     return;
   }
+  if (next === "rehearsal") {
+    openRehearsalWindow();
+    return;
+  }
   liveWindow.value = null;
+  rehearsalWindow.value = null;
   const descriptor = projectAgentWorkspaces.get(next);
   if (!descriptor || (descriptor.requiresProject && !projectRoot.value)) {
     syncWorkspaceQuery("projects");
@@ -268,6 +275,24 @@ function openLiveWindow(): boolean {
   return true;
 }
 
+function openRehearsalWindow(): boolean {
+  if (!projectRoot.value) return false;
+  activeWorkspace.value = null;
+  workspaceFullscreen.value = false;
+  syncWorkspaceQuery(null);
+  if (rehearsalWindow.value) {
+    rehearsalWindow.value.collapsed = false;
+    return true;
+  }
+  const size = { width: Math.min(900, Math.max(320, window.innerWidth - 36)), height: Math.min(700, Math.max(420, window.innerHeight - 36)) };
+  rehearsalWindow.value = {
+    id: "agent:scene-rehearsal", kind: "observatory", title: "推演观察",
+    position: { left: Math.max(12, Math.round((window.innerWidth - size.width) / 2)), top: Math.max(12, Math.round((window.innerHeight - size.height) / 2)) },
+    size, layer: 72, collapsed: false, workspace_mode: "float",
+  };
+  return true;
+}
+
 function resizeLiveWindow(size: SpatialWindowSize): void {
   if (!liveWindow.value) return;
   liveWindow.value.size = {
@@ -282,6 +307,30 @@ function moveLiveWindow(position: SpatialWindowPosition): void {
 
 function setLiveWindowMode(mode: "float" | "fullscreen"): void {
   const item = liveWindow.value;
+  if (!item) return;
+  if (mode === "fullscreen") item.workspace_return = { position: { ...item.position }, size: { ...item.size } };
+  else if (item.workspace_return) {
+    item.position = item.workspace_return.position;
+    item.size = item.workspace_return.size;
+    item.workspace_return = undefined;
+  }
+  item.workspace_mode = mode;
+}
+
+function resizeRehearsalWindow(size: SpatialWindowSize): void {
+  if (!rehearsalWindow.value) return;
+  rehearsalWindow.value.size = {
+    width: Math.max(320, Math.min(size.width, window.innerWidth - 24)),
+    height: Math.max(420, Math.min(size.height, window.innerHeight - 24)),
+  };
+}
+
+function moveRehearsalWindow(position: SpatialWindowPosition): void {
+  if (rehearsalWindow.value) rehearsalWindow.value.position = position;
+}
+
+function setRehearsalWindowMode(mode: "float" | "fullscreen"): void {
+  const item = rehearsalWindow.value;
   if (!item) return;
   if (mode === "fullscreen") item.workspace_return = { position: { ...item.position }, size: { ...item.size } };
   else if (item.workspace_return) {
@@ -338,7 +387,7 @@ function recoverAgentOnForeground(): void {
       :project-progress="progress"
       :project-labels="projectLabels"
       :has-project="Boolean(sessionProject)"
-      :active-workspace="liveWindow ? 'live' : activeWorkspace"
+      :active-workspace="rehearsalWindow ? 'rehearsal' : liveWindow ? 'live' : activeWorkspace"
       :disabled="agent.sending.value || agent.loading.value || agent.creating.value"
       @create="newConversationOpen = true"
       @select="openHistorySession"
@@ -401,7 +450,6 @@ function recoverAgentOnForeground(): void {
         />
       </template>
     </main>
-
     <AgentContextInspector
       v-if="sessionProject && !workspace"
       :title="projectTitle"
@@ -435,6 +483,16 @@ function recoverAgentOnForeground(): void {
       @toggle="liveWindow.collapsed = !liveWindow.collapsed"
       @reset="liveWindow.position = { left: 24, top: 76 }"
       @workspace-mode="setLiveWindowMode"
+    />
+    <SceneRehearsalSpatialWindow
+      v-if="rehearsalWindow && projectRoot"
+      :item="rehearsalWindow"
+      @move="moveRehearsalWindow"
+      @resize="resizeRehearsalWindow"
+      @close="rehearsalWindow = null"
+      @toggle="rehearsalWindow.collapsed = !rehearsalWindow.collapsed"
+      @reset="rehearsalWindow.position = { left: 24, top: 76 }"
+      @workspace-mode="setRehearsalWindowMode"
     />
     <button v-if="railOpen || inspectorOpen" class="pa-panel-backdrop" aria-label="关闭侧栏" @click="railOpen = false; inspectorOpen = false"></button>
   </div>

@@ -91,7 +91,10 @@
 .pa-live-window .spatial-window-actions .orrery-v3-icon { color: #40594c; }
 .pa-live-window .creative-live-dock { min-height: 0; }
 .pa-live-window .creative-live-grid { min-height: 0; }
-@container (max-width: 780px) { .pa-live-window .creative-live-grid { display: block; overflow-y: auto; } }
+@container (max-width: 780px) {
+  .pa-live-window .creative-live-grid { display: block; overflow-y: auto; }
+  .pa-live-window .creative-live-main { min-height: 520px; }
+}
 .pa-subworkspace-scroll:has(.creative-live-view) { overflow: hidden; scrollbar-gutter: auto; }
 .pa-subworkspace .creative-live-view { width: 100%; min-height: 0; height: 100%; }
 .creative-live-view .creative-live-dock {
@@ -143,6 +146,7 @@
   .scene-transaction-pulse li, .scene-transaction-copy small, .creative-live-empty span,
   .creative-session-panel, .creative-context-summary, .creative-execution-timeline,
   .creative-live-runtime, .live-manuscript header p) { font-size: 11px; line-height: 1.5; }
+.creative-live-view :is(.creative-main-tabs button, .creative-process-selector select, .creative-revision-workspace-selector button) { font-size: 12px; }
 @media (max-width: 1180px) {
   .pa-shell:not(.pa-workspace-fullscreen):not(.pa-utility-workspace):not(.pa-no-project) { grid-template-columns: 232px minmax(0, 1fr); }
 }

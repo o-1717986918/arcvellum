@@ -11,6 +11,13 @@ import {
 const PROJECT_ROOT = projectSummaryFixture().path;
 
 describe("feature clients over MockFeatureTransport", () => {
+  it("reads project-scoped rehearsal history through Creative Live", async () => {
+    const { transport, clients } = createFeatureClientHarness();
+    const path = `/creative-live/scene-rehearsals?${transport.query({ project_root: PROJECT_ROOT })}`;
+    transport.respond("GET", path, { scenes: [{ transaction_id: "tx-1", scene_id: "scene_0001" }] });
+    expect((await clients.creativeLive.rehearsals(PROJECT_ROOT)).scenes[0].scene_id).toBe("scene_0001");
+    expect(transport.lastCall("request")?.path).toBe(path);
+  });
   it("keeps workflow requests and workspace events inside the workflow client", async () => {
     const { transport, clients } = createFeatureClientHarness();
     const dashboardPath = `/workflow/dashboard?${transport.query({ project_root: PROJECT_ROOT })}`;

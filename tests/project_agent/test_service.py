@@ -91,6 +91,23 @@ class _DelegatingRuntime:
         )
 
 
+class _CheckpointRuntime:
+    def __init__(self):
+        self.requests = []
+
+    def run_turn(self, request, _tool_handler, **kwargs):
+        self.requests.append(request)
+        if len(self.requests) in (1, 2):
+            kwargs["event_sink"]("project_agent.tool.finished", {
+                "name": "project_goal_manage", "ok": True,
+                "receipt": {
+                    "operation": "goal_start" if len(self.requests) == 1 else "goal_recover",
+                    "run_id": "autopilot-1", "run_status": "running", "work_id": "work-1",
+                },
+            })
+        return ProjectAgentTurnResult("completed", "目标完成。", request.turn_id, 0, 1)
+
+
 class ProjectAgentServiceTests(unittest.TestCase):
     def test_turn_persists_messages_job_and_stream_events(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -177,16 +194,15 @@ class ProjectAgentServiceTests(unittest.TestCase):
             self.assertIn("不要请求用户批准", runtime.requests[0].system_prompt)
             self.assertIn("lean-v2", runtime.requests[0].system_prompt)
             self.assertIn("故事实际写到哪里", runtime.requests[0].system_prompt)
-            self.assertIn("不必每次逐项罗列", runtime.requests[0].system_prompt)
-            self.assertIn("人格只影响观察角度和语气", runtime.requests[0].system_prompt)
+            self.assertIn("按用户问题与已有正文选择相关事实", runtime.requests[0].system_prompt)
+            self.assertIn("人格决定观察角度和语气", runtime.requests[0].system_prompt)
             self.assertIn("continuity_status 为 not_recorded", runtime.requests[0].system_prompt)
             self.assertIn("completed_beats.actual_prose_tail", runtime.requests[0].system_prompt)
             self.assertIn("不凭印象补全", runtime.requests[0].system_prompt)
             self.assertIn("避免连续使用机械", runtime.requests[0].system_prompt)
             self.assertIn("正在进行", runtime.requests[0].system_prompt)
             self.assertIn("无正式正文时直接说尚未落笔", runtime.requests[0].system_prompt)
-            self.assertIn("不要声称本次回答会继续盯守", runtime.requests[0].system_prompt)
-            self.assertIn("无关的作品去重、归档或成本治理建议", runtime.requests[0].system_prompt)
+            self.assertIn("仅要求检查或修复时先核验并汇报，不擅自启动无限创作", runtime.requests[0].system_prompt)
             self.assertIn("stop_after_formal_units", runtime.requests[0].system_prompt)
 
     def test_read_session_exposes_only_its_latest_active_turn(self):
@@ -329,6 +345,34 @@ class ProjectAgentServiceTests(unittest.TestCase):
             self.assertIn("project_agent.goal.terminal", events)
             self.assertIn("project_agent.goal.followup.started", events)
             self.assertEqual(store.read(result["job_id"])["status"], "complete")
+
+    def test_scene_checkpoint_reenters_agent_then_resumes_same_goal(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "project"
+            root.mkdir()
+            store = JobStore(Path(temporary) / "studio.sqlite3")
+            runtime = _CheckpointRuntime()
+            snapshots = iter([
+                {"run_id": "autopilot-1", "status": "paused", "stop_reason": "scene-editorial-checkpoint",
+                 "current_task_id": "lean-scene:scene_0001:committed"},
+                {"run_id": "autopilot-1", "status": "complete", "stop_reason": ""},
+            ])
+            service = ProjectAgentService(
+                {}, sessions=store.sessions, jobs=store,
+                dependencies=_dependencies(),
+                actions=ProjectAgentActionDependencies(
+                    record_direction=lambda _root, _args: {}, creation_control=lambda _root, _args: {},
+                    manage_goal=lambda _root, _args: {},
+                ),
+                runtime_factory=lambda _config, _root: runtime,
+                goal_run_reader=lambda _run_id: next(snapshots), goal_poll_interval=0.001,
+            )
+            session = service.create_session(root)
+            result = service.run_turn(session["session_id"], "继续写完")
+            self.assertEqual(result["answer"], "目标完成。")
+            self.assertEqual(len(runtime.requests), 3)
+            self.assertIn("场间编辑检查点", runtime.requests[1].prompt)
+            self.assertIn("macro_plan", runtime.requests[1].prompt)
 
 
 def _dependencies() -> ProjectAgentDependencies:

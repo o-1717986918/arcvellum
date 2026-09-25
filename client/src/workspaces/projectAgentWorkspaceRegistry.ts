@@ -5,6 +5,7 @@ export type ProjectAgentWorkspaceId =
   | "projects"
   | "reader"
   | "live"
+  | "rehearsal"
   | "archive"
   | "style"
   | "quality"
@@ -73,6 +74,15 @@ const workspaces: ProjectAgentWorkspaceDescriptor[] = [
     shortLabel: "现场",
     description: "观察主创会话、候选正文、审查结论与修订过程。",
     component: asyncWorkspace(() => import("@/features/creative-live/CreativeLiveView.vue")),
+    scope: "project",
+    requiresProject: true,
+  },
+  {
+    id: "rehearsal",
+    title: "推演观察",
+    shortLabel: "推演",
+    description: "按角色轮次观看正在进行与已经完成的场景推演。",
+    component: asyncWorkspace(() => import("@/features/creative-live/SceneRehearsalView.vue")),
     scope: "project",
     requiresProject: true,
   },

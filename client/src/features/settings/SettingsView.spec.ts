@@ -54,7 +54,7 @@ describe("settings model selection", () => {
         return { ok: true, preferences: { creative: role === "creative" ? level : "medium", project: role === "project" ? level : "xhigh" } };
       }
       if (path === "/model-connections/pi-worker/scene-performance" && !init) {
-        return { ok: true, preferences: { enabled: true, max_actor_calls: 4 } };
+        return { ok: true, preferences: { enabled: true, max_actor_calls: 12 } };
       }
       if (path === "/model-connections/pi-worker/scene-performance" && init?.method === "PUT") {
         return { ok: true, preferences: JSON.parse(String(init.body)) };
@@ -127,7 +127,7 @@ describe("settings model selection", () => {
     await flushPromises();
     expect(apiMock).toHaveBeenCalledWith(
       "/model-connections/pi-worker/scene-performance",
-      expect.objectContaining({ method: "PUT", body: JSON.stringify({ enabled: false, max_actor_calls: 4 }) }),
+      expect.objectContaining({ method: "PUT", body: JSON.stringify({ enabled: false, max_actor_calls: 12 }) }),
     );
   });
 });

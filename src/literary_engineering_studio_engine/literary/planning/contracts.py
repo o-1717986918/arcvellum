@@ -135,7 +135,7 @@ def scene_word_budget_contract(
         required = True
     base["required"] = required
     base["budget_status"] = budget_status
-    if budget_status == "needs_expansion":
+    if _requires_budget_materialization(budget_status, required):
         materialized, materialization_message = longform_materialization_status(
             root,
             scene_path=scene_path if scope == "scene" else None,
@@ -204,13 +204,7 @@ def scene_word_budget_contract(
             )
         else:
             alignment_status = "scene_yaml_aligned"
-    narrative_load = chapter_row.get("required_functions") or chapter_row.get("scene_load") or [
-        "mainline_action",
-        "relationship_pressure",
-        "information_release",
-        "consequence_chain",
-        "setup_or_payoff",
-    ]
+    narrative_load = chapter_row.get("required_functions") or chapter_row.get("scene_load") or []
     if isinstance(narrative_load, dict):
         narrative_load = [str(key) for key, value in narrative_load.items() if _to_int(value) > 0]
     if not isinstance(narrative_load, list):
@@ -249,6 +243,12 @@ def scene_word_budget_contract(
     )
     return base
 
+
+def _requires_budget_materialization(status: str, required: bool) -> bool:
+    """An optional short-work scaffold need not be materialized before drafting."""
+    return status == "needs_expansion" and required
+
+
 def ensure_scene_word_budget_ready(
     root: Path,
     scene_path: Path,
@@ -261,6 +261,8 @@ def ensure_scene_word_budget_ready(
     if contract.get("status") == "not_required":
         return contract
     if contract.get("status") == "pass":
+        if contract.get("required") is False:
+            return contract
         budget_task = root / "plot" / "word_budget" / "word_budget.agent_tasks.md"
         completion = agent_task_completion_status(budget_task, root=root)
         if completion.get("complete") is not True:

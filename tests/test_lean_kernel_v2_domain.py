@@ -211,6 +211,20 @@ class LeanKernelV2DomainTests(unittest.TestCase):
         )
         self.assertFalse(quote_report.can_commit)
 
+    def test_standard_scene_verification_blocks_dense_dashes_but_not_one_pause(self) -> None:
+        brief = _brief()
+        policy = derive_scene_policy(mode=SceneExecutionMode.STANDARD, risk=brief.risk)
+        dense = verify_creative_result(
+            brief, _result("“你等等——我没讲完。”" * 12), policy,
+            known_refs={"character/protagonist"},
+        )
+        isolated = verify_creative_result(
+            brief, _result("“等等——我还没讲完。”" + "他沿河走了许久，直到夜色渐渐吞没旧站台。" * 6),
+            policy, known_refs={"character/protagonist"},
+        )
+        self.assertIn("punctuation-dash-overuse", {issue.code for issue in dense.hard_failures})
+        self.assertNotIn("punctuation-dash-overuse", {issue.code for issue in isolated.hard_failures})
+
     def test_commit_plan_obeys_review_policy(self) -> None:
         brief = _brief(risk=SceneRiskLevel.STANDARD)
         policy = derive_scene_policy(mode=SceneExecutionMode.STANDARD, risk=brief.risk)

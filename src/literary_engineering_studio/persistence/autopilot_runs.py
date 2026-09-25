@@ -270,7 +270,13 @@ class AutopilotRepository:
     def recover_autopilot_runs(self) -> int:
         now = iso_now(self._clock)
         with self._uow.write() as connection:
-            rows = connection.execute("SELECT run_id FROM autopilot_runs WHERE status IN ('running','stopping')").fetchall()
+            rows = connection.execute(
+                """SELECT runs.run_id FROM autopilot_runs AS runs
+                   LEFT JOIN autopilot_leases AS leases
+                     ON leases.run_id = runs.run_id AND leases.lease_expires_at >= ?
+                   WHERE runs.status IN ('running','stopping') AND leases.run_id IS NULL""",
+                (now,),
+            ).fetchall()
             for row in rows:
                 connection.execute(
                     "UPDATE autopilot_runs SET status = 'paused', stop_reason = 'application-restart', updated_at = ? WHERE run_id = ?",

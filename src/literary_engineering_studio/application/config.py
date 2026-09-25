@@ -175,7 +175,7 @@ def default_config() -> dict[str, Any]:
             "portable_mode": False,
             "max_workers": 2,
             "lease_seconds": 90,
-            "scene_performance_agents": {"enabled": False, "max_actor_calls": 4},
+            "scene_performance_agents": {"enabled": True, "max_actor_calls": 12},
         },
         "worker": _default_worker_config(),
         "orchestration": _default_orchestration_config(),

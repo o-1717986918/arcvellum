@@ -2,7 +2,7 @@
 schema: literary-engineering-workbench/prompt-asset/v1
 prompt_asset_id: route.longform-planning.chapter-obligation.execute.v1
 match: route.longform-planning.chapter-obligation.execute.v1
-version: v1
+version: v2
 route: longform-planning
 task_type: main-platform-agent-chapter-obligation
 title: Chapter Obligation And Reader Experience Contract
@@ -18,7 +18,7 @@ context_groups:
   - inherited and outgoing hooks
 hard_constraints:
   - Bind every chapter obligation to its target Chinese-content character count and planned scene inventory.
-  - Add event pressure when inventory is insufficient; never ask prose to fill a structural deficit.
+  - Add event pressure when inventory is insufficient.
   - Distinguish setup payoff delay and intentional non-resolution.
   - Keep the plan candidate-only until semantic review and approval pass.
   - Write the plan in ordered chunks of no more than five chapter rows per write_expected_output call.

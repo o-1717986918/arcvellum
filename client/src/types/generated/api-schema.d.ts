@@ -1009,6 +1009,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/creative-live/scene-rehearsals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Scene Rehearsals */
+        get: operations["scene_rehearsals_creative_live_scene_rehearsals_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/creative-live/scene-rehearsals/{transaction_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Scene Rehearsal */
+        get: operations["scene_rehearsal_creative_live_scene_rehearsals__transaction_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/creative-live/sessions/{session_id}": {
         parameters: {
             query?: never;
@@ -1172,6 +1206,24 @@ export interface paths {
         get?: never;
         /** Select */
         put: operations["select_model_connections_pi_worker_model_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/model-connections/pi-worker/scene-performance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Scene Performance */
+        get: operations["scene_performance_model_connections_pi_worker_scene_performance_get"];
+        /** Select Scene Performance */
+        put: operations["select_scene_performance_model_connections_pi_worker_scene_performance_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -1516,6 +1568,23 @@ export interface paths {
         get: operations["project_delivery_download_project_delivery_download_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/project/delivery/snapshot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Project Delivery Snapshot */
+        post: operations["project_delivery_snapshot_project_delivery_snapshot_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3107,6 +3176,13 @@ export interface components {
              * @default 120
              */
             timeout: number;
+        };
+        /** ScenePerformancePreferenceRequest */
+        ScenePerformancePreferenceRequest: {
+            /** Enabled */
+            enabled: boolean;
+            /** Max Actor Calls */
+            max_actor_calls: number;
         };
         /** StyleAdvanceRequest */
         StyleAdvanceRequest: {
@@ -5213,6 +5289,70 @@ export interface operations {
             };
         };
     };
+    scene_rehearsals_creative_live_scene_rehearsals_get: {
+        parameters: {
+            query: {
+                project_root: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    scene_rehearsal_creative_live_scene_rehearsals__transaction_id__get: {
+        parameters: {
+            query: {
+                project_root: string;
+            };
+            header?: never;
+            path: {
+                transaction_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     creative_session_creative_live_sessions__session_id__get: {
         parameters: {
             query: {
@@ -5456,6 +5596,59 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["ModelSelectionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    scene_performance_model_connections_pi_worker_scene_performance_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    select_scene_performance_model_connections_pi_worker_scene_performance_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScenePerformancePreferenceRequest"];
             };
         };
         responses: {
@@ -6203,6 +6396,37 @@ export interface operations {
             query: {
                 project_root: string;
                 path: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    project_delivery_snapshot_project_delivery_snapshot_post: {
+        parameters: {
+            query: {
+                project_root: string;
             };
             header?: never;
             path?: never;

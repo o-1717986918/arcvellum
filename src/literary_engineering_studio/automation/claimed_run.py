@@ -44,7 +44,3 @@ def run_claimed(
             stop_reason="controller-error", finished_at=_now(),
         )
         host.runs.append_autopilot_event(run_id, "autopilot.blocked", {"message": str(exc)})
-    finally:
-        with host._lock:
-            host._stops.pop(run_id, None)
-            host._threads.pop(run_id, None)

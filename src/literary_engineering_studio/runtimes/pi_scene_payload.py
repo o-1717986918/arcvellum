@@ -90,9 +90,11 @@ def _answer_payload(answer: str) -> dict[str, Any]:
         if start < 0:
             raise ValueError("Pi scene response is not a JSON object")
         try:
-            value, _ = json.JSONDecoder().raw_decode(text[start:])
+            value, end = json.JSONDecoder().raw_decode(text[start:])
         except json.JSONDecodeError as exc:
             raise ValueError("Pi scene response is not a JSON object") from exc
+        if text[start + end:].strip():
+            raise ValueError("Pi scene response contains text after its JSON object")
     if not isinstance(value, dict):
         raise ValueError("Pi scene response must be a JSON object")
     return value

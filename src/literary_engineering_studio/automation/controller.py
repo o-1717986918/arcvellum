@@ -32,7 +32,7 @@ from .lean_scene_host import LeanSceneAutopilotHost
 from .lean_route_host import LeanRouteAutopilotHost
 from .lean_release import LeanWholeBookReleaseCoordinator
 from .lean_scene_loop import LeanSceneRunCoordinator
-from .managed_goal import start_managed_goal as _start_managed_goal
+from .managed_goal import await_controller_exit, start_managed_goal as _start_managed_goal
 from .release_completion import complete_release
 from .no_progress import register_no_progress
 from .runtime_event_routing import (
@@ -172,6 +172,7 @@ class AutopilotService:
             return run
         if run["status"] == "complete":
             raise ValueError("这次自动创作已经完成。")
+        await_controller_exit(self, run_id)
         run_policy = run.get("policy") if isinstance(run.get("policy"), dict) else {}
         if str(run_policy.get("mode") or run.get("mode") or "") == "full_auto" and not authorized:
             raise ValueError("全自动交付需要在推进仪表中明确确认授权后才能继续。")
@@ -205,7 +206,10 @@ class AutopilotService:
             stop = self._stops.get(run_id)
             if stop:
                 stop.set()
-        if run["status"] not in TERMINAL_STATUSES:
+        if run["status"] not in TERMINAL_STATUSES or (
+            run["status"] == "paused" and run.get("stop_reason") == "scene-editorial-checkpoint"
+            and reason != "scene-editorial-checkpoint"
+        ):
             self.runs.update_autopilot_run(run_id, status="paused", stop_reason=reason)
             self.runs.append_autopilot_event(run_id, "autopilot.paused", {"reason": reason})
         return self.runs.read_autopilot_run(run_id)
@@ -248,29 +252,35 @@ class AutopilotService:
     def _run(self, run_id: str, stop: threading.Event) -> None:
         """Run one controller only while this process owns the durable lease."""
 
-        lease_owner = f"{self._controller_id}:{run_id}"
-        if not self.runs.acquire_autopilot_lease(run_id, lease_owner, lease_seconds=self._lease_seconds()):
-            self.runs.append_autopilot_event(
-                run_id,
-                "autopilot.controller_busy",
-                {"controller_id": self._controller_id},
-            )
-            return
-        renew_stop = threading.Event()
-
-        heartbeat = threading.Thread(
-            target=self._lease_heartbeat,
-            args=(run_id, lease_owner, stop, renew_stop),
-            name=f"arcvellum-lease-{run_id}",
-            daemon=True,
-        )
-        heartbeat.start()
         try:
-            self._run_claimed(run_id, stop)
+            lease_owner = f"{self._controller_id}:{run_id}"
+            if not self.runs.acquire_autopilot_lease(run_id, lease_owner, lease_seconds=self._lease_seconds()):
+                self.runs.append_autopilot_event(
+                    run_id,
+                    "autopilot.controller_busy",
+                    {"controller_id": self._controller_id},
+                )
+                return
+            renew_stop = threading.Event()
+
+            heartbeat = threading.Thread(
+                target=self._lease_heartbeat,
+                args=(run_id, lease_owner, stop, renew_stop),
+                name=f"arcvellum-lease-{run_id}",
+                daemon=True,
+            )
+            heartbeat.start()
+            try:
+                self._run_claimed(run_id, stop)
+            finally:
+                renew_stop.set()
+                heartbeat.join(timeout=1)
+                self.runs.release_autopilot_lease(run_id, lease_owner)
         finally:
-            renew_stop.set()
-            heartbeat.join(timeout=1)
-            self.runs.release_autopilot_lease(run_id, lease_owner)
+            with self._lock:
+                self._stops.pop(run_id, None)
+                if self._threads.get(run_id) is threading.current_thread():
+                    self._threads.pop(run_id, None)
 
     def _lease_seconds(self) -> int:
         application = self.config.get("application") if isinstance(self.config.get("application"), dict) else {}

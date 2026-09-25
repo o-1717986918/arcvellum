@@ -378,6 +378,22 @@ class AutopilotTests(unittest.TestCase):
             self.assertEqual(restarted.delegated_decisions(run["run_id"])[0]["decision_id"], decision["decision_id"])
             self.assertTrue(restarted.autopilot_events_since(run["run_id"]))
 
+    def test_recovery_preserves_live_controller_lease(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            database = Path(temporary) / "studio.sqlite3"
+            store = JobStore(database)
+            policy = default_policy("supervised_auto")
+            run = store.create_autopilot_run("C:/work", mode=policy["mode"], runtime="opencode", policy=policy)
+            self.assertTrue(store.acquire_autopilot_lease(run["run_id"], "live-controller"))
+            other_process = JobStore(database)
+
+            self.assertEqual(other_process.recover_autopilot_runs(), 0)
+            self.assertEqual(other_process.read_autopilot_run(run["run_id"])["status"], "running")
+
+            store.release_autopilot_lease(run["run_id"], "live-controller")
+            self.assertEqual(other_process.recover_autopilot_runs(), 1)
+            self.assertEqual(other_process.read_autopilot_run(run["run_id"])["status"], "paused")
+
     def test_resume_clears_stale_finished_timestamp(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

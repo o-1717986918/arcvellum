@@ -19,6 +19,13 @@ from literary_engineering_studio.observability.creative_live.artifact_revisions 
 
 
 class CreativeLiveProjectionTests(unittest.TestCase):
+    def test_scene_performance_events_explain_the_creative_action(self):
+        event = project_runtime_event(_raw(1, "scene.performance.interaction.turn", {
+            "scene_id": "scene_0001", "speaker": "闻棠", "turn": 3,
+        }), ".")
+        self.assertEqual(event["data"]["title"], "角色完成一轮对戏")
+        self.assertIn("闻棠完成第 3 轮", event["data"]["message"])
+
     def test_style_projection_is_visible_without_exposing_reference_text(self):
         event = _raw(1, "style.projection.selected", {
             "scene_id": "scene_0001",

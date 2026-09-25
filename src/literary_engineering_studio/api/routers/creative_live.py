@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 import time
 from typing import Any, Callable
@@ -12,9 +13,11 @@ from fastapi.responses import StreamingResponse
 
 from ...observability.creative_live.contracts import project_channel
 from ...observability.creative_live.artifact_revisions import artifact_revisions
+from ...observability.creative_live.scene_revision_history import merge_scene_revision_history
 from ...observability.creative_live.projector import project_runtime_event
 from ...observability.creative_live.snapshot import build_creative_live_snapshot
 from ...observability.creative_live.scene_transactions import project_scene_transactions
+from ...observability.scene_rehearsals import scene_rehearsal_detail, scene_rehearsal_index
 from ..common import call_handler, project_root as resolve_project_root
 from ..streaming import sse_headers
 
@@ -27,6 +30,7 @@ class CreativeLiveRouterDependencies:
     context_ledgers: Any
     scene_transactions: Any
     sse: Callable[[str, dict[str, Any], int | str | None], str]
+    data_root: Path | None = None
 
 
 def build_creative_live_router(deps: CreativeLiveRouterDependencies) -> APIRouter:
@@ -74,10 +78,31 @@ def build_creative_live_router(deps: CreativeLiveRouterDependencies) -> APIRoute
             "session": {**session, "context": _context_summary(deps, session)},
         }
 
+    @router.get("/creative-live/scene-rehearsals")
+    def scene_rehearsals(project_root: str):
+        root = resolve_project_root(project_root)
+        return call_handler(lambda: {
+            "ok": True, "schema": "arcvellum/scene-rehearsals/v1",
+            "scenes": scene_rehearsal_index(
+                deps.data_root or Path("."), deps.scene_transactions.list_for_project(str(root), limit=500),
+            ),
+        })
+
+    @router.get("/creative-live/scene-rehearsals/{transaction_id}")
+    def scene_rehearsal(transaction_id: str, project_root: str):
+        root = resolve_project_root(project_root)
+        return call_handler(lambda: {
+            "ok": True, "schema": "arcvellum/scene-rehearsal/v1",
+            "scene": scene_rehearsal_detail(
+                deps.data_root or Path("."), deps.scene_transactions.list_for_project(str(root), limit=500),
+                transaction_id,
+            ),
+        })
+
     @router.get("/creative-live/artifacts/{artifact_id}/revisions")
     def creative_artifact_revisions(artifact_id: str, project_root: str):
         root = resolve_project_root(project_root)
-        revisions = artifact_revisions(root, _raw_events(deps, root)[0], artifact_id)
+        revisions = _artifact_history(deps, root, artifact_id)
         return {
             "ok": True,
             "schema": "arcvellum/artifact-revisions/v1",
@@ -91,7 +116,7 @@ def build_creative_live_router(deps: CreativeLiveRouterDependencies) -> APIRoute
         revision = next(
             (
                 item
-                for item in artifact_revisions(root, _raw_events(deps, root)[0], artifact_id)
+                for item in _artifact_history(deps, root, artifact_id)
                 if item.get("revision_id") == revision_id
             ),
             None,
@@ -105,6 +130,14 @@ def build_creative_live_router(deps: CreativeLiveRouterDependencies) -> APIRoute
         }
 
     return router
+
+
+def _artifact_history(deps: CreativeLiveRouterDependencies, root: Path, artifact_id: str) -> list[dict[str, Any]]:
+    return merge_scene_revision_history(
+        root, deps.data_root or Path("."),
+        deps.scene_transactions.list_for_project(str(root), limit=500),
+        artifact_id, artifact_revisions(root, _raw_events(deps, root)[0], artifact_id),
+    )
 
 
 def _snapshot(
@@ -143,7 +176,16 @@ def _raw_events(
         {**item, "source": "project-live"}
         for item in deps.live_events.wait_since(project_channel(root), 0, timeout=0)
     )
+    raw.sort(key=_event_time)
     return raw, current_run
+
+
+def _event_time(item: dict[str, Any]) -> float:
+    try:
+        value = datetime.fromisoformat(str(item.get("at") or "").replace("Z", "+00:00"))
+        return value.replace(tzinfo=timezone.utc).timestamp() if value.tzinfo is None else value.timestamp()
+    except ValueError:
+        return 0.0
 
 
 def _revision_summary(item: dict[str, Any]) -> dict[str, Any]:

@@ -1,4 +1,3 @@
-import path from "node:path";
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
 import { prepareVisualProjects, visualProjectRoot } from "./orreryVisualFixture";
 
@@ -20,6 +19,7 @@ test.beforeAll(async ({ request }) => {
 
 test("creative live renders a streamed candidate, review evidence, and runtime state", async ({ page }, testInfo) => {
   const initial = liveSnapshot(prose);
+  await mockLiveDetails(page);
   await page.route("**/api/creative-live?*", async (route) => {
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(initial) });
   });
@@ -27,6 +27,12 @@ test("creative live renders a streamed candidate, review evidence, and runtime s
   await openCreativeLive(page);
   await expect(page.locator(".creative-live-dock")).toHaveAttribute("data-status", "active");
   await expect(page.locator(".creative-live-dock")).toHaveCSS("background-color", "rgb(248, 250, 247)");
+  await expect(page.locator(".creative-process-heading")).toContainText("看见每一步怎样写成正文");
+  await expect(page.locator(".creative-process-rehearsal")).toContainText("闻藻");
+  await page.locator(".creative-process-selector select").selectOption("actor-visual-session");
+  await expect(page.locator(".creative-process-work")).toContainText("先让我听完这场雨");
+  await capture(page, testInfo, "creative-live-process.png");
+  await page.getByRole("button", { name: "正文与资料" }).click();
   await expect(page.locator(".live-manuscript-scroll .safe-markdown-document")).toHaveCSS("color", "rgb(38, 56, 49)");
   await expect(page.locator(".creative-live-runtime")).toContainText("实时连接");
   await expect(page.locator(".creative-style-provenance")).toContainText("R17");
@@ -39,13 +45,27 @@ test("creative live renders a streamed candidate, review evidence, and runtime s
   await expect(page.locator(".live-manuscript-scroll")).toContainText("把未拆的信压在登记册下面");
   await expect(page.locator(".creative-identity-rail")).toContainText("内容状态");
   await page.locator(".creative-artifact-list button").filter({ hasText: "第三章 潮线以内" }).click();
+  await page.getByRole("button", { name: "正文修订" }).click();
+  await expect(page.locator(".creative-revision-diff")).toContainText("正式稿承接的修订痕迹");
+  await expect(page.locator(".revision-diff-scroll p.added")).toContainText("她终于抬头");
+  await expect(page.locator(".revision-diff-scroll p.added")).toHaveCSS("color", "rgb(33, 101, 79)");
+  await capture(page, testInfo, "creative-live-revision.png");
+  await page.getByRole("button", { name: "全文", exact: true }).click();
+  await expect(page.locator(".creative-revision-workspace-scroll")).toContainText("那艘本该昨天离港的船");
+  await page.getByRole("button", { name: "比较变化" }).click();
+  await expect(page.locator(".creative-revision-workspace .revision-diff-scroll")).toContainText("她终于抬头");
+  const revisionWidth = await page.locator(".creative-revision-workspace").evaluate((node) => node.getBoundingClientRect().width);
+  const reviewWidth = await page.locator(".creative-live-right").evaluate((node) => node.getBoundingClientRect().width);
+  expect(revisionWidth).toBeGreaterThan(reviewWidth);
+  await page.getByRole("button", { name: "正文与资料" }).click();
   await expect(page.locator(".creative-live-view")).toBeVisible();
+  await expect(page.locator(".live-manuscript-scroll")).toContainText("雾沿着第 24 根系船柱退去");
   const workspaceHeight = await page.locator(".pa-live-window .spatial-window-scroll").evaluate((node) => node.getBoundingClientRect().height);
   const dockHeight = await page.locator(".creative-live-dock").evaluate((node) => node.getBoundingClientRect().height);
   expect(Math.abs(workspaceHeight - dockHeight)).toBeLessThan(3);
   await expect(page.locator(".live-manuscript-scroll")).toHaveCSS("overflow-y", "auto");
   await expect(page.locator(".creative-live-side-scroll")).toHaveCSS("overflow-y", "auto");
-  expect(await page.locator(".live-manuscript-scroll").evaluate((node) => node.scrollHeight > node.clientHeight)).toBe(true);
+  await expect.poll(() => page.locator(".live-manuscript-scroll").evaluate((node) => node.scrollHeight > node.clientHeight)).toBe(true);
   expect(await page.locator(".creative-live-side-scroll").evaluate((node) => node.scrollHeight > node.clientHeight)).toBe(true);
   const dragHandle = page.locator(".pa-live-window .spatial-window-drag");
   const beforeDrag = await page.locator(".pa-live-window").boundingBox();
@@ -70,16 +90,21 @@ test("creative live renders a streamed candidate, review evidence, and runtime s
 
 test("style provenance remains readable on a narrow viewport", async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 390, height: 844 });
+  await mockLiveDetails(page);
   await page.route("**/api/creative-live?*", async (route) => {
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(liveSnapshot(prose)) });
   });
   await openCreativeLive(page);
-  const enter = page.getByRole("button", { name: "进入创作" });
-  if (await enter.isVisible()) await enter.click();
   await expect(page.getByText("让一部长篇作品从脉络中醒来。")).toBeHidden();
   await expect(page.locator(".creative-style-provenance")).toBeVisible();
+  await expect(page.locator(".creative-process-heading")).toBeVisible();
+  await page.getByRole("button", { name: "正文修订" }).click();
+  await expect(page.locator(".creative-revision-workspace")).toBeVisible();
+  await expect(page.locator(".revision-diff-scroll p.added")).toBeInViewport();
   const strip = page.locator(".creative-style-provenance");
   expect(await strip.evaluate((node) => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
+  const main = page.locator(".creative-live-main");
+  expect(await main.evaluate((node) => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
   await capture(page, testInfo, "creative-live-style-mobile.png");
 });
 
@@ -106,8 +131,13 @@ async function openCreativeLive(page: Page): Promise<void> {
     };
   }, projectRoot);
   await page.goto("#/agent?workspace=live", { waitUntil: "domcontentloaded" });
+  const enter = page.getByRole("button", { name: "进入创作" });
+  if (await enter.isVisible()) await enter.click();
+  await expect(page.getByText("让一部长篇作品从脉络中醒来。")).toBeHidden();
   await expect(page.locator(".pa-live-window")).toBeVisible({ timeout: 30_000 });
   await expect(page.locator(".creative-live-dock")).toBeVisible({ timeout: 30_000 });
+  const chooser = page.getByRole("dialog", { name: "这次想写哪部作品？" });
+  if (await chooser.isVisible()) await chooser.getByRole("button", { name: "关闭", exact: true }).click();
 }
 
 function liveSnapshot(content: string) {
@@ -173,6 +203,11 @@ function liveSnapshot(content: string) {
       transcript: "正在按场景契约展开正文。",
       tools: [{ event: "tool.started", tool: "write_expected_output", status: "running" }],
       model: "deepseek-v4-pro",
+    }, {
+      session_id: "actor-visual-session", role: "worker", runtime: "pi-worker", status: "complete",
+      route: "scene-development", task_id: "scene_0009-performance",
+      transcript: JSON.stringify({ scene_id: "scene_0009", speaker: "闻藻", entries: [{ spoken: "先让我听完这场雨。", first_person_action: "我把箱子放在门口。" }] }),
+      tools: [], updated_at: "2026-08-31T08:59:00Z",
     }],
     activity: Array.from({ length: 18 }, (_, index) => ({
       event_id: `activity-${index + 1}`,
@@ -196,9 +231,47 @@ function liveSnapshot(content: string) {
       artifact_id: "scene-0009-prose",
     })),
     usage: { total_tokens: 4280, cost_usd: 0.0138, updates: 4 },
+    active_scene_transaction: { transaction_id: "tx-visual", scene_id: "scene_0009", status: "creating", mode: "standard", risk: "standard", objective: "让闻藻听见屋顶的歌", scene_function: "setup", body_hanzi: 0, warning_count: 0, hard_issue_count: 0, review_decision: "", review_summary: "", revision_attempts: 0, requires_input: false, message: "", version: 1 },
+    scene_transactions: [],
     events: [],
     cursor: 40,
   };
+}
+
+async function mockLiveDetails(page: Page): Promise<void> {
+  await page.route("**/api/creative-live/sessions/actor-visual-session?*", (route) => route.fulfill({
+    status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, session: {
+      session_id: "actor-visual-session", role: "worker", runtime: "pi-worker", status: "complete",
+      route: "scene-development", task_id: "scene_0009-performance", tools: [],
+      transcript: JSON.stringify({ scene_id: "scene_0009", speaker: "闻藻", entries: [{ spoken: "先让我听完这场雨。", first_person_action: "我把箱子放在门口。" }] }),
+    } }),
+  }));
+  await page.route("**/api/creative-live/scene-rehearsals/tx-visual?*", (route) => route.fulfill({
+    status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, scene: {
+      transaction_id: "tx-visual", scene_id: "scene_0009", status: "creating", objective: "让闻藻听见屋顶的歌", turn_count: 1, updated_at: "2026-08-31T08:59:00Z",
+      turns: [{ turn: 1, speaker: "闻藻", beat_id: "b1", source: "rehearsal", entries: [{ entry_id: "t1:1", spoken: "先让我听完这场雨。", first_person_action: "我把箱子放在门口。" }] }],
+      environment: [{ beat_id: "b1", description: "雨沿着瓦脊往下走。" }],
+    } }),
+  }));
+  await page.route("**/api/creative-live/artifacts/scene-0009-prose/revisions?*", (route) => route.fulfill({
+    status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, revisions: [
+      { revision_id: "r1", artifact_id: "scene-0009-prose", event_id: "e1", at: "2026-08-31T08:59:00Z", identity: "candidate_written", digest: "a", characters: 10, finding_refs: [] },
+      { revision_id: "r2", artifact_id: "scene-0009-prose", event_id: "e2", at: "2026-08-31T09:00:00Z", identity: "candidate_written", digest: "b", characters: prose.length, finding_refs: [] },
+      { revision_id: "r3", artifact_id: "scene-0009-prose", event_id: "e3", at: "2026-08-31T09:01:00Z", identity: "promoted", digest: "b", characters: prose.length, finding_refs: [] },
+    ] }),
+  }));
+  await page.route("**/api/creative-live/artifacts/scene-0009-prose/revisions/r2?*", (route) => route.fulfill({
+    status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, revision: {
+      revision_id: "r2", artifact_id: "scene-0009-prose", event_id: "e2", at: "2026-08-31T09:00:00Z", identity: "candidate_written", digest: "b", characters: prose.length, finding_refs: [],
+      content: prose, diff: "--- 上一版\n+++ 当前版\n+她终于抬头，看见那艘本该昨天离港的船。\n",
+    } }),
+  }));
+  await page.route("**/api/creative-live/artifacts/scene-0009-prose/revisions/r3?*", (route) => route.fulfill({
+    status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, revision: {
+      revision_id: "r3", artifact_id: "scene-0009-prose", event_id: "e3", at: "2026-08-31T09:01:00Z", identity: "promoted", digest: "b", characters: prose.length, finding_refs: [],
+      content: prose, diff: "",
+    } }),
+  }));
 }
 
 async function capture(page: Page, testInfo: TestInfo, name: string): Promise<void> {

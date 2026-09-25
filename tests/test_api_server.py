@@ -1,4 +1,5 @@
 import json
+import hashlib
 import os
 from pathlib import Path
 import re
@@ -32,6 +33,17 @@ class ApiServerTests(unittest.TestCase):
     def tearDown(self):
         self.client.close()
         self.temporary.cleanup()
+
+    def test_scene_rehearsal_history_is_project_scoped(self):
+        root = Path(self.temporary.name) / "project"
+        root.mkdir()
+        (root / "project.yaml").write_text("title: 测试作品\n", encoding="utf-8")
+        response = self.client.get("/creative-live/scene-rehearsals", params={"project_root": str(root)})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["scenes"], [])
+        missing = self.client.get("/creative-live/scene-rehearsals/other-project-tx",
+                                  params={"project_root": str(root)})
+        self.assertEqual(missing.status_code, 400)
 
     def test_health_separates_agent_runners_and_model_connections(self):
         self.client.app.state.bootstrap._engine_future.result(timeout=15)
@@ -78,7 +90,7 @@ class ApiServerTests(unittest.TestCase):
             path = Path(temporary) / "config.json"
             with patch.dict(os.environ, {"LES_CONFIG_PATH": str(path)}):
                 current = self.client.get("/model-connections/pi-worker/scene-performance")
-                self.assertEqual(current.json()["preferences"], {"enabled": False, "max_actor_calls": 4})
+                self.assertEqual(current.json()["preferences"], {"enabled": True, "max_actor_calls": 12})
                 updated = self.client.put("/model-connections/pi-worker/scene-performance", json={
                     "enabled": False, "max_actor_calls": 2,
                 })
@@ -354,6 +366,40 @@ class ApiServerTests(unittest.TestCase):
                 params={"project_root": str(project), "path": "../project.yaml"},
             )
             self.assertEqual(rejected.status_code, 400)
+
+    def test_partial_docx_endpoint_allows_unfinished_project(self):
+        root = Path(self.temporary.name) / "unfinished"
+        root.mkdir()
+        (root / "project.yaml").write_text("title: 未完稿\n", encoding="utf-8")
+        (root / "scenes").mkdir()
+        (root / "scenes" / "scene_0001.yaml").write_text(
+            "scene_id: scene_0001\nchapter_id: chapter_0001\n", encoding="utf-8",
+        )
+        prose = root / "drafts" / "scenes" / "scene_0001.md"
+        prose.parent.mkdir(parents=True)
+        prose.write_text("她推开了门。\n", encoding="utf-8")
+        receipt = root / "workflow" / "scene_commits" / "scene_0001.json"
+        receipt.parent.mkdir(parents=True)
+        receipt.write_text(json.dumps({
+            "prose_sha256": hashlib.sha256("她推开了门。".encode()).hexdigest(),
+        }), encoding="utf-8")
+
+        before = self.client.get("/project/delivery", params={"project_root": str(root)})
+        self.assertEqual(before.status_code, 200)
+        self.assertEqual(before.json()["files"], [])
+
+        response = self.client.post("/project/delivery/snapshot", params={"project_root": str(root)})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["status"], "partial_snapshot")
+        download = self.client.get("/project/delivery/download", params={
+            "project_root": str(root), "path": response.json()["docx_path"],
+        })
+        self.assertEqual(download.status_code, 200)
+        self.assertTrue(download.content.startswith(b"PK"))
+        listing = self.client.get("/project/delivery", params={"project_root": str(root)})
+        self.assertEqual(listing.status_code, 200)
+        self.assertTrue(any(item["path"] == response.json()["docx_path"] for item in listing.json()["files"]))
 
     def test_delivery_stream_publishes_real_delivery_state(self):
         with tempfile.TemporaryDirectory() as temporary:

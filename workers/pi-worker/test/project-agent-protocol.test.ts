@@ -157,6 +157,41 @@ describe("Project Agent bridge protocol", () => {
 		expect(outbound.find((item) => item.type === "tool.call")?.payload.name).toBe("project_record_direction");
 	});
 
+	it("exposes archive and author-style tools in one Project Agent turn", async () => {
+		const faux = createFauxCore({
+			provider: "arcvellum-faux-owner",
+			models: [{ id: "project-agent-owner-test", reasoning: false }],
+		});
+		faux.setResponses([
+			fauxAssistantMessage(fauxToolCall("project_style_versions", {}), { stopReason: "toolUse" }),
+			fauxAssistantMessage(fauxToolCall("project_archive_read", { section: "detail", asset_id: "character:lin" }), { stopReason: "toolUse" }),
+			fauxAssistantMessage(fauxToolCall("project_owner_style_write", {
+				base_revision: "a".repeat(64), content: "让情绪进入叙事。", reason: "作者调整作品文风方向。",
+			}), { stopReason: "toolUse" }),
+			fauxAssistantMessage("档案与文风已处理。"),
+		]);
+		const calls: string[] = [];
+		let bridge: ProjectToolBridge;
+		const write = (value: BridgeEnvelope) => {
+			if (value.type !== "tool.call") return;
+			calls.push(String(value.payload.name));
+			queueMicrotask(() => bridge.receive(envelope("tool.result", "turn-owner", {
+				request_id: value.payload.request_id,
+				name: value.payload.name,
+				ok: true,
+				result: { ok: true },
+			})));
+		};
+		bridge = new ProjectToolBridge("turn-owner", write, 1_000);
+		const result = await runProjectAgentTurn({
+			sessionId: "session-owner", turnId: "turn-owner", prompt: "检查并调整作品文风。",
+			systemPrompt: "按现有服务的作者权限工作。",
+			allowedTools: ["project_style_versions", "project_archive_read", "project_owner_style_write"],
+		}, { model: faux.getModel(), streamFn: faux.streamSimple }, bridge, write);
+		expect(result.status).toBe("completed");
+		expect(calls).toEqual(["project_style_versions", "project_archive_read", "project_owner_style_write"]);
+	});
+
 	it("rejects timed out and cancelled tool requests without leaking pending calls", async () => {
 		const timed = new ProjectToolBridge("turn-timeout", () => undefined, 5);
 		await expect(timed.request("project_overview", {})).rejects.toThrow("timed out");

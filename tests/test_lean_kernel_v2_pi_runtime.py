@@ -19,11 +19,14 @@ from literary_engineering_studio.persistence.sqlite_uow import SqliteUnitOfWork
 from literary_engineering_studio.runtime.role_conversation import RoleConversationResult
 from literary_engineering_studio.runtimes.pi_scene_transaction import (
     PiSceneTransactionRuntime,
+    _expression_context_for_prompt,
+    _original_performance_materials,
     creative_result_from_payload,
     render_scene_create_prompt,
     render_scene_revision_prompt,
     render_scene_review_prompt,
 )
+from literary_engineering_studio.runtimes.pi_scene_payload import _answer_payload
 from literary_engineering_studio.runtimes.scene_length_completion import (
     render_scene_length_completion_prompt,
 )
@@ -103,6 +106,33 @@ class _CommitPort:
 
 
 class LeanKernelV2PiRuntimeTests(unittest.TestCase):
+    def test_review_uses_compact_voice_context(self) -> None:
+        expression = {"expression_plan": {"syntax_motion": "variable"}, "dialogue_intents": [{
+            "speaker": "纪蔚", "wants": "说出真相", "speech_strategy": "绕开手续后追问",
+            "background_influence": ["不应重复的大段资料" * 300],
+        }]}
+        compact = _expression_context_for_prompt(expression, review=True)
+        self.assertIn("绕开手续后追问", compact)
+        self.assertNotIn("不应重复的大段资料", compact)
+        actor_owned = _expression_context_for_prompt(expression, review=True, actor_owned=True)
+        self.assertIn("说出真相", actor_owned)
+        self.assertNotIn("绕开手续后追问", actor_owned)
+
+    def test_existing_transaction_reuses_unambiguous_first_level_materials(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            original = root / "performance_materials_old.json"
+            (root / "creative_result_old.json").write_text("{}", encoding="utf-8")
+            original.write_text('{"materials":"一级角色言行"}', encoding="utf-8")
+            found, record = _original_performance_materials(root / "performance_materials_new.json")
+            self.assertEqual(found, original)
+            self.assertEqual(record["materials"], "一级角色言行")
+            (root / "creative_result_other.json").write_text("{}", encoding="utf-8")
+            (root / "performance_materials_other.json").write_text("{}", encoding="utf-8")
+            found, record = _original_performance_materials(root / "performance_materials_new.json")
+            self.assertEqual(found.name, "performance_materials_new.json")
+            self.assertIsNone(record)
+
     def test_prompt_is_compact_and_contains_no_legacy_lifecycle_manual(self) -> None:
         prompt = render_scene_create_prompt(_brief())
 
@@ -112,23 +142,24 @@ class LeanKernelV2PiRuntimeTests(unittest.TestCase):
         self.assertNotIn("expected_outputs", prompt)
         self.assertIn("SceneBrief", prompt)
         self.assertIn("canon_constraints", prompt)
-        self.assertIn("不得用登记 new_asset_candidates 绕过", prompt)
-        self.assertIn("逐字沿用其中已确定的人名、日期、年份、数量和时间差", prompt)
-        self.assertIn("保留差值不代表可以改动构成差值的绝对值", prompt)
-        self.assertIn("核对—追问—停顿—留悬念", prompt)
-        self.assertIn("未列入 participants 的主要人物不得登场", prompt)
-        self.assertIn("不得重演首次见面", prompt)
+        self.assertIn("正文实际造成的语义变化", prompt)
+        self.assertIn("逐字沿用已确定的人名、日期、年份、数量和时间差", prompt)
+        self.assertIn("逐字沿用已确定的人名、日期、年份、数量和时间差", prompt)
+        self.assertIn("实现 SceneBrief 的 objective、participants、scene_function 与 incoming_handoff", prompt)
         self.assertIn("写对白前根据人物背景、欲望、身份和关系压力", prompt)
         self.assertIn("speech_style 未填写时从已知事实推导", prompt)
-        self.assertIn("不把所有人压成同一种平直短句", prompt)
+        self.assertIn("让不同人物有各自语势", prompt)
+        self.assertIn("通读整场破折号", prompt)
         self.assertIn("Style Reference Priority", prompt)
         self.assertIn("若资料中有文风参考，借用与本场相关的表达机制", prompt)
         self.assertIn("白描只是可用底色之一", prompt)
         self.assertIn("## Literary Rendering", prompt)
-        self.assertIn("不要把心理缩成", prompt)
+        self.assertIn('避免反复套用“引号台词—某某说或做—下一句台词”', prompt)
+        self.assertIn("当前视角的误读、欲望与记忆", prompt)
         self.assertIn("允许有意义地停留和渲染", prompt)
-        self.assertIn("即使既有模板写着 low", prompt)
-        self.assertIn("证据之后停笔", prompt)
+        self.assertIn("对白可绕路、说错或沉默", prompt)
+        self.assertIn("中段的空间里变化", prompt)
+        self.assertIn("最新用户方向和阅读效果决定心理、环境与语言起伏的篇幅", prompt)
         self.assertIn("新增精确数字默认不用", prompt)
         self.assertIn("“一个又一个”“一次次”等虚指反复并非精确计数", prompt)
         self.assertIn("当场问答、人物选择或谈判", prompt)
@@ -138,22 +169,26 @@ class LeanKernelV2PiRuntimeTests(unittest.TestCase):
         self.assertIn("若只为显得具体，删去精度不损失对话信息", prompt)
         self.assertGreater(prompt.rfind("## Final Prose Pass"), prompt.rfind("## Output"))
 
+    def test_scene_payload_rejects_trailing_partial_json(self) -> None:
+        with self.assertRaisesRegex(ValueError, "text after its JSON object"):
+            _answer_payload('{"scene_id":"scene_0001"},"actor_prompts":{}')
+
     def test_length_completion_preserves_expression_and_stops_after_evidence(self) -> None:
         prompt = render_scene_length_completion_prompt(
             _brief(), "她把信压在杯底。\n\n妹妹仍站在门边。", 420
         )
 
-        self.assertIn("辨认叙述距离、句群呼吸、主导意象和人物话语策略", prompt)
-        self.assertIn("白描不能独占补写段", prompt)
+        self.assertIn("沿用已有正文的叙述距离与声音", prompt)
+        self.assertIn("让语言随感受变化而舒展", prompt)
         self.assertIn("动作、意象、对白或物证已经传意时停笔", prompt)
-        self.assertIn("不追加翻译潜台词、概括感受或解释意义的尾句", prompt)
+        self.assertNotIn("不追加解释性尾句", prompt)
         owned = render_scene_length_completion_prompt(
             _brief(), "妹妹仍站在门边。", 420, actor_owned=True,
             performance_material_block="一级素材：她没有说话，但怕他离开。",
         )
         self.assertIn("同一份一级角色与环境素材", owned)
         self.assertIn("一级素材：她没有说话", owned)
-        self.assertIn("不能把私念转成台词或全知事实", owned)
+        self.assertIn("当前视角内展开未出口的心理", owned)
 
     def test_review_treats_hard_continuity_conflicts_as_revision(self) -> None:
         result = CreativeResult("第一版正文。", "初稿", SceneDelta())
@@ -167,6 +202,8 @@ class LeanKernelV2PiRuntimeTests(unittest.TestCase):
         self.assertIn("软字数偏差只作建议，不得单独退回", prompt)
         self.assertIn("重复结构及可保留的有效内容", prompt)
         self.assertIn("共享调查题材", prompt)
+        self.assertIn("一级角色 entries 是可采用的候选，不是必须逐条照录的情节义务", prompt)
+        self.assertIn("每条退回证据必须能在 Candidate 中逐字定位", prompt)
         self.assertIn("最小指令", prompt)
         self.assertIn("当前场 scene_goal", prompt)
         self.assertIn("三个以上关键节拍", prompt)
@@ -176,13 +213,20 @@ class LeanKernelV2PiRuntimeTests(unittest.TestCase):
         self.assertIn("对明确无关的精确计数，引用具体片段", prompt)
         self.assertIn("对虚指反复、当场问答或改变人物理解的数值，不得仅因数词存在", prompt)
         self.assertIn("心理完全缺席", prompt)
+        self.assertIn("只有成簇出现并削弱人物或叙事时", prompt)
+        self.assertIn("短句堆叠审读", prompt)
+        self.assertIn("引用相邻原句", prompt)
+        self.assertIn("情绪审读", prompt)
         owned_review = render_scene_review_prompt(
             _brief(), result, VerificationReport("scene_0001", 6),
             performance_material_block="一级角色：信是我拿的。",
         )
-        self.assertIn("逐段核对候选正文中每一处实际说出口的台词", owned_review)
-        self.assertIn("不得叫主创替演员", owned_review)
+        self.assertIn("主创可以为因果衔接和文学效果补写必要言行", owned_review)
+        self.assertIn("只因没有逐条素材来源而判退属于误审", owned_review)
+        self.assertIn("可要求主创改写、删选该角色已有台词", owned_review)
         self.assertIn("一级角色给出候选不等于正文必须全收", owned_review)
+        self.assertIn("误称、误会或追问，核对正文是否给出可感的起因", owned_review)
+        self.assertIn("人物开始反复议论称呼规则", owned_review)
         self.assertIn("一级角色：信是我拿的。", owned_review)
         self.assertIn("不得按数词出现本身、数字密度或统一清单裁决", prompt)
         self.assertGreater(prompt.rfind("## Quantitative Detail Review"), prompt.rfind("## Relevant Sources"))
@@ -248,22 +292,28 @@ class LeanKernelV2PiRuntimeTests(unittest.TestCase):
         )
 
         self.assertIn('"character/protagonist"', create)
+        self.assertIn("EMOTION_ARC / EMOTION_CONTRADICTION / EMOTION_RESIDUE", create)
         self.assertIn("只能逐字选自 Allowed Existing Refs", create)
         self.assertIn("Existing SceneDelta", revision)
+        self.assertIn("情绪修订轴", revision)
         self.assertIn("invented-id", revision)
         self.assertIn("不得保留空对象", revision)
-        self.assertIn("不得在修复一个问题时重新引入已消失的冲突", revision)
-        self.assertIn("不得用 new_asset_candidates 绕过", revision)
+        self.assertIn("修订一处后通读全场", revision)
+        with_materials = render_scene_create_prompt(brief, performance_material_block="一级角色素材")
+        self.assertIn("下一人的回答检查所回应的那句话", with_materials)
+        self.assertIn("先让那人的言行在正文里发生", with_materials)
+        self.assertIn("抓住谁向谁说话", create)
+        self.assertIn("既有变化组的 target_ref 只能逐字选自 Allowed Existing Refs", revision)
+        self.assertIn("亲自写出下一版完整正文", revision)
+        self.assertIn("一级角色 entries 是可取舍的发言与行为素材", revision)
         self.assertIn("保留候选中有效的语言运动", revision)
         self.assertIn("新增精确数字默认不用", revision)
         self.assertIn("不要求五项同时成立", revision)
-        self.assertIn("不要把所有台词统一磨成平直短句", revision)
-        self.assertIn("主创可以重新选择叙述距离、心理层次", revision)
-        self.assertIn("即使写 low，也只是全场软建议", revision)
-        self.assertIn("旧挂载文风的“只有行为无法承载才简短直述”", revision)
-        self.assertIn("请求原角色续演", revision)
-        self.assertIn("不能重写该角色的具体发言", revision)
-        self.assertIn("角色推演不是逐字实录", revision)
+        self.assertIn("可重组句法、人物声音、心理和环境", revision)
+        self.assertIn("一级角色 entries 是可取舍的发言与行为素材", revision)
+        self.assertIn("主创可改写已有台词，也可在必要时补写言行", revision)
+        self.assertIn("误称、误会和追问应让读者看见其起因", revision)
+        self.assertIn("对白在改变关系时重提事实", revision)
         self.assertGreater(revision.rfind("## Final Prose Pass"), revision.rfind("## Output"))
 
     def test_first_level_materials_reach_create_completion_and_revision(self) -> None:
@@ -283,18 +333,19 @@ class LeanKernelV2PiRuntimeTests(unittest.TestCase):
                 "tx-owned", _brief(), result, VerificationReport("scene_0001", 20), None, attempt=1,
             )
             self.assertEqual(len(list((root / ".studio" / "scene-transactions" / "tx-owned")
-                                      .glob("revision_result_1_owner_v2_*.json"))), 1)
+                              .glob("revision_result_1_director_v1_*.json"))), 1)
             prompts = [prompt for _, prompt in gateway.calls
                        if not prompt.startswith("# First-Level Visible Action Source Audit")]
             self.assertIn(marker, prompts[0])
-            self.assertIn("细小动作也不例外", prompts[0])
+            self.assertIn("一级演员提供角色言行与临场选择的优先素材", prompts[0])
             self.assertIn(marker, prompts[1])
-            self.assertIn(marker, prompts[-2])
-            self.assertIn("逐段核对候选正文中每一处实际说出口的台词", prompts[-2])
-            self.assertIn(marker, prompts[-1])
+            self.assertIn('"spoken":"信是我拿的。"', prompts[-2])
+            self.assertNotIn("角色素材：妹妹没说出口的恐惧", prompts[-2])
+            self.assertIn("主创可以为因果衔接和文学效果补写必要言行", prompts[-2])
+            self.assertIn('"spoken":"信是我拿的。"', prompts[-1])
             self.assertIn("Original First-Level Character And Environment Materials", prompts[-1])
-            self.assertIn("外显台词和动作仍只来自原角色 entries", prompts[-1])
-            self.assertIn("又抹了一下", prompts[-1])
+            self.assertIn("主创可改写已有台词，也可在必要时补写言行", prompts[-1])
+            self.assertIn("一级角色 entries 是可取舍的发言与行为素材", prompts[-1])
 
     def test_revision_does_not_invent_missing_first_level_source(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

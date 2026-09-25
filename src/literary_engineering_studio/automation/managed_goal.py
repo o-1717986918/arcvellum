@@ -36,7 +36,7 @@ def _same_execution_policy(run: dict[str, Any], target: dict[str, Any]) -> bool:
     active = normalize_policy(run.get("policy"))
     return all(
         active.get(key) == target.get(key)
-        for key in ("mode", "literary_kernel", "release_policy", "scene_execution_mode", "limits")
+        for key in ("mode", "literary_kernel", "release_policy", "scene_execution_mode", "editorial_scene_checkpoint", "limits")
     )
 
 
@@ -51,4 +51,16 @@ def _stop_active_run(service: Any, run: dict[str, Any], timeout: float) -> None:
         raise RuntimeError("旧创作运行仍在收尾，请稍后重试长期目标")
 
 
-__all__ = ["start_managed_goal"]
+def await_controller_exit(service: Any, run_id: str, *, timeout: float = 5.0) -> None:
+    """Wait for a published checkpoint's controller to release its lease."""
+
+    with service._lock:
+        thread = service._threads.get(run_id)
+    if thread is None or thread is threading.current_thread() or not thread.is_alive():
+        return
+    thread.join(timeout=timeout)
+    if thread.is_alive():
+        raise RuntimeError("上一场的控制器仍在收尾，请稍后恢复创作。")
+
+
+__all__ = ["await_controller_exit", "start_managed_goal"]

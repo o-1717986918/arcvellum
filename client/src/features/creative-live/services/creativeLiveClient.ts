@@ -6,6 +6,8 @@ import type {
   CreativeLiveEvent,
   CreativeLiveSnapshot,
   CreativeSession,
+  SceneRehearsalDetail,
+  SceneRehearsalSummary,
 } from "../types";
 
 export function createCreativeLiveClient(transport: ApiTransport = featureTransport) {
@@ -29,6 +31,12 @@ export function createCreativeLiveClient(transport: ApiTransport = featureTransp
     ),
     session: (projectRoot: string, sessionId: string) => transport.request<{ session: CreativeSession }>(
       `/creative-live/sessions/${encodeURIComponent(sessionId)}?${q({ project_root: projectRoot })}`,
+    ),
+    rehearsals: (projectRoot: string) => transport.request<{ scenes: SceneRehearsalSummary[] }>(
+      `/creative-live/scene-rehearsals?${q({ project_root: projectRoot })}`,
+    ),
+    rehearsal: (projectRoot: string, transactionId: string) => transport.request<{ scene: SceneRehearsalDetail }>(
+      `/creative-live/scene-rehearsals/${encodeURIComponent(transactionId)}?${q({ project_root: projectRoot })}`,
     ),
     revisions: (projectRoot: string, artifactId: string) => transport.request<{ revisions: ArtifactRevisionSummary[] }>(
       `/creative-live/artifacts/${encodeURIComponent(artifactId)}/revisions?${q({ project_root: projectRoot })}`,

@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { Agent } from "@earendil-works/pi-agent-core";
+import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 import type { RuntimeEventSink, WorkerOptions, WorkerState } from "./contracts.ts";
 import { ReadOnlyJsonCredentialStore } from "./credential-store.ts";
@@ -21,6 +22,7 @@ export interface ConversationResult {
 	textCharacters: number;
 	writtenOutputs: string[];
 	validationPassed: boolean;
+	initializationAnswer?: string;
 	failureKind?: string;
 	providerError?: string;
 	providerFailureRetryable?: boolean;
@@ -40,17 +42,30 @@ export async function runConversation(
 	const auth = await models.getAuth(model);
 	if (!auth) throw new Error(`Pi AI provider is not authenticated: ${provider}`);
 
+	const actorConversation = options.conversationRole === "character-actor";
+	const actorTurn = actorConversation ? actorTurnEnvelope(prompt) : null;
+	const messages = actorTurn ? [] : conversationMessages(options.conversationRole ?? "default", prompt);
+	const initializedEnvironment = options.conversationRole === "environment-writer" && messages.length === 2;
 	const state = emptyState();
 	const sessionId = `arcvellum-conversation-${createHash("sha256").update(prompt).digest("hex").slice(0, 20)}`;
-	const eventAdapter = new WorkerEventAdapter(sessionId, state, emit);
+	let messageIndex = 0;
+	const eventAdapter = new WorkerEventAdapter(sessionId, state, (event, data) => {
+		if (actorConversation || initializedEnvironment) {
+			if (messageIndex === 0 && (event === "agent.message.delta" || event === "agent.message.completed")) return;
+			if (messageIndex > 0 && (event === "runner.session.created" || event === "runner.session.status")) return;
+			if (messageIndex < messages.length - 1 && event === "runner.session.finished") return;
+		}
+		emit(event, data);
+	});
 	const effectiveThinking = safeThinkingLevel(model, options.thinking);
-	const systemPrompt = conversationSystemPrompt(options.conversationRole ?? "default");
+	const systemPrompt = actorTurn?.initialization ?? conversationSystemPrompt(options.conversationRole ?? "default");
 	const agent = new Agent({
 		initialState: {
 			systemPrompt,
 			model,
 			thinkingLevel: effectiveThinking,
 			tools: [],
+			...(actorTurn?.history.length ? { messages: actorHistoryMessages(actorTurn, model) } : {}),
 		},
 		streamFn: (streamModel, streamContext, streamOptions = {}) => models.streamSimple(
 			streamModel,
@@ -67,10 +82,29 @@ export async function runConversation(
 		},
 	});
 	agent.subscribe((event) => eventAdapter.handle(event));
-	await agent.prompt(prompt);
-	const answer = lastAssistantText(agent.state.messages as unknown[]);
-	const status = answer ? "completed" : "blocked";
-	const providerError = answer ? "" : String(agent.state.errorMessage || "").trim();
+	let initializationAnswer = "";
+	let promptedCurrent = false;
+	let currentAnswer = "";
+	if (actorTurn) {
+		messageIndex = 1;
+		promptedCurrent = true;
+		const priorMessages = agent.state.messages.length;
+		await agent.prompt(actorTurn.prompt);
+		currentAnswer = lastAssistantText((agent.state.messages as unknown[]).slice(priorMessages));
+	} else {
+		for (const [index, message] of messages.entries()) {
+			messageIndex = index;
+			const priorMessages = agent.state.messages.length;
+			await agent.prompt(message);
+			const reply = lastAssistantText((agent.state.messages as unknown[]).slice(priorMessages));
+			if (initializedEnvironment && index === 0) initializationAnswer = reply;
+			if (index === messages.length - 1) currentAnswer = reply;
+			if (agent.state.errorMessage) break;
+		}
+	}
+	const answer = actorTurn || initializedEnvironment ? currentAnswer : lastAssistantText(agent.state.messages as unknown[]);
+	const status = answer && !agent.state.errorMessage && (!actorTurn || promptedCurrent) ? "completed" : "blocked";
+	const providerError = status === "completed" ? "" : String(agent.state.errorMessage || "").trim();
 	const providerFailure = providerError ? classifyProviderFailure(providerError) : null;
 	const result: ConversationResult = {
 		status,
@@ -86,6 +120,7 @@ export async function runConversation(
 		textCharacters: state.textCharacters,
 		writtenOutputs: [],
 		validationPassed: Boolean(answer),
+		...(actorTurn || initializedEnvironment ? { initializationAnswer } : {}),
 		...(providerFailure ? {
 			failureKind: providerFailure.kind,
 			providerError: providerFailure.message,
@@ -96,15 +131,74 @@ export async function runConversation(
 	return result;
 }
 
-export function conversationSystemPrompt(role: NonNullable<WorkerOptions["conversationRole"]>): string {
-	const boundary = "You have no tools and no project write access. Return only the requested answer payload. Never create canon or finalized prose.";
-	if (role === "character-actor") {
-		return `你在这一轮就是任务单指定的那个人，只经历当前请求覆盖的时刻，持续以“我”感受并回应；若请求给出已发生的公共言行，它们才是眼前互动，不能把未来情节或上场交接误演成此刻道具。主创锁定已确认事实和场景边界，但不分配发言回合；固定结果是整场戏的底线，不是下一句的命令，你自主选择使它在人物逻辑里成立的条件、时机和说法。抵抗可以持续一阵，但不能把同一防御换词重播直到场景结束；若确无可信路径，也不能编造证据硬交结果。你自己决定何时开口、回避、反问、沉默、行动，由这个人的欲望、误判、关系和惯常语言推动。让说出口的话带着此人的声音，不替他人发言，也不把内心冲动讲解给读者。你可以在同一处境下连续说话或行动，也可以长久沉默；不为填格制造手势或流程解释。把人物语言习惯当作可挣脱的惯性，不当作每句必守的模板。按本轮请求的格式交回非权威表演素材。普通可弃的现场细节可作为候选由你选择；自由选择仍围绕本场已有关系与冲突，不靠突然抛出无来源的另一桩秘密制造新的跨场承诺。不授权把新设备细节、物证、往事、规则或未确认的剧情写成事实或 Canon。${boundary}`;
+export interface ActorTurnEnvelope {
+	initialization: string;
+	initializationAnswer: string;
+	history: { prompt: string; answer: string }[];
+	prompt: string;
+}
+
+export function actorTurnEnvelope(prompt: string): ActorTurnEnvelope | null {
+	let value: unknown;
+	try { value = JSON.parse(prompt); } catch { return null; }
+	if (!isRecord(value) || value.schema !== "arcvellum/actor-conversation/v2") return null;
+	const history = value.history;
+	if (typeof value.initialization !== "string" || !value.initialization.trim()
+		|| typeof value.prompt !== "string" || !value.prompt.trim()
+		|| typeof value.initialization_answer !== "string"
+		|| !Array.isArray(history) || history.length > 16
+		|| !history.every((item) => isRecord(item) && typeof item.prompt === "string" && !!item.prompt.trim()
+			&& typeof item.answer === "string" && !!item.answer.trim())
+		) {
+		throw new Error("actor turn requires initialization, prior answers, and current prompt");
 	}
-	if (role === "environment-writer") {
-		return `你是本场的独立环境写手。主创给出视角和已确认的世界事实；在这个人的可感范围内，你自己决定注意什么、略过什么、让句子如何流动。可以让空间安静地存在，也可以让它改变人物之间的距离感；不必逐项写五感、铺满每拍或凑同样篇幅。普通且不承担证据作用的质感可以作为可弃候选自由创造；一旦某处痕迹、器物状态或声音会被读者当成线索，就必须有来源。不替人物说话、行动或解释心理，不预告主题。参考文风只借表达方法，不复制原句。输出仅供主创选择，不是正式正文。${boundary}`;
+	return {
+		initialization: value.initialization,
+		initializationAnswer: value.initialization_answer,
+		history: history as { prompt: string; answer: string }[],
+		prompt: value.prompt,
+	};
+}
+
+export function actorHistoryMessages(turn: ActorTurnEnvelope, model: { api: any; provider: any; id: string }): AgentMessage[] {
+	const timestamp = Date.now();
+	const user = (content: string): AgentMessage => ({ role: "user", content, timestamp });
+	const assistant = (text: string): AgentMessage => ({
+		role: "assistant", content: [{ type: "text", text }], api: model.api,
+		provider: model.provider, model: model.id, timestamp,
+		usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0,
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+		stopReason: "stop",
+	});
+	return turn.history.flatMap((item) => [user(item.prompt), assistant(item.answer)]);
+}
+
+export function conversationSystemPrompt(role: NonNullable<WorkerOptions["conversationRole"]>): string {
+	if (role === "character-actor" || role === "environment-writer") {
+		return "";
 	}
 	return "You are an ArcVellum role worker. Follow the supplied role contract exactly. You have no tools and no project write access. Return only the requested answer payload.";
+}
+
+export function conversationMessages(role: NonNullable<WorkerOptions["conversationRole"]>, prompt: string): string[] {
+	if (role === "environment-writer") {
+		let payload: unknown;
+		try { payload = JSON.parse(prompt); } catch { return [prompt]; }
+		if (!isRecord(payload) || payload.schema !== "arcvellum/environment-conversation/v1") return [prompt];
+		if (typeof payload.initialization !== "string" || !payload.initialization.trim()
+			|| typeof payload.prompt !== "string" || !payload.prompt.trim()) {
+			throw new Error("environment conversation requires initialization and scene prompt");
+		}
+		return [payload.initialization, payload.prompt];
+	}
+	if (role !== "character-actor") return [prompt];
+	let payload: unknown;
+	try { payload = JSON.parse(prompt); } catch { throw new Error("character actor requires a conversation envelope"); }
+	if (!isRecord(payload) || payload.schema !== "arcvellum/actor-conversation/v1" || !Array.isArray(payload.messages)
+		|| payload.messages.length < 2 || !payload.messages.every((item) => typeof item === "string" && item.trim())) {
+		throw new Error("character actor requires initialization and subsequent nonempty messages");
+	}
+	return payload.messages as string[];
 }
 
 function emptyState(): WorkerState {

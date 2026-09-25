@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from literary_engineering_studio_engine.literary.scene.roleplay.lab import CharacterCard, _load_characters
+from literary_engineering_studio_engine.literary.scene.roleplay.actor_personas import actor_personas_for_participants
 from ..facts import SceneFacts
 
 
@@ -101,6 +102,7 @@ def project_brief_expression_context(project_root: Path, brief: dict[str, Any]) 
         "expression_plan": build_expression_plan(facts, {"narrative_rhythm": {"paragraph_shape": paragraph_shape}}),
         "dialogue_intents": build_dialogue_intents(facts, cards),
         "perceptual_options": build_perceptual_options(facts),
+        "actor_personas": actor_personas_for_participants(project_root, participants),
     }
 
 
@@ -214,7 +216,7 @@ def _character_subtext(facts: SceneFacts, card: CharacterCard) -> dict[str, Any]
 
 
 def _dialogue_intent(facts: SceneFacts, card: CharacterCard) -> dict[str, Any]:
-    stable_voice = card.speech_style_details or {"rhythm": card.speech_style}
+    stable_voice = card.speech_style_details or ({"rhythm": card.speech_style} if card.speech_style else {})
     interlocutors = [name for name in facts.participants if not _same_character(name, card)]
     return {
         "character_id": card.character_id,
@@ -233,7 +235,7 @@ def _dialogue_intent(facts: SceneFacts, card: CharacterCard) -> dict[str, Any]:
         "avoids": _first_nonempty(card.fear + card.secret)
         or facts.internal_conflict
         or "避免暴露过多信息。",
-        "speech_strategy": card.speech_style or "让语气服务关系压力，少解释，多留白。",
+        "speech_strategy": card.speech_style,
         "stable_voice": stable_voice,
         "voice_state": {
             "interlocutors": interlocutors,

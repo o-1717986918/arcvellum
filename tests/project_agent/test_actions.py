@@ -3,6 +3,7 @@ import tempfile
 import unittest
 
 from literary_engineering_studio.project_agent.actions import dependencies_from_actions
+from literary_engineering_studio_engine.public.literary import save_actor_persona
 
 
 class _Autopilot:
@@ -74,6 +75,31 @@ class _CandidatePromotions:
 
 
 class ProjectAgentActionTests(unittest.TestCase):
+    def test_actor_persona_update_uses_engine_service_and_returns_receipt(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            characters = root / "characters"
+            characters.mkdir()
+            (characters / "lin.yaml").write_text(
+                "character_id: character/lin\nname: 林\n", encoding="utf-8"
+            )
+            invalidations = []
+            actions = dependencies_from_actions(
+                record_direction=lambda *_args, **_kwargs: {}, autopilot=_Autopilot(),
+                save_actor_persona=save_actor_persona,
+                invalidate_project=lambda path, reason: invalidations.append((path, reason)),
+            )
+            sections = {
+                "PERSONA_LOAD": ["SELF_CLAIM_LIN"], "PERSONALITY_CORE": ["TRAIT_RESTLESS"],
+                "PERSONALITY_PUBLIC": ["TRAIT_WITTY"], "LANGUAGE_STYLE": ["POLISHED"],
+                "LITERATURE_STYLE": ["ABSURDITY_STYLE"],
+            }
+            result = actions.update_actor_persona(root, {"character_id": "character/lin", "sections": sections})
+            self.assertEqual(result["profile"]["sections"], sections)
+            self.assertEqual(result["effect"], "future-scene-transactions")
+            self.assertTrue(result["receipt"]["token"])
+            self.assertEqual(invalidations, [(root, "project-agent-actor-persona")])
+
     def test_profile_only_rhythm_update_preserves_current_scene_entries(self):
         current = [
             {"scene_id": "scene_0001", "rhythm_role": "setup", "source": "rhythm-plan"},
@@ -242,6 +268,7 @@ class ProjectAgentActionTests(unittest.TestCase):
         self.assertEqual(autopilot.current_policy["mode"], "full_auto")
         self.assertEqual(autopilot.current_policy["literary_kernel"], "lean-v2")
         self.assertEqual(autopilot.current_policy["release_policy"], "delegated")
+        self.assertTrue(autopilot.current_policy["editorial_scene_checkpoint"])
         self.assertEqual(autopilot.current_policy["limits"]["stop_after_formal_units"], 5)
         self.assertEqual(len(autopilot.managed_goals), 1)
         self.assertEqual(started["run"]["status"], "running")
@@ -280,6 +307,24 @@ class ProjectAgentActionTests(unittest.TestCase):
         self.assertFalse(result["ok"])
         self.assertEqual(result["status"], "decision_required")
         self.assertEqual(result["recommended_tool"], "project_decision_resolve")
+
+    def test_checkpoint_recover_preserves_newer_user_pause(self):
+        autopilot = _Autopilot()
+        autopilot.run = {
+            "run_id": "run-checkpoint", "status": "paused", "stop_reason": "user-request",
+            "mode": "full_auto",
+            "policy": {"mode": "full_auto", "literary_kernel": "lean-v2", "release_policy": "delegated"},
+        }
+        actions = dependencies_from_actions(
+            record_direction=lambda *_args, **_kwargs: {}, autopilot=autopilot,
+        )
+
+        result = actions.manage_goal(Path("C:/work"), {
+            "operation": "recover", "expected_stop_reason": "scene-editorial-checkpoint",
+        })
+
+        self.assertEqual(result["status"], "checkpoint_changed")
+        self.assertIsNone(autopilot.authorized)
 
     def test_old_non_goal_run_is_not_resumed_without_a_new_objective(self):
         autopilot = _Autopilot()

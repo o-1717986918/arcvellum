@@ -1,15 +1,10 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
-import tempfile
 import unittest
-from unittest.mock import patch
 
-from literary_engineering_studio.runtimes.pi_scene_transaction import PiSceneTransactionRuntime
-from literary_engineering_studio.runtimes.scene_performance_ownership import audit_visible_actions, unlicensed_scene_dialogue
+from literary_engineering_studio.runtimes.scene_performance_ownership import audit_visible_actions, compact_performance_materials, has_actor_entries, repair_actor_ownership, unlicensed_scene_dialogue
 from literary_engineering_studio_engine.public.literary import CreativeResult, SceneDelta
-from tests.test_lean_kernel_v2_pi_runtime import _brief
 
 
 def _materials() -> str:
@@ -20,6 +15,23 @@ def _materials() -> str:
 
 
 class ScenePerformanceOwnershipTests(unittest.TestCase):
+    def test_environment_only_supplement_does_not_trigger_actor_audit(self) -> None:
+        material = "环境候选\n" + json.dumps({"actor_entries": [], "environment_candidates": {
+            "passages": [{"beat_id": "b1", "description": "雨停了。"}],
+        }}, ensure_ascii=False)
+        candidate = CreativeResult("雨停了。", "视角停留", SceneDelta())
+        self.assertFalse(has_actor_entries(material))
+        self.assertIn("雨停了", compact_performance_materials(material))
+        self.assertIs(repair_actor_ownership(candidate, material,
+                                             lambda _prose: self.fail("unexpected actor audit"),
+                                             lambda *_args: self.fail("unexpected repair")), candidate)
+
+    def test_compact_review_material_keeps_visible_provenance_without_private_repetition(self) -> None:
+        compact = compact_performance_materials(_materials())
+        self.assertIn("信……我拿的", compact)
+        self.assertIn("我没碰信", compact)
+        self.assertNotIn("别让人知道我的念头", compact)
+
     def test_quote_check_allows_actor_fragments_but_not_new_dialogue(self) -> None:
         self.assertEqual(unlicensed_scene_dialogue("他说：“信……我拿的。”她问：“信呢？”", _materials()), [])
         self.assertEqual(unlicensed_scene_dialogue("他说：“饭在锅里。”", _materials()), ["饭在锅里。"])
@@ -37,11 +49,43 @@ class ScenePerformanceOwnershipTests(unittest.TestCase):
         result = audit_visible_actions(prose, _materials(), lambda prompt: captured.append(prompt) or json.dumps(finding, ensure_ascii=False))
         self.assertEqual(result, finding["violations"])
         self.assertNotIn("别让人知道", captured[0])
-        self.assertIn("朝某处看一眼", captured[0])
+        self.assertIn("普通走位、拿放无情节后果的道具、眼神、手势、台词间停顿", captured[0])
+        self.assertIn("决定性交付、藏取证物、揭露线索", captured[0])
         self.assertEqual(audit_visible_actions(prose, _materials(), lambda _: '{"status":"clean","violations":[]}'), [])
         finding["violations"][0]["closest_entry_id"] = "a2"
         with self.assertRaisesRegex(ValueError, "same-actor evidence"):
             audit_visible_actions(prose, _materials(), lambda _: json.dumps(finding, ensure_ascii=False))
+
+    def test_action_audit_preserves_grounded_findings_when_reviewer_adds_fiction(self) -> None:
+        prose = "他拿起信。"
+        real = {"prose_quote": prose, "speaker": "character/protagonist", "closest_entry_id": "a1",
+                "why_not_covered": "来源明确没碰信。"}
+        imagined = {**real, "prose_quote": "他捡起两枚硬币。"}
+        response = {"status": "violations_found", "violations": [real, imagined]}
+        self.assertEqual(audit_visible_actions(prose, _materials(), lambda _: json.dumps(response, ensure_ascii=False)), [real])
+
+    def test_consequential_dialogue_audit_keeps_rewrites_but_flags_new_turns(self) -> None:
+        prose = "他说：\u201c饭在锅里。\u201d"
+        finding = {"kind": "dialogue", "prose_quote": "饭在锅里。", "speaker": "character/protagonist",
+                   "closest_entry_id": "a1", "why_not_covered": "这句招呼没有同一人物的 spoken 来源。"}
+        captured = []
+        result = audit_visible_actions(prose, _materials(),
+                                       lambda prompt: captured.append(prompt) or json.dumps(
+                                           {"status": "violations_found", "violations": [finding]}, ensure_ascii=False))
+        self.assertEqual(result, [finding])
+        self.assertIn("同一人物的 spoken", captured[0])
+        self.assertIn("主创可以改写已有台词", captured[0])
+
+        candidate = CreativeResult(prose, "初稿", SceneDelta())
+        repaired = CreativeResult("他说：\u201c信是我拿的。\u201d", "修订", SceneDelta())
+        repairs = []
+        self.assertIs(repair_actor_ownership(
+            candidate, _materials(), lambda text: [finding] if text == prose else [],
+            lambda _candidate, kind, evidence: repairs.append((kind, evidence)) or repaired,
+            allow_dialogue_rewrite=True,
+        ), repaired)
+        self.assertEqual(repairs[0][0], "dialogue")
+        self.assertIn("饭在锅里。", repairs[0][1][0])
 
     def test_batch_entries_inherit_speaker_and_receive_stable_audit_ids(self) -> None:
         materials = "一级角色素材\n" + json.dumps({"actor_candidates": [{
@@ -54,45 +98,14 @@ class ScenePerformanceOwnershipTests(unittest.TestCase):
         self.assertEqual(audit_visible_actions("柳烟拿起信。", materials,
                                               lambda _: json.dumps(finding, ensure_ascii=False)), finding["violations"])
 
-    def test_repairs_use_original_material_and_reject_persistent_violation(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            runtime = PiSceneTransactionRuntime({}, project_root=root, data_root=root / ".studio")
-            candidate = CreativeResult("她说：“饭在锅里。”", "初稿", SceneDelta())
-            good = json.dumps({"prose": "他说：“信……我拿的。”", "decision_summary": "修订", "scene_delta": {}}, ensure_ascii=False)
-            bad = json.dumps({"prose": "她又说：“去吃饭。”", "decision_summary": "修订", "scene_delta": {}}, ensure_ascii=False)
-            def good_run(prompt: str, *, role: str, transaction_id: str) -> str:
-                return '{"status":"clean","violations":[]}' if role == "reviewer" else good
-            with patch.object(runtime, "_run", side_effect=good_run) as run:
-                result = runtime._repair_actor_ownership("tx", _brief(), candidate, _materials(), "", "")
-                self.assertEqual(unlicensed_scene_dialogue(result.prose, _materials()), [])
-                self.assertIn("饭在锅里", run.call_args_list[0].args[0])
-                self.assertIn("一级角色素材", run.call_args_list[0].args[0])
-            with patch.object(runtime, "_run", return_value=bad) as run, self.assertRaisesRegex(RuntimeError, "after four repairs"):
-                runtime._repair_actor_ownership("tx", _brief(), candidate, _materials(), "", "")
-            self.assertEqual(run.call_count, 4)
-
-    def test_runtime_repairs_unauthorized_action_without_additional_dialogue(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            runtime = PiSceneTransactionRuntime({}, project_root=root, data_root=root / ".studio")
-            candidate = CreativeResult("他拿起信。", "初稿", SceneDelta())
-            repaired = json.dumps({"prose": "他望着信，没有碰。", "decision_summary": "修订", "scene_delta": {}}, ensure_ascii=False)
-            finding = json.dumps({"status": "violations_found", "violations": [{
-                "prose_quote": "他拿起信。", "speaker": "character/protagonist", "closest_entry_id": "a1",
-                "why_not_covered": "来源没碰信，正文拿起了。",
-            }]}, ensure_ascii=False)
-            calls = []
-            def run(prompt: str, *, role: str, transaction_id: str) -> str:
-                calls.append((role, prompt))
-                if role == "worker":
-                    return repaired
-                return finding if "他拿起信。" in prompt else '{"status":"clean","violations":[]}'
-            with patch.object(runtime, "_run", side_effect=run):
-                result = runtime._repair_actor_ownership("tx", _brief(), candidate, _materials(), "", "")
-            self.assertEqual(result.prose, "他望着信，没有碰。")
-            self.assertEqual([role for role, _ in calls], ["reviewer", "worker", "reviewer"])
-            self.assertIn("来源没碰信", calls[1][1])
+    def test_strict_ownership_helper_still_rejects_unsourced_dialogue(self) -> None:
+        candidate = CreativeResult("她说：“饭在锅里。”", "初稿", SceneDelta())
+        repaired = CreativeResult("他说：“信……我拿的。”", "修订", SceneDelta())
+        self.assertIs(repair_actor_ownership(candidate, _materials(), lambda _: [],
+                                             lambda _candidate, _kind, _evidence: repaired), repaired)
+        with self.assertRaisesRegex(RuntimeError, "after four repairs"):
+            repair_actor_ownership(candidate, _materials(), lambda _: [],
+                                   lambda current, _kind, _evidence: current)
 
 
 if __name__ == "__main__":

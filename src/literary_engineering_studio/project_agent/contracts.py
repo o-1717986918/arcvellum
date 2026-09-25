@@ -208,6 +208,10 @@ class ProjectAgentDependencies:
     workspace_catalog: ProjectReadModel | None = None
     project_diagnose: ProjectReadModel | None = None
     resolve_project: ProjectScopeResolver | None = None
+    actor_personas: ProjectReadModel | None = None
+    archive_read: ProjectReadModel | None = None
+    owner_style_read: ProjectReadModel | None = None
+    style_versions: ProjectReadModel | None = None
 
 
 @dataclass(frozen=True)
@@ -225,3 +229,6 @@ class ProjectAgentActionDependencies:
     manage_goal: ProjectAction | None = None
     extend_chapter: ProjectAction | None = None
     replan_future: ProjectAction | None = None
+    update_actor_persona: ProjectAction | None = None
+    archive_change: ProjectAction | None = None
+    owner_style_write: ProjectAction | None = None

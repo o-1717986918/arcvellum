@@ -66,4 +66,22 @@ describe("Creative Live presentation", () => {
     expect(result.source).toContain("新章 — 新转向");
     expect(result.source).not.toContain("旧前提");
   });
+
+  it("names and renders actor, environment and director work as readable creative behavior", () => {
+    const actor = { ...session, transcript: JSON.stringify({
+      scene_id: "scene_0001", speaker: "闻藻",
+      entries: [{ spoken: "我不急着走。", first_person_action: "我把箱子留在楼梯口。", private_impulse: "不公开的内心材料" }],
+    }) };
+    expect(sessionDisplayName(actor)).toBe("角色演出 · 闻藻");
+    expect(transcriptPresentation(actor.transcript).source).toContain("我不急着走。");
+    expect(transcriptPresentation(actor.transcript).source).not.toContain("不公开的内心材料");
+
+    const environment = { ...session, transcript: JSON.stringify({ passages: [{ beat_id: "b1", description: "雨落在瓦脊上。" }] }) };
+    expect(sessionDisplayName(environment)).toBe("环境描写");
+    expect(transcriptPresentation(environment.transcript).source).toContain("雨落在瓦脊上。");
+
+    const director = { ...session, transcript: JSON.stringify({ next_speaker: "闻棠", scene_change: "门开了。", cue: "她听见姐姐问起花盆。" }) };
+    expect(sessionDisplayName(director)).toBe("导演调度");
+    expect(transcriptPresentation(director.transcript).source).toContain("她听见姐姐问起花盆。");
+  });
 });

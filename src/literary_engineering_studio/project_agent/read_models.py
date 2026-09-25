@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -21,6 +22,11 @@ def dependencies_from_read_models(
     style_mounts: Any | None = None,
     archive_candidates: Any | None = None,
     project_catalog: Any | None = None,
+    actor_personas: Any | None = None,
+    archive_read: Any | None = None,
+    owner_style_read: Any | None = None,
+    style_versions: Any | None = None,
+    style_version_detail: Any | None = None,
 ) -> ProjectAgentDependencies:
     def catalog(_root: Path, arguments: Mapping[str, Any]) -> Mapping[str, Any]:
         if project_catalog is None:
@@ -65,11 +71,14 @@ def dependencies_from_read_models(
         dashboard = read_models.dashboard(root)
         library = read_models.library(root)
         reader = read_models.reader(root)
+        focus = str(arguments.get("focus") or "")
         return _fit_payload({
             "work_id": work_id_for_root(root),
-            "focus": str(arguments.get("focus") or ""),
+            "focus": focus,
             "summary": dashboard.get("summary", {}),
             "story_brief": build_story_brief(library, reader),
+            "macro_plan": _macro_plan(root) if focus == "scene-checkpoint" else {},
+            "latest_formal_scene": _latest_formal_scene(root) if focus == "scene-checkpoint" else {},
             "next_actions": _items(dashboard.get("next_actions"), 12),
             "route_audits": _items(dashboard.get("route_audits"), 12),
             "progress": read_models.progress(root),
@@ -145,6 +154,29 @@ def dependencies_from_read_models(
             "agents": agent_status,
         })
 
+    def read_actor_personas(root: Path, arguments: Mapping[str, Any]) -> Mapping[str, Any]:
+        if actor_personas is None:
+            raise RuntimeError("Project Agent actor persona service is unavailable")
+        payload = actor_personas(root)
+        character_id = str(arguments.get("character_id") or "").strip()
+        if not character_id:
+            return _fit_payload(payload)
+        matches = [item for item in payload["characters"] if item["character_id"] == character_id]
+        if not matches:
+            raise ValueError("actor persona character_id is not in this work")
+        return {"schema": payload["schema"], "default_language_style": payload["default_language_style"], "character": matches[0]}
+
+    def read_style_versions(root: Path, arguments: Mapping[str, Any]) -> Mapping[str, Any]:
+        if style_versions is None:
+            raise RuntimeError("Project Agent style version catalog is unavailable")
+        style_id = str(arguments.get("style_id") or "").strip()
+        version_id = str(arguments.get("version_id") or "").strip()
+        if style_id or version_id:
+            if not style_id or not version_id or style_version_detail is None:
+                raise ValueError("style detail requires both style_id and version_id")
+            return _fit_payload(style_version_detail(root, style_id=style_id, version_id=version_id))
+        return _style_version_page(style_versions(root), arguments)
+
     return ProjectAgentDependencies(
         overview,
         search,
@@ -153,6 +185,10 @@ def dependencies_from_read_models(
         catalog if project_catalog is not None else None,
         diagnose,
         resolve if project_catalog is not None else None,
+        read_actor_personas if actor_personas is not None else None,
+        archive_read,
+        (lambda root, _arguments: owner_style_read(root)) if owner_style_read is not None else None,
+        read_style_versions if style_versions is not None else None,
     )
 
 
@@ -201,6 +237,62 @@ def _search_value(
 
 def _mapping(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, Mapping) else {}
+
+
+def _macro_plan(root: Path) -> dict[str, Any]:
+    path = root / "plot" / "lean_project_plan.json"
+    if not path.is_file():
+        return {}
+    try:
+        plan = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(plan, dict):
+        return {}
+    chapters = plan.get("chapters") if isinstance(plan.get("chapters"), list) else []
+    fields = ("chapter_id", "title", "dramatic_turn", "obligation")
+    return {
+        "premise": str(plan.get("premise") or "")[:1200],
+        "central_question": str(plan.get("central_question") or "")[:600],
+        "narrative_design": _mapping(plan.get("narrative_design")),
+        "volume_obligations": _items(plan.get("volume_obligations"), 8),
+        "chapters": [{key: str(item.get(key) or "")[:600] for key in fields}
+                     for item in chapters[:20] if isinstance(item, dict)],
+    }
+
+
+def _latest_formal_scene(root: Path) -> dict[str, Any]:
+    receipts = root / "workflow" / "scene_commits"
+    candidates = sorted(receipts.glob("*.json"), key=lambda path: path.stat().st_mtime, reverse=True)
+    for receipt in candidates[:3]:
+        scene_id = receipt.stem
+        prose = root / "drafts" / "scenes" / f"{scene_id}.md"
+        if not prose.is_file():
+            continue
+        try:
+            expected = str(json.loads(receipt.read_text(encoding="utf-8")).get("prose_sha256") or "")
+            content = prose.read_text(encoding="utf-8").rstrip()
+        except (OSError, ValueError):
+            continue
+        if hashlib.sha256(content.encode("utf-8")).hexdigest() != expected:
+            continue
+        excerpt = content if len(content) <= 12000 else content[:6000] + "\n\n[中段节略]\n\n" + content[-6000:]
+        return {"scene_id": scene_id, "prose": excerpt,
+                "truncated": len(content) > 12000, "characters": len(content)}
+    return {}
+
+
+def _style_version_page(payload: Mapping[str, Any], arguments: Mapping[str, Any]) -> dict[str, Any]:
+    rows = payload.get("versions") if isinstance(payload.get("versions"), list) else []
+    offset = max(0, int(arguments.get("offset") or 0))
+    fields = ("style_id", "version_id", "content_hash", "state", "author_id", "profile_id", "mounted")
+    return {
+        "schema": payload.get("schema"), "revision": payload.get("revision"),
+        "count": len(rows), "offset": offset, "has_more": offset + 40 < len(rows),
+        "versions": [{key: row[key] for key in fields if key in row}
+                     for row in rows[offset:offset + 40] if isinstance(row, dict)],
+        "active_mount": payload.get("active_mount") or {}, "issues": payload.get("issues") or [],
+    }
 
 
 def _items(value: Any, limit: int) -> list[Any]:

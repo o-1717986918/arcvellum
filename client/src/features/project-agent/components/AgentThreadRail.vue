@@ -8,6 +8,7 @@ import {
   FileCheck2,
   Info,
   MessageSquarePlus,
+  MessageCircleMore,
   Palette,
   Radio,
   ScanSearch,
@@ -82,6 +83,7 @@ function relativeDate(value: string): string {
       <span>查看作品</span>
       <button :disabled="!hasProject" :class="{ active: activeWorkspace === 'reader' }" @click="emit('workspace', 'reader')"><BookOpenText :size="14" />正文长卷</button>
       <button :disabled="!hasProject" :class="{ active: activeWorkspace === 'live' }" @click="emit('workspace', 'live')"><Radio :size="14" />创作现场</button>
+      <button :disabled="!hasProject" :class="{ active: activeWorkspace === 'rehearsal' }" @click="emit('workspace', 'rehearsal')"><MessageCircleMore :size="14" />推演观察</button>
       <button :disabled="!hasProject" :class="{ active: activeWorkspace === 'archive' }" @click="emit('workspace', 'archive')"><Archive :size="14" />作品档案</button>
       <button :disabled="!hasProject" :class="{ active: activeWorkspace === 'style' }" @click="emit('workspace', 'style')"><Palette :size="14" /><span>文风成果<small class="pa-feature-note">开发中，不完善</small></span></button>
       <button :disabled="!hasProject" :class="{ active: activeWorkspace === 'quality' }" @click="emit('workspace', 'quality')"><Boxes :size="14" />质量与节奏</button>

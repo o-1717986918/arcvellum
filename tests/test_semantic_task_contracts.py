@@ -139,7 +139,7 @@ class SemanticTaskContractTests(unittest.TestCase):
             self.assertEqual(full.character_count, 2)
             light_text = light.output_path.read_text(encoding="utf-8")
             self.assertIn("RP 深度：`light`", light_text)
-            self.assertIn("不得把 light 理解为跳过 RP", light_text)
+            self.assertIn("仍必须形成非占位证据", light_text)
             self.assertIn("roleplay_result.json", light.agent_tasks_path.read_text(encoding="utf-8"))
 
     def test_composition_semantic_evidence_binds_to_exact_source_digest(self):

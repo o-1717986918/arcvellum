@@ -11,6 +11,7 @@ class AntiAiStyleTests(unittest.TestCase):
         self.assertIn("反讽、借代、通感、自由间接引语", ANTI_AI_STYLE_PROMPT)
         self.assertIn("证据之后停笔", ANTI_AI_STYLE_PROMPT)
         self.assertIn("翻译潜台词、概括人物感受、宣布主题", ANTI_AI_STYLE_PROMPT)
+        self.assertNotIn("同一件事说一遍即可", ANTI_AI_STYLE_PROMPT)
         self.assertNotIn("日记里会不会这样写", ANTI_AI_STYLE_PROMPT)
 
     def test_semantic_quantities_are_not_misclassified_by_static_lint(self):

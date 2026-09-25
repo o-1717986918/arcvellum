@@ -2,7 +2,7 @@
 schema: literary-engineering-workbench/prompt-asset/v1
 prompt_asset_id: route.style-engineering.eval.execute.v1
 match: route.style-engineering.eval.execute.v1
-version: v1
+version: v2
 route: style-engineering
 task_type: platform-agent-evaluation
 title: Formal Style Evaluation Candidate
@@ -15,7 +15,7 @@ context_groups:
   - style prompt effectiveness
   - originality boundary
 hard_constraints:
-  - Generate from the neutral input under style_prompt.md; do not transform or copy the reference text.
+  - Generate from the neutral input under style_prompt.md.
   - Write only the declared candidate manifest and completion outputs.
   - The manifest must record mode style_prompt reference input candidate source_paths and generation boundary.
   - Do not assign a score or accepted verdict; deterministic style-eval owns the measurement.

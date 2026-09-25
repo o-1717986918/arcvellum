@@ -15,8 +15,8 @@ type ModelRole = "worker" | "advisor" | "steward" | "character-actor" | "environ
 const selectedModels = reactive<Record<ModelRole, string>>({ worker: "", advisor: "", steward: "", "character-actor": "", "environment-writer": "" });
 const roleSaving = reactive<Record<ModelRole, boolean>>({ worker: false, advisor: false, steward: false, "character-actor": false, "environment-writer": false });
 const roleSaved = reactive<Record<ModelRole, boolean>>({ worker: false, advisor: false, steward: false, "character-actor": false, "environment-writer": false });
-const performance = reactive<ScenePerformancePreferences>({ enabled: false, max_actor_calls: 4 });
-const performanceConfirmed = reactive<ScenePerformancePreferences>({ enabled: false, max_actor_calls: 4 });
+const performance = reactive<ScenePerformancePreferences>({ enabled: false, max_actor_calls: 12 });
+const performanceConfirmed = reactive<ScenePerformancePreferences>({ enabled: false, max_actor_calls: 12 });
 const performanceSaving = ref(false);
 const performanceLoaded = ref(false);
 const thinking = reactive<Record<ThinkingRole, ThinkingLevel>>({ creative: "medium", project: "xhigh" });
@@ -387,7 +387,7 @@ function pathValue(key: string): string {
           <select v-model="performance.enabled" aria-label="场景表演 Agent" :disabled="!performanceLoaded || performanceSaving" @change="savePerformance"><option :value="true">开启</option><option :value="false">关闭</option></select>
         </label>
         <label><span><strong>每场角色表演上限</strong><small>环境写手另有一次调用；上限越高，耗时与费用越多。</small></span>
-          <select v-model.number="performance.max_actor_calls" aria-label="每场角色表演上限" :disabled="!performanceLoaded || performanceSaving || !performance.enabled" @change="savePerformance"><option v-for="count in [0, 1, 2, 3, 4]" :key="count" :value="count">{{ count }}</option></select>
+          <select v-model.number="performance.max_actor_calls" aria-label="每场角色表演上限" :disabled="!performanceLoaded || performanceSaving || !performance.enabled" @change="savePerformance"><option v-for="count in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]" :key="count" :value="count">{{ count }}</option></select>
         </label>
       </div>
     </section>

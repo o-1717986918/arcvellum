@@ -78,6 +78,18 @@ describe("Creative Live projection", () => {
     expect(applyCreativeEvent(promoted, promoted.events[0])).toBe(promoted);
   });
 
+  it("does not replay an older preview over a reconnect snapshot", () => {
+    const current = {
+      ...snapshot(), live_cursor: 8,
+      artifacts: [{
+        ...event().artifact!, identity: "promoted" as const,
+        content: "正式正文。", updated_at: event().at, source_event: "mutation.receipt",
+      }],
+    };
+    expect(applyCreativeEvent(current, event({ sequence: 7 }))).toBe(current);
+    expect(current.artifacts[0].identity).toBe("promoted");
+  });
+
   it("collects visible transcript, tools and usage independently", () => {
     let value = applyCreativeEvent(snapshot(), event({
       event_id: "message",

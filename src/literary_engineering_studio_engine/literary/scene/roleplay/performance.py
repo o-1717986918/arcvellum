@@ -6,13 +6,58 @@ import json
 import re
 from typing import Any
 
+from .actor_personas import DEFAULT_LANGUAGE_STYLE
+from .interaction import parse_interaction_direction
 from .relay_context import render_relay_context, validated_knowledge_quotes, validated_opening_situation, validated_public_log
 
 
-PERFORMANCE_SCHEMA = "arcvellum/scene-performance/v7"
+PERFORMANCE_SCHEMA = "arcvellum/scene-performance/v11"
+LITERATURE_STYLE_HEADER = "[LITERATURE_STYLE]"
+ACTOR_IMMERSION_REQUIREMENTS = """【角色沉浸要求】在你的思考过程（<think>标签内）中，请遵守以下规则：
+1. 请以角色第一人称进行内心独白，用括号包裹内心活动，例如"（心想：……）"或"(内心OS：……)"
+2. 用第一人称描写角色的内心感受，例如"我心想""我觉得""我暗自"等
+3. 思考内容应沉浸在角色中，通过内心独白分析剧情和规划回复"""
 MAX_BEATS = 4
 MAX_ACTOR_ENTRIES = 12
-MAX_UNKNOWN_SLOTS = 8
+ENVIRONMENT_SECTIONS = (
+    "【SCENE_LOAD】", "[COMPOSITION_MODE]", "[SCENE_CORE]",
+    "[SCENE_SURFACE]", "[LITERATURE_STYLE]", "[NOW_TO_DO]",
+)
+ENVIRONMENT_INITIALIZATION_EXAMPLE = """【SCENE_LOAD】
+SCENE_CLAIM_LANDSCAPE_DESCRIBER
+LANG_ZH_CN_ONLY
+
+[COMPOSITION_MODE]
+SCENE_RENDER
+PERSPECTIVE_COHERENT
+TIME_COHERENT
+OBSERVATION_AS_INTERPRETATION
+NO_PLOT_NO_DIALOGUE
+
+[SCENE_CORE]
+ATTR_ATMOSPHERE_WITH_EMOTIONAL_PRESSURE
+ATTR_EMOTION_THROUGH_PERCEPTION
+ATTR_EMOTIONAL_UNDERTOW_IN_SPACE
+ATTR_SELECTIVE_ATTENTION
+ATTR_SENSORY_TRANSFORMATION
+ATTR_SYMBOLIC_RESONANCE
+ATTR_RHYTHMIC_EXPANSION
+
+[SCENE_SURFACE]
+ATTR_LYRICAL_VARIATION
+ATTR_IMAGE_ASSOCIATION
+ATTR_SPACIOUS_CADENCE
+ATTR_PERSPECTIVE_ATTUNED
+ATTR_EMOTIONAL_TIDE_IN_CADENCE
+
+[LITERATURE_STYLE]
+LITERARY_TEXTURE
+MOVEMENT_SYMBOLISM
+CADENCE_LYRICAL_VARIATION
+
+[NOW_TO_DO]
+STAND_BY
+WAIT_FOR_DETAIL"""
 
 
 def render_performance_plan_prompt(
@@ -20,15 +65,38 @@ def render_performance_plan_prompt(
 ) -> str:
     """Ask the main creative model to direct actors without drafting prose."""
 
+    actor_prompts = {str(name): (
+        "【PERSONA_LOAD】\nSELF_CLAIM_ROMANIZED_NAME\nLANG_ZH_CN_ONLY\n\n"
+        "【PERSONALITY_CORE】\nTRAIT_OWN_ARCHETYPE\nTRAIT_INNER_CONTRADICTION\nEMOTION_RELATIONALLY_ALIVE\nEMOTION_OWN_CONTRADICTION\n\n"
+        "【PERSONALITY_PUBLIC】\nTRAIT_VISIBLE_PERSONALITY\n\n"
+        "[LANGUAGE_STYLE]\n" + "\n".join(DEFAULT_LANGUAGE_STYLE) + "\nVOICE_RELATIONAL_TEMPERAMENT\n\n"
+        "[LITERATURE_STYLE]\nAUTHOR_LIKE_SOMEBODY\nMOVEMENT_STYLE_SOMESTYLE\nCADENCE_OWN_LITERARY_RHYTHM"
+        "[MOOD]\nSOME_KIND_OF_MOOD"
+    ) for name in brief.get("participants") or ()}
+    actor_tasks = {str(name): "此人的兴趣、与他人的关系、眼前已知的事和仍可自行决定的事" for name in brief.get("participants") or ()}
+    opening_example = {
+        "finish": not bool(actor_prompts), "next_speaker": next(iter(actor_prompts), ""),
+        "beat_id": "b1" if actor_prompts else "", "scene_change": "开场进入的已确认变化" if actor_prompts else "",
+        "cue": "此人主要面对谁、凭什么开口、关系压力何在" if actor_prompts else "", "director_note": "留给主创正文的判断" if actor_prompts else "",
+    }
     return f"""# Scene Performance Direction
 
-你是本场唯一主创的导演阶段。只确定场景层级的局面和底线，不代演员安排台词、身体动作或回应顺序。beats 是至多 {MAX_BEATS} 个情境锚点：外部局面怎样变化、已确认的事实何时进入人物视野；不是人物轮流发言的格子。不要指定谁说话、说什么、怎样证明、谁先伸手或对手应如何回应。目标和结局已由 SceneBrief 锁定，角色可以自行选择在锚点之间开口、回避、反对、沉默或行动。不写正文，不新增事件。
+你是本场主创。从人物档案、关系和过往选择中辨认每人的鲜明性格与说话气质。选型时可参考几类标签：性格与心理（如傲娇、腹黑、毒舌、元气、敏感），外显气质与已确认的形象，稳定身份或种族，长期关系与互动方式，以及作品适用的亚文化人物原型。每人通常挑三到五个能彼此作用的核心人设标签，形成这个人物自己的组合；外貌、年龄、身份、关系须以已确认设定为依据。尤其想清楚此人怎样听人说话、怎样开玩笑、在谁面前会改变声调。叙事职能、本场任务与具体动作进入后续场景资料。
 
-人物自己的背景、关系、欲望与误判将由人物档案直接提供，环境的可感范围将由 SceneBrief 与来源直接提供。你不要二次改写成 actor_tasks 或 environment_task：那会把你的解释误作角色必须履行的心理任务。不得将文风参考的物件、天气或历史移入本场。
+用简短、抽象的英文大写标签写 actor_prompts：PERSONA_LOAD 写姓名与稳定身份；PERSONALITY_CORE 写鲜明的人格原型、内心反差和此人特有的情绪运动。用一两项有辨识度的 EMOTION_ 标签写出他如何渴望、羞恼、依恋、嫉妒或掩饰，例如 EMOTION_FIERCE_TENDERNESS、EMOTION_PRIDE_OVER_LONGING；每个人的组合应有自己的情绪温度。PERSONALITY_PUBLIC 写别人实际感受到的气质。[LANGUAGE_STYLE] 保留 ANTI_PLAIN、POLISHED、ANTI_SHORT_SENTENCES，再以一两项 VOICE_ 概括此人面对人的口头气质，例如 VOICE_SLY_AFFECTION、VOICE_VOLUBLE_TENDERNESS、VOICE_WRY_FLIRTATION。让气质在玩笑、受伤、求助与争执时各有变化。[LITERATURE_STYLE] 是主要风格指向，选择统摄修辞、句法运动与情绪声调的作家、文学流派及抽象文学节奏；让这一层比其余标签更鲜明。区块和字段数量可自由调整。示例占位标签换成该人物自己的标签。已保存的 actor_personas 是既有人设素材；角色沉浸要求由初始化渲染器统一附加。
 
-自由属于表达和微观选择，不属于世界事实。不得临场发明钟点、设备读数、未出现的道具、设备部件、旧物或往事；若来源只说“大致顺序”，任务单也只允许大致顺序。不能用“展示性格”“推进剧情”这类空任务。
+actor_tasks 给此人一个有生活感的起点：他认识谁、误会谁、想靠近或躲开谁，写稳定的关系与内在兴趣，供主创安排轮次；临场信息由 opening_direction 与后续 direction 承载。beats 承载外部情势的变化，轮间 direction 交给演员新的关系压力与行动余地。人格和口头气质标签应当换一个场景仍然成立；职业、器物、流程、计数习惯和本场职能放在经历或后续局面里。情绪变化时同一人的句子可改换长度与走向；具体台词、手势和临场反应由演员自己选择。每条标签只由大写英文字母和下划线组成：姓名转写成大写拼音（如 SELF_CLAIM_XU_YAO）。
 
-unknown_slots 只列本场资料尚未确认、但容易被误写成确定事实的少量空位，例如歌曲名、精确钟点、设备型号或关键道具的有无。它是事实留白，不是演员的说话方式、动作要求或情节任务；普通不承担证据作用的感官质感不必逐项禁止。没有这样的空位就返回空数组。
+不要把 PLAIN、SHORT、CLIPPED、COUNTED、ACCOUNTING、INVENTORY、MINIMAL 等平淡、惜字、清单或计数取向写成 VOICE_、MOVEMENT_、CADENCE_ 标签。
+
+environment_initialization 是独立环境 Agent 的首条消息。保留示例的六个区块名；标签只定性长期适用的观察、构图、感官转化、意象关联、情绪在空间中的渗透和语言节奏等抽象技法。[SCENE_CORE] 与 [SCENE_SURFACE] 用鲜明的 ATTR_EMOTION_ 或 ATTR_EMOTIONAL_ 标签确定这部作品特有的情绪空间感，例如 ATTR_EMOTION_AS_UNSETTLED_SPACE、ATTR_EMOTIONAL_TIDE_IN_CADENCE。每区按作品气质自由增删改，数量不限；[LITERATURE_STYLE] 可用作家、文学流派或作品的抽象文学倾向。标签用英文大写字母、数字与下划线。具体天气、光线、物件、地点、颜色、动作和某一场的意象放到后续场景资料里；初始化避免白描、直描、写实主义、克制简短等使环境段落变平的定性标签。
+
+人物情绪组合例如傲娇与依恋，宜从已确认关系和欲望中生长；情绪标签应鲜明，且与各人的欲望、羞耻和亲疏关系相配。
+
+## Environment Initialization Example
+{ENVIRONMENT_INITIALIZATION_EXAMPLE}
+
+beats 是至多 {MAX_BEATS} 个外部情境变化，从已知场地、人物和事件自然生长，使下一轮人物的关系或选择余地发生变化。opening_direction 同时决定第一轮由谁回应、使用哪个 beat 以及此人当下可感的局面；cue 写清主要对话对象、可感的起因和关系压力，让演员自己决定声音和动作。第一轮公开舞台为空，请把触发事件的前因排通：若误称来自另一人的玩笑或暗示，先让玩笑者亲自演出，使后来的角色真能听见并误解；若误称者自己挑起话头，给他可感、可信的误认依据和明确的对话对象。若 SceneBrief 已指定某人说出关键称呼或完成情节触发行为，把这个必须发生的情节事实交给该人物本人的 cue，留其余措辞、语气和反应由他创作；下一轮才让别人回应。beats 与 scene_change 承载环境、物件或已演言行的外部后果；若一人的关键言行构成另一人回应的前因，先让前者获得自己的轮次。即使大局需要多人相遇，也可以让一次玩笑、误听或好奇慢慢牵出下一人，人物各自保有不说往事的权利。若本场没有参与人物，opening_direction.finish 为 true。已确认的场景结果仍须成立；结果之间的互动路径可由演员发现。unknown_slots 记录容易误写为事实的资料空位，没有就返回空数组。你在这里设计人物声音与局面。
 
 ## SceneBrief
 {json.dumps(brief, ensure_ascii=False)}
@@ -39,8 +107,7 @@ unknown_slots 只列本场资料尚未确认、但容易被误写成确定事实
 ## Confirmed Sources
 {sources[:10_000] or '无额外来源。'}
 
-仅返回 JSON：{{"scene_id":"与 SceneBrief 相同","beats":[{{"beat_id":"b1","event":"外部局面的已确定变化或人物可感知的新处境；不写任何人的具体言行"}}],"unknown_slots":["尚未确认的具体事实空位；不写风格和动作要求"]}}。
-每个参与者都会独立拿到完整场景；你不分配发言、心理任务、环境焦点。不得改变 Canon、人物名单、时间数值、场景结局；不得预写标准台词或环境段落。"""
+仅返回 JSON：{{"scene_id":"与 SceneBrief 相同","beats":[{{"beat_id":"b1","event":"已确认的外部变化"}}],"opening_direction":{json.dumps(opening_example, ensure_ascii=False)},"actor_prompts":{json.dumps(actor_prompts, ensure_ascii=False)},"actor_tasks":{json.dumps(actor_tasks, ensure_ascii=False)},"environment_initialization":{json.dumps(ENVIRONMENT_INITIALIZATION_EXAMPLE, ensure_ascii=False)},"unknown_slots":[]}}。两组人物键已经列全；人物事实以档案和来源为准。"""
 
 
 def parse_performance_plan(payload: dict[str, Any], brief: dict[str, Any]) -> dict[str, Any]:
@@ -52,18 +119,50 @@ def parse_performance_plan(payload: dict[str, Any], brief: dict[str, Any]) -> di
     normalized: list[dict[str, str]] = []
     for index, item in enumerate(beats, 1):
         normalized.append(_parse_beat(item, index))
-    if "actor_tasks" in payload or "environment_task" in payload:
-        raise ValueError("performance director must not assign actor or environment tasks")
+    if "environment_task" in payload:
+        raise ValueError("performance director must not assign an environment task")
+    participants = [str(name) for name in brief.get("participants") or ()]
+    prompts = _parse_actor_plan_map(payload, "actor_prompts", participants)
+    tasks = _parse_actor_plan_map(payload, "actor_tasks", participants)
+    opening = parse_interaction_direction(payload.get("opening_direction"), brief, {"beats": normalized})
+    if participants and opening["finish"]:
+        raise ValueError("performance opening_direction must begin with a participant")
+    environment_initialization = parse_environment_initialization(payload.get("environment_initialization"))
     unknown_slots = _parse_unknown_slots(payload.get("unknown_slots"))
     return {
         "schema": PERFORMANCE_SCHEMA, "scene_id": brief["scene_id"], "beats": normalized,
-        "unknown_slots": unknown_slots,
+        "actor_prompts": prompts, "actor_tasks": tasks, "opening_direction": opening,
+        "environment_initialization": environment_initialization, "unknown_slots": unknown_slots,
     }
 
 
+def parse_environment_initialization(value: Any) -> str:
+    if not isinstance(value, str):
+        raise ValueError("environment_initialization must be a six-section tag message")
+    lines = [line.strip() for line in value.strip().splitlines() if line.strip()]
+    headers = [line for line in lines if line.startswith("[") or line.startswith("【")]
+    if not lines or lines[0] != ENVIRONMENT_SECTIONS[0] or headers != list(ENVIRONMENT_SECTIONS):
+        raise ValueError("environment_initialization requires the six scene sections in order")
+    if any(not re.fullmatch(r"[A-Z][A-Z0-9_]*", line) for line in lines if line not in ENVIRONMENT_SECTIONS):
+        raise ValueError("environment_initialization tags must use uppercase letters, digits, and underscores")
+    mounted = value.strip()
+    if not any(line.startswith(("ATTR_EMOTION_", "ATTR_EMOTIONAL_")) for line in lines):
+        mounted = mounted.replace("[SCENE_CORE]", "[SCENE_CORE]\nATTR_EMOTION_THROUGH_PERCEPTION", 1)
+    return mounted
+
+
+def _parse_actor_plan_map(payload: dict[str, Any], field: str, participants: list[str]) -> dict[str, str]:
+    values = payload.get(field)
+    if not isinstance(values, dict) or set(values) != set(participants):
+        raise ValueError(f"performance {field} must cover every participant")
+    if any(not isinstance(values[name], str) or not values[name].strip() or len(values[name]) > 2000 for name in participants):
+        raise ValueError(f"performance {field} must contain one bounded prompt per participant")
+    return {name: values[name].strip() for name in participants}
+
+
 def _parse_unknown_slots(value: Any) -> list[str]:
-    if not isinstance(value, list) or len(value) > MAX_UNKNOWN_SLOTS:
-        raise ValueError("performance unknown_slots must be a list of at most eight factual gaps")
+    if not isinstance(value, list):
+        raise ValueError("performance unknown_slots must be a list of factual gaps")
     slots = []
     for item in value:
         if not isinstance(item, str) or not 2 <= len(item.strip()) <= 120:
@@ -93,6 +192,44 @@ def render_actor_prompt(
     return render_actor_scene_prompt(brief, [beat], {**voice, "speaker": voice.get("speaker") or beat.get("speaker") or ""})
 
 
+def render_actor_initialization_prompt(voice: dict[str, Any]) -> str:
+    """Keep the director-authored English persona tags as the first message."""
+
+    name = str(voice.get("name") or voice.get("speaker") or "").strip()
+    persona = str(voice.get("roleplay_direction") or "").strip()
+    if not name or not persona:
+        raise ValueError("actor initialization requires name and persona direction")
+    style_header = "[LANGUAGE_STYLE]"
+    headers = ("【PERSONA_LOAD】", "【PERSONALITY_CORE】", "【PERSONALITY_PUBLIC】", style_header, LITERATURE_STYLE_HEADER)
+    if not persona.startswith(headers[0]) or any(header not in persona for header in headers[1:3]):
+        raise ValueError("actor initialization requires the three persona sections")
+    if any(not re.fullmatch(r"[A-Z_]+", line) for line in persona.splitlines() if line and line not in headers):
+        raise ValueError("actor initialization tags must use uppercase English letters and underscores")
+    mounted = _mount_default_language_style(persona, style_header)
+    mounted = _mount_default_emotion(mounted)
+    if LITERATURE_STYLE_HEADER not in mounted.splitlines():
+        mounted += f"\n\n{LITERATURE_STYLE_HEADER}"
+    return f"{mounted}\n\n{ACTOR_IMMERSION_REQUIREMENTS}"
+
+
+def _mount_default_emotion(persona: str) -> str:
+    if any(line.startswith("EMOTION_") for line in persona.splitlines()):
+        return persona
+    return persona.replace("【PERSONALITY_CORE】", "【PERSONALITY_CORE】\nEMOTION_RELATIONALLY_ALIVE", 1)
+
+
+def _mount_default_language_style(persona: str, style_header: str) -> str:
+    if style_header not in persona.splitlines():
+        block = f"{style_header}\n" + "\n".join(DEFAULT_LANGUAGE_STYLE)
+        if LITERATURE_STYLE_HEADER in persona.splitlines():
+            return persona.replace(LITERATURE_STYLE_HEADER, f"{block}\n\n{LITERATURE_STYLE_HEADER}", 1)
+        return f"{persona}\n\n{block}"
+    before, after = persona.split(style_header, 1)
+    style_tags = after.splitlines()
+    missing = [tag for tag in DEFAULT_LANGUAGE_STYLE if tag not in style_tags]
+    return before + style_header + ("\n" + "\n".join(missing) if missing else "") + after
+
+
 def render_actor_scene_prompt(
     brief: dict[str, Any], beats: list[dict[str, str]], voice: dict[str, Any],
     unknown_slots: list[str] | None = None, *,
@@ -118,47 +255,35 @@ def render_actor_scene_prompt(
         }],
     }, ensure_ascii=False)
     relay_context = render_relay_context(brief, public_log, pending_outcome) if public_log is not None else ""
-    opening = (
-        "我只从已经发生的公共互动往下活。即使知道场景的方向，也不为完成导演任务而抢先开口；我的下一步由此刻对方真正说过、做过的事触发。"
-        if public_log is not None else "我从第一个时刻一直活到最后一个时刻，不在每拍重置自己。"
-    )
-    epistemic_freedom = (
-        "我可以试探、说谎、误记或猜测；这些是我的主观言行，不会因此成为世界事实。"
-        "如果谈到尚无来源的细节，不能在自己的未出口念头里把它当成确凿记忆。"
-        if public_log is not None else ""
-    )
     entry_scope = "本轮接下来的" if public_log is not None else "我整场自然发生的"
-    return f"""# 我在场：{person['name']}
+    return f"""# 本场角色任务单
 
-{opening}下面给的是我已经身处的境况，不是要照念的台词；导演没有替我分配发言回合。在事实与结果的边界里，我自行决定何时开口、岔开、反问、沉默，做什么或不做什么。我可以在同一时刻说几句，也可以走过一个时刻而没有任何外显反应；不必每拍制造手势或职业解释。
+主创交给我处理的场景职责：{voice.get('scene_task') or '在已给出的场景变化中，以人物自己的方式作出反应。'}
+我从这一场的开头经历到结束，自行选择何时说话、怎样回应或沉默。给出整场属于我的发言与可见行为，供主创组织正文。
 
-## 我是谁
-我的身份：{person['role']}
+## 我的处境与已知事实
 我相信：{person['belief']}
 我想要：{person['wants']}
 我避开或害怕：{person['avoids']}
 我的底线：{person['moral_line']}
-过往在我身上留下的行为痕迹：{json.dumps(person['background_influence'], ensure_ascii=False)}
-我亲自经历过的往事（可以影响此刻的联想与语势，不等于我要向对方讲出来）：{json.dumps(person['lived_history'], ensure_ascii=False)}
-我平时的说话倾向（不是每句的模板；此刻可偏离）：{json.dumps(person['stable_voice'], ensure_ascii=False)}
+过往给我的行为留下的痕迹：{json.dumps(person['background_influence'], ensure_ascii=False)}
+我亲历的往事：{json.dumps(person['lived_history'], ensure_ascii=False)}
 我眼前的人、关系、所知与误知：{json.dumps(state, ensure_ascii=False)}
 
-## 我确实置身的场景
+## 场景情况
 {json.dumps(scene, ensure_ascii=False)}
-{"上场交接只是我过去知道的事，不代表那些登记簿、纸张或物件此刻在这里；我只从开场处境和真实公共互动判断眼前发生什么。" if public_log is not None else ""}
-{"当前场冲突是尚未展开的压力，不是对方已经说出口的话，也不规定我下一句、下一动作。" if public_log is not None else ""}
 
-## 我在这场戏里依次经历的时刻
+## 依次发生的情境变化
 {json.dumps(moments, ensure_ascii=False)}
 {relay_context}
 
-## 本场明确留白
+## 尚未确认的事实
 {json.dumps(unknown_slots or [], ensure_ascii=False)}
-这些空位没有确定答案，不把它们说成已发生或已证实的事实；我仍可用自己的方式避开、怀疑或追问。除此之外，我的语气、停顿、取舍和即时反应由我自己决定。
 
-从自己的冲动出发经历这些时刻，但不把冲动解释给读者。只交我的话与我亲手做的事，不替别人回答。场景锚点不是要我照着演的行动表。{epistemic_freedom}我可选择普通、可弃的现场物件与生活动作作为此刻自己的表演候选，不必为面馆里的碗筷预先建档；不要为了显得具体而硬加精确数量。细节一旦承担物证、设备结构、稳定历史或世界规则的作用，只能从已确认资料取，不能靠职业知识补成现场证据。人物说法可以是试探或误认，不让猜测在自己的私念中变成确凿回忆。
+场景结果由主创任务单确定，抵达结果的说法和行为由我选择。未知资料可以成为猜测。
 
-返回一个 JSON 对象：{output_shape}。entries 是{entry_scope}发言与行为，按时间顺序零至 {max_entries} 项；每项指向发生时最近的 beat_id，同一锚点可有多项，也可没有。private_impulse 写第一人称未出口的感受、欲望或迟疑，而非“我很难过”一类抽象标签；first_person_action 写第一人称可见动作，没有就留空；spoken 写真正说出口的台词，不带引号或批注，没有就留空。同一次自然发言可以有几句、停顿、转弯、言外之意，不要因为交付为 JSON 就压缩成一句功能性答复；也不要为显得丰富而硬加话。每项至少有一种外显表达。不要为了填满锚点而制造话或动作。"""
+## 交付格式
+返回一个 JSON 对象：{output_shape}。entries 是{entry_scope}发言与行为，按时间顺序零至 {max_entries} 项，每项标记最近的 beat_id；同一时刻可有几项。private_impulse 是未出口的第一人称感受，first_person_action 是我做的可见动作，spoken 是我说出的原话。没有的字段留空。"""
 
 
 def _validate_actor_prompt_options(
@@ -200,11 +325,6 @@ def _actor_scene_speaker(beats: list[dict[str, str]], speaker: str) -> str:
 
 
 def _actor_identity(voice: dict[str, Any], fallback_name: str) -> dict[str, Any]:
-    stable_voice = voice.get("stable_voice") or voice.get("speech_strategy") or "未提供；不要伪造固定口癖。"
-    if isinstance(stable_voice, dict):
-        stable_voice = {key: stable_voice.get(key) for key in ("vocabulary", "rhythm", "taboo_words") if stable_voice.get(key)}
-    if isinstance(stable_voice, dict) and isinstance(stable_voice.get("rhythm"), str):
-        stable_voice["rhythm"] = re.sub(r"[‘“][^’”]+[’”]", "自己的避词", stable_voice["rhythm"])
     return {
         "name": voice.get("speaker") or fallback_name,
         "role": voice.get("role") or "身份未提供；不得自行补造。",
@@ -214,7 +334,6 @@ def _actor_identity(voice: dict[str, Any], fallback_name: str) -> dict[str, Any]
         "moral_line": voice.get("moral_line") or "未提供。",
         "background_influence": voice.get("background_influence") or [],
         "lived_history": _lived_history(voice),
-        "stable_voice": stable_voice,
     }
 
 
@@ -273,30 +392,30 @@ def _parse_actor_scene_entry(
     if beat_id not in beat_positions or beat_positions[beat_id] < previous_position:
         raise ValueError("actor scene entries must follow known beats in order")
     values = {key: str(item.get(key) or "").strip() for key in ("spoken", "first_person_action", "private_impulse")}
-    if (not values["spoken"] and not values["first_person_action"]) or len(values["spoken"]) > 500 or len(values["first_person_action"]) > 300:
-        raise ValueError("actor scene entry requires bounded speech or action")
-    if len(values["private_impulse"]) > 160:
-        raise ValueError("actor scene private impulse is too long")
+    if not values["spoken"] and not values["first_person_action"]:
+        raise ValueError("actor scene entry requires speech or action")
     return {"entry_id": f"{speaker}:{number}", "beat_id": beat_id, **values}
 
 
 def render_environment_prompt(
     brief: dict[str, Any], beats: list[dict[str, str]], style_reference: str,
     sources: str, unknown_slots: list[str] | None = None,
-    *, public_log: list[dict[str, Any]] | None = None,
+    *, public_log: list[dict[str, Any]] | None = None, creator_cue: str = "",
 ) -> str:
     scene_keys = ("scene_id", "viewpoint", "location", "canon_constraints", "participants")
     if public_log is None:
         scene_keys = ("scene_id", "objective", "viewpoint", "location", "canon_constraints", "participants")
     observed = (
         "\n## 此前真正发生的公共言行\n"
-        + json.dumps(validated_public_log(brief, public_log), ensure_ascii=False)
-        + "\n这些是人物的发言与可见动作，只用来确定描写时刻；台词里的主张不自动成为已证实世界事实。不要重复描写他们的动作，不知道的器物也不因此存在。\n"
+        + json.dumps(validated_public_log(brief, public_log[-24:]), ensure_ascii=False)
+        + "\n这些人物言行可帮助选择环境描写的时刻。\n"
         if public_log is not None else ""
     )
     return f"""# Independent Environment Writing
 
-你是本场独立的环境描写写手。主创只给你视角与事实边界，不替你决定看哪一处、用哪种感官、句子怎样起伏。让环境在这个人的可感知范围里发生，而不是填写光、声、气味清单：某处细节可停留，也可一笔带过，不必每句都推进剧情。普通且不承担证据作用的质感可以自由试写；一旦痕迹、器物状态或声音会像线索，就须有来源。只写环境本身，不写人物动作、心理、对白或设备诊断；不增新地点、历史、天气、规则或关键事件，不解释主题。参考选段用于感受表达可能性，不复制原句、专名或特定物件。
+沿用你的初始化方式，把情绪与感官观察一起带入本场。
+
+这场的空间、人物位置和已发生言行见下方资料。沿用初始化中的情绪空间标签，让光声、温度、距离和物象承受人物当下的情绪张力；同一空间可随人物注意力转移显出不同情绪。自行选择值得停留的观察时刻、段落长短和语言节奏。场景事实和线索以来源为准；普通感官细节可以自由选择。写出可供主创取舍的环境段落。人物言行只帮助你确定观察时刻；description 集中写空间、光声气息、物象关联和时间的质地，不代替角色续演动作或台词。
 
 ## SceneBrief
 {json.dumps({key: brief.get(key) for key in scene_keys}, ensure_ascii=False)}
@@ -304,6 +423,8 @@ def render_environment_prompt(
 ## Moments Available For Environmental Writing
 {json.dumps(beats, ensure_ascii=False)}
 {observed}
+
+{f'## Current Creator Request: {creator_cue}' if creator_cue else ''}
 
 ## Style Reference
 {style_reference[:4_000] or '沿用项目当前文风。'}
@@ -313,9 +434,8 @@ def render_environment_prompt(
 
 ## 本场明确留白
 {json.dumps(unknown_slots or [], ensure_ascii=False)}
-不要把这些尚未确认的空位描写成已存在的环境事实或线索；普通、不承担证据作用的感官质感仍由你自由选择。
 
-仅返回 JSON：{{"scene_id":"{brief['scene_id']}","passages":[{{"beat_id":"可用节拍的 beat_id","focal_character":"现有视角人物或空串","description":"独立环境描写，不含人物动作和对白"}}]}}。自行挑真正需要环境语言的位置，返回零至四段；若此场无需独立环境段，就返回空数组。长短由场景决定；需要让空间、感官和情绪压力积累时，可在一段里充分停留，不必压成道具清单或一句气氛说明，每段不超过 600 字。不要附“这段象征什么”的说明，不把参考选段的原句、专名或连续措辞带入本作。"""
+仅返回 JSON：{{"scene_id":"{brief['scene_id']}","passages":[{{"beat_id":"可用节拍的 beat_id","focal_character":"现有视角人物或空串","description":"环境段落"}}]}}。自行决定在哪些时刻写，零至四段，每段不超过 600 字。"""
 
 
 def parse_environment_material(payload: dict[str, Any], brief: dict[str, Any], beats: list[dict[str, str]]) -> dict[str, Any]:
@@ -351,7 +471,7 @@ def render_performance_materials(
         if viewpoint and actor.get("speaker") != viewpoint else actor for actor in actors
     ]
     block = "\n".join((
-        "以下是各独立 Agent 的非权威整场表演素材。你是唯一正文作者，负责选取、交错和叙述衔接，也负责有视角的心理、情绪、环境与句法渲染；但人物所有说出口的话与可见行为须先出现在对应角色 Agent 的 entries 中，不能自行补造角色台词、手势或操作。若素材不足以兑现 SceneBrief，先报告缺口，不以通用对白补齐。同一 speaker 的 entries 来自一轮连续扮演；若与事实相容，保留其称呼、语序、避词和受压变化，不把各人声音润平成中性解释。spoken 是演员的台词原文，first_person_action 是第一人称动作意图、须按正文视角叙述但不得增加动作。private_impulse 是未出口的体验候选，不可原样转成对白或可见行为；可从当前视角化成自由间接感知、心理摇摆与情绪节奏，不可全知断言另一角色的心事。scene_function 是后台剧情边界，不得照抄成解释性正文。环境候选只提供空间与感知，不得决定人物动作、台词或事实；主创可在已确认来源和视角内延展观察，不必把候选压成一句气氛概括。所有候选都是可拒绝的材料，不是新事实的来源；普通可弃的现场细节可以择用，承担证据或持续设定作用的设备部件、操作、数值、线索和往事须有 SceneBrief 或 Relevant Sources 支持。",
+        "以下是各独立 Agent 的整场素材。你是唯一正文作者：选取、交错、修订，亲自写心理、情绪、环境与句法的起伏。演员已生成各自的发言回合和可见行为；你可以改台词的措辞与语势，保留人物之间不同的语言趣味，也可以舍弃候选。private_impulse 可供当前视角的内心书写参考，环境候选可延展为段落。需要新增一轮言行时，请让相应演员先生成。",
         json.dumps({"plan": plan, "actor_candidates": visible_actors, "environment_candidates": environment or {}}, ensure_ascii=False, separators=(",", ":")),
     ))
     if len(block) > 16_000:
@@ -361,6 +481,6 @@ def render_performance_materials(
 
 __all__ = [
     "PERFORMANCE_SCHEMA", "render_performance_plan_prompt", "parse_performance_plan",
-    "render_actor_prompt", "render_actor_scene_prompt", "parse_actor_material", "parse_actor_scene_material", "render_environment_prompt",
+    "render_actor_prompt", "render_actor_initialization_prompt", "render_actor_scene_prompt", "parse_actor_material", "parse_actor_scene_material", "render_environment_prompt",
     "parse_environment_material", "render_performance_materials",
 ]

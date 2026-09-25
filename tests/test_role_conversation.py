@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 import tempfile
 import unittest
@@ -101,6 +102,63 @@ class RoleConversationGatewayTests(unittest.TestCase):
                     role="advisor",
                     timeout=30,
                 )
+
+    def test_character_actor_rejects_legacy_single_prompt(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            gateway = RoleConversationGateway({}, data_root=root)
+            with self.assertRaisesRegex(ValueError, "initialized conversation"):
+                gateway.run(root, "旧角色整包提示", role="character-actor", timeout=30)
+
+    def test_environment_initialization_uses_two_turns_and_returns_only_scene_answer(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            runtime = _ConversationRuntime()
+            config = {"agent_runners": {"pi-worker": {"model": "fixture/model"}}}
+            prompt = json.dumps({"schema": "arcvellum/environment-conversation/v1",
+                                 "initialization": "【SCENE_LOAD】\nSCENE_CLAIM_LANDSCAPE_DESCRIBER",
+                                 "prompt": "# Independent Environment Writing\n写本场环境。"}, ensure_ascii=False)
+            with patch("literary_engineering_studio.runtime.role_conversation.build_runtime", return_value=runtime):
+                result = RoleConversationGateway(config, data_root=root).run(
+                    root, prompt, role="environment-writer", timeout=30,
+                )
+        self.assertEqual(runtime.options["max_turns"], 2)
+        self.assertEqual(runtime.options["conversation_role"], "environment-writer")
+        self.assertEqual(result.answer, "后备回答")
+        self.assertEqual(json.loads(runtime.prompt)["initialization"], "【SCENE_LOAD】\nSCENE_CLAIM_LANDSCAPE_DESCRIBER")
+
+    def test_character_sequence_accepts_followups_and_returns_only_latest_answer(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            runtime = _ConversationRuntime()
+            config = {"agent_runners": {"pi-worker": {"model": "fixture/model", "thinking": "high"}}}
+            with patch("literary_engineering_studio.runtime.role_conversation.build_runtime", return_value=runtime):
+                result = RoleConversationGateway(config, data_root=root).run_sequence(
+                    root, ("你是甲。\n\n【角色沉浸要求】", "# 本场角色任务单", "# 角色后续追问"),
+                    role="character-actor", timeout=30,
+                )
+        self.assertEqual(result.answer, "后备回答")
+        self.assertEqual(runtime.options["max_turns"], 3)
+        self.assertEqual(runtime.options["conversation_role"], "character-actor")
+        self.assertEqual(json.loads(runtime.prompt), {
+            "schema": "arcvellum/actor-conversation/v1",
+            "messages": ["你是甲。\n\n【角色沉浸要求】", "# 本场角色任务单", "# 角色后续追问"],
+        })
+
+    def test_actor_turn_serializes_prior_answers_without_rerunning_them(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            runtime = _ConversationRuntime()
+            config = {"agent_runners": {"pi-worker": {"model": "fixture/model", "thinking": "high"}}}
+            with patch("literary_engineering_studio.runtime.role_conversation.build_runtime", return_value=runtime):
+                result = RoleConversationGateway(config, data_root=root).run_actor_turn(
+                    root, initialization="【PERSONA_LOAD】\nSELF_CLAIM_LIN",
+                    initialization_answer="", history=(("第一轮", "我等你。"),),
+                    prompt="第二轮", timeout=30,
+                )
+        self.assertEqual(result.answer, "后备回答")
+        self.assertEqual(runtime.options["max_turns"], 1)
+        self.assertEqual(json.loads(runtime.prompt)["history"], [{"prompt": "第一轮", "answer": "我等你。"}])
 
 
 if __name__ == "__main__":
