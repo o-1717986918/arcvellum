@@ -73,3 +73,21 @@ module_change_packet:
   rollback_unit: "发布元数据提交与 v0.99.12 tag"
   documentation: ["README", "CHANGELOG", "docs/releases/v0.99.12*.md", "清理结果表"]
 ```
+
+## P5：Linux CI 的正式任务路径规范化
+
+```yaml
+module_change_packet:
+  objective: "在 Windows 与 POSIX 上把旧任务蓝图的反斜杠路径归一为同一斜杠形式"
+  primary_module: "Engine tasking/paths.py"
+  public_entry: "normalize_relative_path，经 TaskBuilder.normalized_unique 使用"
+  variation_point: "不同宿主系统对反斜杠是否视作路径分隔符"
+  inputs: ["drafts\\candidate.md", "drafts/candidate.md"]
+  outputs: ["drafts/candidate.md"]
+  invariants: ["正式任务路径身份一致", "不改外部绝对路径读取策略", "v1/v2 Schema 不变"]
+  allowed_dependencies: ["tasking/paths.py", "现有 test_task_builder"]
+  forbidden_dependencies: ["Studio 路径适配器", "放宽任务资源边界"]
+  tests: ["Windows 定向任务构建测试", "Linux CI 全量任务合同"]
+  rollback_unit: "路径规范化修复提交"
+  documentation: ["发布验证中的 CI 记录"]
+```

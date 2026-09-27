@@ -1,15 +1,21 @@
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from literary_engineering_studio_engine.tasking.builder import (
     TaskBuilder,
     WordCountContract,
     file_sha256,
 )
+from literary_engineering_studio_engine.tasking.paths import normalize_relative_path
 
 
 class TaskBuilderTests(unittest.TestCase):
+    def test_legacy_backslash_path_is_normalized_under_posix_semantics(self):
+        with patch("literary_engineering_studio_engine.tasking.paths.Path", PurePosixPath):
+            self.assertEqual(normalize_relative_path(r"drafts\candidate.md"), "drafts/candidate.md")
+
     def test_builds_normalized_shared_envelope_and_blueprint_contracts(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

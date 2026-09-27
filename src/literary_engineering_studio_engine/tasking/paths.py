@@ -66,7 +66,7 @@ def normalize_route(route: str) -> str:
 
 
 def normalize_relative_path(value: str | Path) -> str:
-    return Path(str(value)).as_posix()
+    return Path(str(value).replace("\\", "/")).as_posix()
 
 
 def read_json(path: Path) -> dict[str, object]:
