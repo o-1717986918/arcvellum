@@ -14,17 +14,17 @@
 | `src/literary_engineering_studio_engine/orchestration` | 6 | Read-only orchestration catalog | `orchestration/__init__.py` | task and Gate catalogs | Planner execution |
 | `src/literary_engineering_studio_engine/projections` | 17 | Engine read projections | `projection facades` | formal project facts | promotion/writeback |
 | `src/literary_engineering_studio_engine/command_line` | 25 | Engine CLI adapter | `command_line/main.py` | Engine public services | literary business rules |
-| `src/literary_engineering_studio/application` | 65 | Studio use cases | `application services` | ports and Engine contracts | API/framework adapters |
+| `src/literary_engineering_studio/application` | 66 | Studio use cases | `application services` | ports and Engine contracts | API/framework adapters |
 | `src/literary_engineering_studio/automation` | 22 | Campaign control | `automation/controller.py` | application/runtime ports | Engine route implementations |
 | `src/literary_engineering_studio/orchestration` | 51 | Adaptive plan domain | `orchestration services` | Engine catalog and ports | API or task lifecycle |
 | `src/literary_engineering_studio/runtime` | 98 | Controlled execution | `runtime worker/bundle ports` | contracts and infrastructure ports | literary route policy |
-| `src/literary_engineering_studio/runtimes` | 24 | Agent adapters | `runtimes registry` | Runtime SPI and external SDKs | Engine route implementations |
-| `src/literary_engineering_studio/persistence` | 28 | Durable adapters | `repository facades` | SQLite and file storage | literary decisions |
+| `src/literary_engineering_studio/runtimes` | 25 | Agent adapters | `runtimes registry` | Runtime SPI and external SDKs | Engine route implementations |
+| `src/literary_engineering_studio/persistence` | 29 | Durable adapters | `repository facades` | SQLite and file storage | literary decisions |
 | `src/literary_engineering_studio/projections` | 36 | Studio read models | `projection services` | read ports and Engine facts | promotion/writeback |
 | `src/literary_engineering_studio/preflight` | 31 | Writeback validation | `task_preflight facade` | contracts and deterministic validators | Agent creativity |
 | `src/literary_engineering_studio/observability` | 39 | Events and telemetry | `observability projections` | event contracts | task mutation |
 | `src/literary_engineering_studio/integrations` | 9 | External integrations | `integration-specific facades` | external SDKs and ports | literary policy |
-| `src/literary_engineering_studio/api` | 28 | HTTP/SSE adapters | `router factories` | application use cases | direct project mutation |
+| `src/literary_engineering_studio/api` | 29 | HTTP/SSE adapters | `router factories` | application use cases | direct project mutation |
 | `src/literary_engineering_studio/advisor` | 11 | Read-only advisor | `advisor service` | read models and Runtime port | formal project writeback |
 | `workers/pi-worker/src` | 21 | Bounded Pi Worker | `main.ts / worker.ts` | Pi SDK and task contract | formal project access |
 | `desktop/src-tauri/src` | 1 | Desktop host | `main.rs` | Tauri commands and sidecar protocol | literary logic |
@@ -33,22 +33,19 @@
 
 | Feature | 文件数 | 规则 |
 |---|---:|---|
-| `advisor` | 1 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `archaeology` | 14 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `archive` | 24 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `creative-live` | 25 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `delivery` | 5 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `details` | 2 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `help` | 1 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
-| `observatory` | 2 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
-| `orrery` | 80 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
+| `orrery` | 78 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `project-agent` | 16 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `projects` | 4 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `quality` | 6 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `reader` | 1 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
-| `settings` | 3 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
+| `settings` | 7 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `spatial-os` | 2 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
-| `strategy` | 8 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `style-atelier` | 19 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `workflow` | 2 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 
