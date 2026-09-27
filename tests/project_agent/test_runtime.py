@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 import json
 import sys
@@ -162,6 +163,40 @@ class ProjectAgentRuntimeTests(unittest.TestCase):
             )
             self.assertEqual(seen[0][0], registered.resolve())
 
+    def test_planning_prepare_targets_only_a_registered_work(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            registered = root / "registered"
+            registered.mkdir()
+            (registered / "project.yaml").write_text("title: Registered\n", encoding="utf-8")
+            seen = []
+            dispatcher = ProjectAgentToolDispatcher(
+                root,
+                ProjectAgentDependencies(
+                    project_overview=lambda _root, _args: {},
+                    project_search=lambda _root, _args: {},
+                    creation_observe=lambda _root, _args: {},
+                    resolve_project=lambda _anchor, args: registered if args.get("work_id") == "valid" else root,
+                ),
+                enabled=("project_planning_prepare",),
+                actions=ProjectAgentActionDependencies(
+                    record_direction=lambda _root, _args: {},
+                    creation_control=lambda _root, _args: {},
+                    prepare_plan=lambda target, args: seen.append((target, args)) or {"status": "prepared"},
+                ),
+            )
+
+            result = dispatcher(ProjectAgentToolCall(
+                "prepare-1", "turn-1", "project_planning_prepare", {"work_id": "valid"},
+            ))
+
+            self.assertEqual(result["status"], "prepared")
+            self.assertEqual(seen[0][0], registered.resolve())
+            with self.assertRaisesRegex(ValueError, "registered work project"):
+                dispatcher(ProjectAgentToolCall(
+                    "prepare-2", "turn-1", "project_planning_prepare", {"work_id": "invalid"},
+                ))
+
     def test_dispatches_one_allowed_tool_and_reaps_the_process(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -201,6 +236,34 @@ class ProjectAgentRuntimeTests(unittest.TestCase):
             finished = next(data for event, data in events if event == "project_agent.tool.finished")
             self.assertEqual(finished["receipt"], {"token": "receipt-1"})
             self.assertEqual(sorted(path.name for path in root.iterdir()), ["fake_project_agent.py"])
+
+    def test_slow_project_action_delivers_its_actual_result(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            script = _script(root, """
+                import json, sys
+                schema = "arcvellum/project-agent-bridge/v1"
+                def send(kind, turn, payload):
+                    print(json.dumps({"schema": schema, "type": kind, "message_id": "child-" + kind, "turn_id": turn, "payload": payload}), flush=True)
+                send("bridge.ready", "bridge", {})
+                start = json.loads(sys.stdin.readline())
+                turn = start["turn_id"]
+                send("tool.call", turn, {"request_id": "slow-1", "name": "project_future_replan", "arguments": {}})
+                result = json.loads(sys.stdin.readline())
+                send("turn.complete", turn, {"status": "completed", "answer": str(result["payload"]["result"]["future_scene_count"]), "turns": 2, "toolCalls": 1})
+            """)
+            runtime = ProjectAgentRuntime((sys.executable, "-u", str(script)), cwd=root)
+            def slow_replan(_call):
+                time.sleep(0.08)
+                return {"future_scene_count": 51}
+
+            result = runtime.run_turn(
+                replace(_request(), allowed_tools=("project_future_replan",)),
+                slow_replan, timeout=2,
+            )
+
+            self.assertEqual(result.status, "completed")
+            self.assertEqual(result.answer, "51")
 
     def test_rejects_an_undeclared_tool(self):
         with tempfile.TemporaryDirectory() as temporary:

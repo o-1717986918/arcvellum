@@ -336,6 +336,15 @@ class IdGenerator(Protocol):
     def new_id(self, prefix: str) -> str: ...
 
 
+@runtime_checkable
+class PromptLayerRepositoryPort(Protocol):
+    def active(self, scope: str, project_root: Path | None, layer_id: str) -> dict[str, Any] | None: ...
+    def history(self, scope: str, project_root: Path | None, layer_id: str) -> list[dict[str, Any]]: ...
+    def save(self, scope: str, project_root: Path | None, layer_id: str, text: str) -> dict[str, Any]: ...
+    def activate(self, scope: str, project_root: Path | None, layer_id: str, version: int) -> dict[str, Any]: ...
+    def reset(self, scope: str, project_root: Path | None, layer_id: str) -> None: ...
+
+
 @dataclass(frozen=True)
 class PersistencePorts:
     """Named persistence capabilities for one application instance."""
@@ -351,6 +360,7 @@ class PersistencePorts:
     events: DurableEventStorePort
     unit_of_work: UnitOfWorkPort
     facade: Any
+    prompt_layers: PromptLayerRepositoryPort | None = None
 
     @property
     def worker(self) -> WorkerPersistencePort:
@@ -371,6 +381,7 @@ __all__ = [
     "MutationReceiptRepositoryPort",
     "PersistencePorts",
     "PlanRepositoryPort",
+    "PromptLayerRepositoryPort",
     "SessionRepositoryPort",
     "UnitOfWorkPort",
     "WorkerPersistencePort",

@@ -81,6 +81,12 @@ from ..literary.scene.context.broker import context_trace_status
 from ..literary.scene.facts import SceneFacts, load_scene_facts, load_scene_mapping
 from ..literary.scene.composition.creative_plan import project_brief_expression_context
 from ..literary.scene.roleplay.actor_personas import actor_personas_for_participants, list_actor_personas, save_actor_persona
+from ..literary.scene.roleplay.describers import (
+    DESCRIBER_KINDS,
+    render_describer_initialization,
+    render_describer_turn,
+    parse_describer_candidates,
+)
 from ..literary.scene.roleplay.performance import (
     render_performance_plan_prompt,
     parse_performance_plan,
@@ -94,6 +100,7 @@ from ..literary.scene.roleplay.performance import (
     render_performance_materials,
 )
 from ..literary.scene.roleplay.interaction import (
+    MaterialRequestV2,
     parse_interaction_direction,
     parse_scene_material_requests,
     render_actor_interaction_prompt,
@@ -110,6 +117,7 @@ from ..literary.style.reference_projection import (
 )
 from ..literary.scene.transaction import (
     ChangeProposal,
+    CreativeIntentV1,
     CreativeResult,
     IssueSeverity,
     LengthTarget,

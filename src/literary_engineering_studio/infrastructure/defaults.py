@@ -10,6 +10,8 @@ from ..integrations.model_connections import model_connection_status
 from ..observability.live_events import LiveEventBus
 from ..persistence.job_store import JobStore
 from ..persistence.composition import sqlite_persistence_ports
+from ..persistence.prompt_layers import FilePromptLayerRepository
+from dataclasses import replace
 from ..projections.read_model_cache import ReadModelCache
 from ..runtime.execution_coordinator import ProjectExecutionCoordinator
 from ..runtime.prepared_context_cache import PreparedContextCache
@@ -29,7 +31,7 @@ def build_default_application_ports(config: dict[str, Any]) -> ApplicationPorts:
     cache = worker.get("prepared_context_cache") if isinstance(worker.get("prepared_context_cache"), dict) else {}
 
     store = JobStore(database)
-    persistence = sqlite_persistence_ports(store)
+    persistence = replace(sqlite_persistence_ports(store), prompt_layers=FilePromptLayerRepository(data_root))
     process_manager = ProcessManager(data_root / "logs" / "sidecars")
     execution_coordinator = ProjectExecutionCoordinator()
     return ApplicationPorts(

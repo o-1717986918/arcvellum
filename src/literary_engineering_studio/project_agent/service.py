@@ -28,6 +28,7 @@ RuntimeFactory = Callable[[dict[str, Any], Path], ProjectAgentRuntime]
 EventSink = Callable[[str, dict[str, Any]], None]
 PersonaLoader = Callable[[Path], dict[str, str]]
 GoalRunReader = Callable[[str], dict[str, Any]]
+PromptResolver = Callable[[str, Path | None], str]
 
 
 class ProjectAgentService:
@@ -43,6 +44,7 @@ class ProjectAgentService:
         actions: ProjectAgentActionDependencies | None = None,
         runtime_factory: RuntimeFactory = build_project_agent_runtime,
         persona_loader: PersonaLoader | None = None,
+        prompt_resolver: PromptResolver | None = None,
         goal_run_reader: GoalRunReader | None = None,
         goal_poll_interval: float = 0.5,
     ) -> None:
@@ -53,6 +55,7 @@ class ProjectAgentService:
         self.actions = actions
         self.runtime_factory = runtime_factory
         self.persona_loader = persona_loader
+        self.prompt_resolver = prompt_resolver
         resolved_goal_reader = goal_run_reader or getattr(jobs, "read_autopilot_run", None)
         self.goal_observer = (
             DelegatedGoalObserver(resolved_goal_reader, poll_interval=goal_poll_interval)
@@ -314,7 +317,12 @@ class ProjectAgentService:
             session_id=session_id,
             turn_id=turn_id,
             prompt=turn_prompt(message, session),
-            system_prompt=system_prompt(persona, write_enabled=self.actions is not None),
+            system_prompt=system_prompt(
+                persona, write_enabled=self.actions is not None,
+                literary_guidance=self.prompt_resolver(
+                    "project_agent.creative_direction", root if (root / "project.yaml").is_file() else None,
+                ) if self.prompt_resolver is not None else "",
+            ),
             allowed_tools=allowed_tools,
         )
 

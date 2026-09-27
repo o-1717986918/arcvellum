@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createFeatureClientHarness } from "./featureClientHarness";
 import {
-  advisorSessionFixture,
   dashboardFixture,
   projectSummaryFixture,
   qualityProfileFixture,
@@ -104,27 +103,6 @@ describe("feature clients over MockFeatureTransport", () => {
 
     expect(onProjection).toHaveBeenCalledWith(projection);
     expect(onPatch).toHaveBeenCalledWith({ target_revision: "fixture-p2" });
-  });
-
-  it("loads advisor surface and consumes a deterministic streamed answer", async () => {
-    const { transport, clients } = createFeatureClientHarness();
-    const personasPath = `/advisor/personas?${transport.query({ project_root: PROJECT_ROOT })}`;
-    const inboxPath = `/advisor/inbox?${transport.query({ project_root: PROJECT_ROOT })}`;
-    const session = advisorSessionFixture();
-    const askPath = `/advisor/sessions/${session.session_id}/ask/stream`;
-    transport
-      .respond("GET", personasPath, { selected_persona: "chief-editor", items: [{ persona_id: "chief-editor", name: "严谨总编" }] })
-      .respond("GET", inboxPath, { items: [], unread_count: 0 })
-      .streamWith(askPath, [
-        { event: "advisor.delta", data: { text: "先看人物动机。" } },
-        { event: "advisor.result", data: { answer: { message: "先看人物动机。", evidence: [], uncertainties: [], suggested_actions: [] } } },
-      ]);
-
-    expect((await clients.advisor.surface(PROJECT_ROOT)).personas.selected_persona).toBe("chief-editor");
-    const events: string[] = [];
-    await clients.advisor.ask(session.session_id, "下一步呢？", {}, new AbortController().signal, (event) => events.push(event));
-    expect(events).toEqual(["advisor.delta", "advisor.result"]);
-    expect(transport.lastCall("stream")?.body).toMatchObject({ question: "下一步呢？", timeout: 240 });
   });
 
   it("fails loudly when a feature reaches an unregistered transport route", async () => {

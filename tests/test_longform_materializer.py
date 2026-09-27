@@ -159,6 +159,50 @@ class LongformMaterializerTests(unittest.TestCase):
             self.assertNotIn("陈砺首次来馆调卷", contract)
             self.assertNotIn("陈砺递交调档单", contract)
 
+    def test_lean_plan_adopts_matching_authored_scene_without_rewriting_it(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "plot" / "lean_project_plan.json"
+            source.parent.mkdir(parents=True)
+            source.write_text("{}", encoding="utf-8")
+            path = root / "scenes" / "scene_0001.yaml"
+            path.parent.mkdir()
+            authored = (
+                "scene_id: scene_0001\nchapter_id: chapter_0001\n"
+                "word_count_target: 1000\nparticipants:\n- 主角\n"
+                "scene_goal: 用户亲自设计的场面\n"
+            )
+            path.write_text(authored, encoding="utf-8")
+
+            result = materialize_lean_window(
+                root, scenes=[self._lean_scene(1, "chapter_0001")],
+                obligations={}, sources=(source,), outline_text="大纲",
+            )
+
+            self.assertEqual(result.scene_paths, (path,))
+            self.assertEqual(path.read_text(encoding="utf-8"), authored)
+
+    def test_lean_plan_rejects_authored_scene_with_conflicting_participants(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "plot" / "lean_project_plan.json"
+            source.parent.mkdir(parents=True)
+            source.write_text("{}", encoding="utf-8")
+            path = root / "scenes" / "scene_0001.yaml"
+            path.parent.mkdir()
+            path.write_text(
+                "scene_id: scene_0001\nchapter_id: chapter_0001\n"
+                "word_count_target: 1000\nparticipants:\n- 另一个人\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ValueError, "participants differ"):
+                materialize_lean_window(
+                    root, scenes=[self._lean_scene(1, "chapter_0001")],
+                    obligations={}, sources=(source,), outline_text="大纲",
+                )
+            self.assertIn("另一个人", path.read_text(encoding="utf-8"))
+
     @staticmethod
     def _lean_scene(index: int, chapter_id: str) -> dict[str, object]:
         return {

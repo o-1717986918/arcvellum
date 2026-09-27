@@ -1,0 +1,31 @@
+import unittest
+
+from literary_engineering_studio_engine.public.literary import (
+    parse_describer_candidates, render_describer_initialization, render_describer_turn,
+)
+
+
+class DescriberContractTests(unittest.TestCase):
+    def test_character_lens_guards_private_thought_and_returns_short_candidates(self):
+        init = render_describer_initialization("character-description", "克制的作品语言")
+        turn = render_describer_turn(
+            "character-description", {"scene_id": "s1", "viewpoint": "甲", "participants": ["甲", "乙"]},
+            target="乙", purpose="让读者注意他习惯性的迟疑", scene_moment="递杯时",
+            cue="他把杯沿转向自己", confirmed_sources="杯子有缺口", public_stage=[],
+        )
+        self.assertIn("不要声称知道视角之外的私念", init)
+        self.assertIn("递杯时", turn)
+        self.assertEqual(len(parse_describer_candidates({"candidates": [
+            {"text": "他把缺口藏进掌心，仍没接话。", "focus": "迟疑与惯常照顾"},
+        ]}, "character-description")), 1)
+
+    def test_empty_candidate_needs_reason_and_more_than_three_are_rejected(self):
+        with self.assertRaises(ValueError):
+            parse_describer_candidates({"candidates": []}, "scene-description")
+        self.assertEqual(parse_describer_candidates({"candidates": [], "no_material_reason": "此刻停顿已足够"}, "scene-description"), [])
+        with self.assertRaises(ValueError):
+            parse_describer_candidates({"candidates": [{"text": "有效文本", "focus": "焦点"}] * 4}, "scene-description")
+
+
+if __name__ == "__main__":
+    unittest.main()

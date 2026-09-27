@@ -10,9 +10,13 @@ from ..application.failures import present_run
 from .action_receipts import action_receipt, goal_result
 from .actor_persona_actions import actor_persona_update_action
 from .archive_actions import archive_change_action
+from .asset_reconcile_actions import asset_reconcile_action
 from .contracts import ProjectAgentActionDependencies
 from .chapter_actions import chapter_extension_action
 from .future_plan_actions import future_replan_action
+from .formal_output_state import has_unmigrated_formal_work
+from .goal_resume import current_goal_run, resume_managed_goal
+from .planning_actions import planning_prepare_action
 from .scope import work_reference
 from .style_actions import owner_style_write_action, style_mount_action
 
@@ -38,6 +42,8 @@ def dependencies_from_actions(
     save_actor_persona: Callable[..., dict[str, Any]] | None = None,
     archive_dependencies: Any | None = None,
     write_owner_style: Callable[..., dict[str, Any]] | None = None,
+    reconcile_assets: Callable[..., dict[str, Any]] | None = None,
+    prepare_plan: Callable[[Path], dict[str, Any]] | None = None,
 ) -> ProjectAgentActionDependencies:
     settings = config or {}
     def save_direction(root: Path, arguments: Mapping[str, Any]) -> Mapping[str, Any]:
@@ -217,6 +223,8 @@ def dependencies_from_actions(
         actor_persona_update_action(save_actor_persona, invalidate_project) if save_actor_persona is not None else None,
         archive_change_action(archive_dependencies, invalidate_project) if archive_dependencies is not None else None,
         owner_style_write_action(write_owner_style, invalidate_project) if write_owner_style is not None else None,
+        asset_reconcile_action(reconcile_assets, invalidate_project) if reconcile_assets is not None else None,
+        planning_prepare_action(prepare_plan, autopilot, invalidate_project) if prepare_plan is not None else None,
     )
 
 
@@ -262,7 +270,7 @@ def _resolve_decision(
 
 def _start_creation(root: Path, autopilot: Any) -> dict[str, Any]:
     kernel = str(autopilot.policy(root).get("policy", {}).get("literary_kernel") or "")
-    historical = _has_unmigrated_formal_work(root)
+    historical = has_unmigrated_formal_work(root)
     if kernel == "lean-v2" and historical:
         raise ValueError("历史正式正文尚未转换为轻事务回执；请先完成作品迁移，不能直接按轻内核续跑。")
     if kernel != "lean-v2" and not historical:
@@ -321,6 +329,10 @@ def _manage_goal(
         current_choices=current_choices,
         settings=settings,
         expected_stop_reason=str(arguments.get("expected_stop_reason") or "").strip(),
+        stop_after_formal_units=(
+            max(0, int(arguments.get("stop_after_formal_units") or 0))
+            if "stop_after_formal_units" in arguments else None
+        ),
     )
 
 
@@ -334,16 +346,17 @@ def _start_goal(
 ) -> Mapping[str, Any]:
     if not objective:
         raise ValueError("project_goal_manage start requires an objective")
-    record_direction(root, f"长期创作目标：{objective}", actor="project-agent")
     current = autopilot.policy(root).get("policy", {})
-    if str(current.get("literary_kernel") or "") == "lean-v2" and _has_unmigrated_formal_work(root):
+    historical = has_unmigrated_formal_work(root)
+    if str(current.get("literary_kernel") or "") == "lean-v2" and historical:
         raise ValueError("历史正式正文尚未转换为轻事务回执；请先完成作品迁移，不能直接按轻内核续跑。")
     kernel = (
         "strict-v1"
-        if _has_unmigrated_formal_work(root)
+        if historical
         and str(current.get("literary_kernel") or "") != "lean-v2"
         else "lean-v2"
     )
+    record_direction(root, f"长期创作目标：{objective}", actor="project-agent")
     goal_policy = {
         "mode": "full_auto",
         "literary_kernel": kernel,
@@ -371,13 +384,16 @@ def _continue_goal(
     current_choices: Callable[..., dict[str, Any]] | None,
     settings: dict[str, Any],
     expected_stop_reason: str = "",
+    stop_after_formal_units: int | None = None,
 ) -> Mapping[str, Any]:
-    status = autopilot.status(root)
-    run = status.get("run") if isinstance(status.get("run"), dict) else {}
+    run = current_goal_run(root, autopilot)
     run_id = str(run.get("run_id") or "").strip()
     if not run_id:
         if operation == "recover" and objective:
-            return _start_goal(root, objective, record_direction, autopilot)
+            return _start_goal(
+                root, objective, record_direction, autopilot,
+                stop_after_formal_units=stop_after_formal_units or 0,
+            )
         raise ValueError("project_goal_manage requires an existing long-running goal")
     if operation == "pause":
         paused = autopilot.pause(run_id, reason="project-agent-goal-paused")
@@ -389,12 +405,14 @@ def _continue_goal(
     if expected_stop_reason and str(run.get("stop_reason") or "") != expected_stop_reason:
         return goal_result(root, operation, run, "checkpoint_changed")
     if not _is_managed_goal(run):
-        return _non_goal_result(root, operation, objective, record_direction, autopilot)
+        return _non_goal_result(
+            root, operation, objective, record_direction, autopilot,
+            stop_after_formal_units=stop_after_formal_units,
+        )
     pending = _pending_choices(settings, root, current_choices) if operation == "recover" else []
     if pending:
         return _decision_required_result(root, pending)
-    resumed = autopilot.resume(run_id, authorized=True)
-    return goal_result(root, operation, resumed, "accepted")
+    return resume_managed_goal(root, operation, run, autopilot, stop_after_formal_units)
 
 
 def _non_goal_result(
@@ -403,9 +421,13 @@ def _non_goal_result(
     objective: str,
     record_direction: RecordDirection,
     autopilot: Any,
+    stop_after_formal_units: int | None = None,
 ) -> Mapping[str, Any]:
     if operation == "recover" and objective:
-        return _start_goal(root, objective, record_direction, autopilot)
+        return _start_goal(
+            root, objective, record_direction, autopilot,
+            stop_after_formal_units=stop_after_formal_units or 0,
+        )
     return {
         "ok": False,
         "operation": f"goal_{operation}",
@@ -448,20 +470,6 @@ def _is_managed_goal(run: Mapping[str, Any]) -> bool:
         and str(policy.get("literary_kernel") or "") in {"lean-v2", "strict-v1"}
         and str(policy.get("release_policy") or "") == "delegated"
     )
-
-
-def _has_unmigrated_formal_work(root: Path) -> bool:
-    receipts = root / "workflow" / "scene_commits"
-    for draft in (root / "drafts" / "scenes").glob("*.md"):
-        if not (receipts / f"{draft.stem}.json").is_file():
-            return True
-    if (root / "plot" / "lean_project_plan.json").is_file():
-        return False
-    for scene in (root / "scenes").glob("scene_*.yaml"):
-        for line in scene.read_text(encoding="utf-8", errors="ignore").splitlines():
-            if line.startswith("scene_id:") and line.partition(":")[2].strip().strip("\"'"):
-                return True
-    return False
 
 
 def _resume_after_decision(autopilot: Any, root: Path, result: Mapping[str, Any]) -> None:

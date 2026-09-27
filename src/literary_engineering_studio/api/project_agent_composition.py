@@ -19,6 +19,9 @@ from ..application.style.owner_directive import read_owner_style_directive, writ
 from ..application.style import StyleApplicationService
 from ..application.lean_chapter_extension import extend_lean_chapter
 from ..application.lean_future_replan import replan_lean_future
+from ..application.lean_longform_planning import LeanLongformPlanningService
+from ..application.lean_assets import ensure_lean_planning_assets, lean_asset_alignment
+from ..application.lean_asset_enrichment import enrich_lean_planning_assets
 from ..runtime.role_conversation import RoleConversationGateway
 from ..project_manager import create_project, list_projects, record_direction
 from literary_engineering_studio_engine.public.literary import (
@@ -40,6 +43,7 @@ def build_project_agent_service(
     read_models: Any,
     archive_dependencies: Any,
     worker_dependencies: Any,
+    prompts: Any = None,
 ) -> ProjectAgentService:
     jobs, style_catalog = lifecycle.persistence.worker, StyleApplicationService()
 
@@ -86,31 +90,61 @@ def build_project_agent_service(
                 **values,
             ),
             goal_evidence=lambda root: read_models.reader(root),
-            extend_chapter=lambda root, **values: extend_lean_chapter(
-                root,
-                RoleConversationGateway(
-                    config,
-                    data_root=Path(str(config.get("application", {}).get("data_root") or ".")) / "pi-conversations",
-                ),
-                **values,
-            ),
-            replan_future=lambda root, **values: replan_lean_future(
-                root,
-                RoleConversationGateway(
-                    config,
-                    data_root=Path(str(config.get("application", {}).get("data_root") or ".")) / "pi-conversations",
-                ),
-                **values,
-            ),
+            extend_chapter=lambda root, **values: extend_lean_chapter(root, _role_gateway(config), **values),
+            replan_future=lambda root, **values: replan_lean_future(root, _role_gateway(config), **values),
             save_actor_persona=save_actor_persona,
             archive_dependencies=archive_dependencies,
             write_owner_style=write_owner_style_directive,
+            reconcile_assets=lambda root, **values: _reconcile_lean_assets(config, root, **values),
+            prepare_plan=lambda root: _prepare_lean_plan(config, root),
         ),
         persona_loader=lambda root: active_persona(
-            Path(str(config.get("application", {}).get("data_root") or ".")), root
+            Path(str(config.get("application", {}).get("data_root") or ".")), root,
+            prompt_resolver=(lambda layer_id, project: prompts.resolve(layer_id, project).text)
+            if prompts is not None else None,
         ),
+        prompt_resolver=(lambda layer_id, root: prompts.resolve(layer_id, root).text)
+        if prompts is not None else None,
         goal_run_reader=lambda run_id: _goal_run_reader(jobs, run_id),
     )
+
+
+def _role_gateway(config: dict[str, Any]) -> RoleConversationGateway:
+    return RoleConversationGateway(
+        config,
+        data_root=Path(str(config.get("application", {}).get("data_root") or ".")) / "pi-conversations",
+    )
+
+
+def _prepare_lean_plan(config: dict[str, Any], root: Path) -> dict[str, Any]:
+    data_root = Path(str(config.get("application", {}).get("data_root") or "."))
+    return LeanLongformPlanningService(config, data_root=data_root).ensure_initial(root)
+
+
+def _reconcile_lean_assets(
+    config: dict[str, Any], root: Path, *, target_asset_id: str,
+) -> dict[str, Any]:
+    alignment = lean_asset_alignment(root)
+    if not alignment["available"]:
+        raise ValueError("lean planning assets are unavailable; use the formal asset route or owner archive creation")
+    item = next((row for row in alignment["items"] if row["asset_id"] == target_asset_id), None)
+    if item is None:
+        raise ValueError("asset is not in the lean plan; use owner archive creation for a new asset")
+    if item["status"] in {"identity_mismatch", "path_conflict"}:
+        raise ValueError(
+            f"planned asset identity needs author resolution: {item['status']} "
+            f"({', '.join(item['matching_asset_ids'])})"
+        )
+    created = ensure_lean_planning_assets(root, target_asset_id=target_asset_id)
+    enriched = enrich_lean_planning_assets(
+        root, _role_gateway(config),
+        target_asset_id=target_asset_id,
+    )
+    after = lean_asset_alignment(root)
+    return {
+        **created, **enriched,
+        "alignment": next(row for row in after["items"] if row["asset_id"] == target_asset_id),
+    }
 
 
 def _goal_run_reader(jobs: Any, run_id: str) -> dict[str, Any]:

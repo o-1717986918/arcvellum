@@ -8,8 +8,10 @@ from typing import Any, Callable
 
 from ..application.scene_transaction import SceneTransactionService, TransactionEventSink
 from ..application.lean_longform_planning import LeanLongformPlanningService
+from ..application.prompt_workbench import PromptWorkbenchService
 from ..automation.lean_scene_loop import LeanSceneRunCoordinator
 from ..persistence.scene_transactions import SceneTransactionRepository
+from ..persistence.prompt_layers import FilePromptLayerRepository
 from ..runtimes.pi_scene_transaction import PiSceneTransactionRuntime
 from .project_scene_transactions import AtomicProjectSceneCommitter, ProjectSceneBriefProvider
 
@@ -32,11 +34,13 @@ def build_lean_scene_runtime(
     planning: LeanLongformPlanningService | None = None,
 ) -> LeanSceneRuntimeBundle:
     project = project_root.expanduser().resolve()
+    prompt_workbench = PromptWorkbenchService(FilePromptLayerRepository(data_root))
     runtime = PiSceneTransactionRuntime(
         config,
         project_root=project,
         data_root=data_root.expanduser().resolve(),
         event_sink=event_sink,
+        prompt_snapshot_provider=prompt_workbench.snapshot,
     )
     service = SceneTransactionService(
         briefs=ProjectSceneBriefProvider(),

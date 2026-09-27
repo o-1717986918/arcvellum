@@ -7,6 +7,7 @@ import { ReadOnlyJsonCredentialStore } from "./credential-store.ts";
 import { WorkerEventAdapter } from "./event-adapter.ts";
 import { reasoningThinkingBudgets, safeThinkingLevel } from "./reasoning-budget.ts";
 import { classifyProviderFailure, providerStreamControls } from "./provider-reliability.ts";
+import defaultConversationProfile from "../profiles/conversation-system.md?raw";
 
 export interface ConversationResult {
 	status: "completed" | "blocked";
@@ -43,14 +44,15 @@ export async function runConversation(
 	if (!auth) throw new Error(`Pi AI provider is not authenticated: ${provider}`);
 
 	const actorConversation = options.conversationRole === "character-actor";
-	const actorTurn = actorConversation ? actorTurnEnvelope(prompt) : null;
+	const roleTurn = !actorConversation && options.conversationRole !== "default" ? roleTurnEnvelope(prompt) : null;
+	const actorTurn = actorConversation ? actorTurnEnvelope(prompt) : roleTurn;
 	const messages = actorTurn ? [] : conversationMessages(options.conversationRole ?? "default", prompt);
 	const initializedEnvironment = options.conversationRole === "environment-writer" && messages.length === 2;
 	const state = emptyState();
 	const sessionId = `arcvellum-conversation-${createHash("sha256").update(prompt).digest("hex").slice(0, 20)}`;
 	let messageIndex = 0;
 	const eventAdapter = new WorkerEventAdapter(sessionId, state, (event, data) => {
-		if (actorConversation || initializedEnvironment) {
+		if (actorConversation || roleTurn || initializedEnvironment) {
 			if (messageIndex === 0 && (event === "agent.message.delta" || event === "agent.message.completed")) return;
 			if (messageIndex > 0 && (event === "runner.session.created" || event === "runner.session.status")) return;
 			if (messageIndex < messages.length - 1 && event === "runner.session.finished") return;
@@ -58,7 +60,10 @@ export async function runConversation(
 		emit(event, data);
 	});
 	const effectiveThinking = safeThinkingLevel(model, options.thinking);
-	const systemPrompt = actorTurn?.initialization ?? conversationSystemPrompt(options.conversationRole ?? "default");
+	const defaultEnvelope = options.conversationRole === "default" || !options.conversationRole
+		? defaultConversationEnvelope(prompt) : null;
+	const systemPrompt = actorTurn?.initialization ?? defaultEnvelope?.systemPrompt
+		?? conversationSystemPrompt(options.conversationRole ?? "default");
 	const agent = new Agent({
 		initialState: {
 			systemPrompt,
@@ -139,9 +144,17 @@ export interface ActorTurnEnvelope {
 }
 
 export function actorTurnEnvelope(prompt: string): ActorTurnEnvelope | null {
+	return parsedTurnEnvelope(prompt, "arcvellum/actor-conversation/v2");
+}
+
+export function roleTurnEnvelope(prompt: string): ActorTurnEnvelope | null {
+	return parsedTurnEnvelope(prompt, "arcvellum/role-conversation/v1");
+}
+
+function parsedTurnEnvelope(prompt: string, schema: string): ActorTurnEnvelope | null {
 	let value: unknown;
 	try { value = JSON.parse(prompt); } catch { return null; }
-	if (!isRecord(value) || value.schema !== "arcvellum/actor-conversation/v2") return null;
+	if (!isRecord(value) || value.schema !== schema) return null;
 	const history = value.history;
 	if (typeof value.initialization !== "string" || !value.initialization.trim()
 		|| typeof value.prompt !== "string" || !value.prompt.trim()
@@ -174,13 +187,14 @@ export function actorHistoryMessages(turn: ActorTurnEnvelope, model: { api: any;
 }
 
 export function conversationSystemPrompt(role: NonNullable<WorkerOptions["conversationRole"]>): string {
-	if (role === "character-actor" || role === "environment-writer") {
+	if (role === "character-actor" || role === "environment-writer" || role === "character-describer" || role === "object-describer" || role === "scene-describer") {
 		return "";
 	}
-	return "You are an ArcVellum role worker. Follow the supplied role contract exactly. You have no tools and no project write access. Return only the requested answer payload.";
+	return defaultConversationProfile.trim();
 }
 
 export function conversationMessages(role: NonNullable<WorkerOptions["conversationRole"]>, prompt: string): string[] {
+	if (role === "default") return [defaultConversationEnvelope(prompt)?.prompt ?? prompt];
 	if (role === "environment-writer") {
 		let payload: unknown;
 		try { payload = JSON.parse(prompt); } catch { return [prompt]; }
@@ -199,6 +213,17 @@ export function conversationMessages(role: NonNullable<WorkerOptions["conversati
 		throw new Error("character actor requires initialization and subsequent nonempty messages");
 	}
 	return payload.messages as string[];
+}
+
+function defaultConversationEnvelope(prompt: string): { systemPrompt: string; prompt: string } | null {
+	let payload: unknown;
+	try { payload = JSON.parse(prompt); } catch { return null; }
+	if (!isRecord(payload) || payload.schema !== "arcvellum/default-conversation/v1") return null;
+	if (typeof payload.system_prompt !== "string" || !payload.system_prompt.trim()
+		|| typeof payload.prompt !== "string" || !payload.prompt.trim()) {
+		throw new Error("default conversation requires system prompt and user prompt");
+	}
+	return { systemPrompt: payload.system_prompt, prompt: payload.prompt };
 }
 
 function emptyState(): WorkerState {

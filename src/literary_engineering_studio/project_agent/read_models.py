@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .contracts import ProjectAgentDependencies
+from .formal_output_state import has_unmigrated_formal_work
 from .scope import registered_work_rows, work_id_for_root, work_reference
 from .story_brief import build_story_brief
 
@@ -141,12 +142,15 @@ def dependencies_from_read_models(
         decision_payload = choices(root) if choices is not None else {}
         decisions = _items(_mapping(decision_payload).get("choices"), 12)
         classification, recoverable, recommendation = _diagnosis(run, decisions, agent_status)
+        plan_alignment = _plan_source_alignment(root)
         return _fit_payload({
             "work_id": work_id_for_root(root),
             "focus": str(arguments.get("focus") or ""),
             "classification": classification,
             "recoverable": recoverable,
             "recommended_tool": recommendation,
+            "plan_alignment": plan_alignment,
+            "unmigrated_formal_work": has_unmigrated_formal_work(root),
             "run": run,
             "pending_decisions": decisions,
             "next_actions": _items(dashboard.get("next_actions"), 12),
@@ -209,6 +213,28 @@ def _diagnosis(
     if status in {"paused", "blocked", "runtime_failed", "cancelled", "stopped"}:
         return "recoverable_stop", True, "project_goal_manage"
     return "not_started", True, "project_goal_manage"
+
+
+def _plan_source_alignment(root: Path) -> dict[str, str]:
+    project_path = root / "project.yaml"
+    plan_path = root / "plot" / "lean_project_plan.json"
+    result = {"status": "unavailable", "compared_source": "project.yaml"}
+    if not project_path.is_file() or not plan_path.is_file():
+        return result
+    try:
+        current_digest = hashlib.sha256(project_path.read_bytes()).hexdigest()
+        plan = json.loads(plan_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {**result, "status": "unreadable"}
+    if not isinstance(plan, dict) or not isinstance(plan.get("scenes"), list):
+        return {**result, "status": "invalid_plan"}
+    planned_digest = str(plan.get("project_digest") or "")
+    return {
+        "status": "aligned" if current_digest == planned_digest else "stale",
+        "compared_source": "project.yaml",
+        "current_digest": current_digest,
+        "planned_digest": planned_digest,
+    }
 
 
 def _search_value(
@@ -285,7 +311,7 @@ def _latest_formal_scene(root: Path) -> dict[str, Any]:
 def _style_version_page(payload: Mapping[str, Any], arguments: Mapping[str, Any]) -> dict[str, Any]:
     rows = payload.get("versions") if isinstance(payload.get("versions"), list) else []
     offset = max(0, int(arguments.get("offset") or 0))
-    fields = ("style_id", "version_id", "content_hash", "state", "author_id", "profile_id", "mounted")
+    fields = ("style_id", "display_name", "version_id", "content_hash", "state", "author_id", "profile_id", "mounted")
     return {
         "schema": payload.get("schema"), "revision": payload.get("revision"),
         "count": len(rows), "offset": offset, "has_more": offset + 40 < len(rows),

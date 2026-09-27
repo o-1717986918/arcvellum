@@ -23,8 +23,8 @@ describe("frontend feature boundaries", () => {
     expect(offenders).toEqual([]);
   });
 
-  it("provides semantic clients for every M6 core feature", () => {
-    const required = ["advisor", "delivery", "orrery", "projects", "quality", "settings", "workflow"];
+  it("provides semantic clients for every mounted core feature", () => {
+    const required = ["creative-live", "delivery", "orrery", "project-agent", "projects", "quality", "settings", "workflow"];
     const missing = required.filter((name) => {
       const folder = join(sourceRoot, "features", name, "services");
       try {

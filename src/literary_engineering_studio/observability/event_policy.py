@@ -41,15 +41,10 @@ def classify_runtime_event(event: str) -> EventDurability:
     )
 
 
-def should_persist_runtime_event(event: str) -> bool:
-    return classify_runtime_event(event) is EventDurability.DURABLE
-
-
 __all__ = [
     "EPHEMERAL_RUNTIME_EVENTS",
     "EventDurability",
     "canonical_runtime_event",
     "classify_runtime_event",
     "is_ephemeral_runtime_event",
-    "should_persist_runtime_event",
 ]

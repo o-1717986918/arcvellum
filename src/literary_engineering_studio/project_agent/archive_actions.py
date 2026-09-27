@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Any
 
 from ..application.assets.contracts import OwnerAssetCreation, OwnerOverrideTransaction, SemanticReview
+from ..application.assets.owner_transactions import AssetVersionConflictError
+from ..application.lean_assets import lean_asset_alignment
 from .action_receipts import action_receipt
 
 
@@ -24,15 +26,18 @@ def archive_read_action(archive: Any):
                 "groups": [{key: value for key, value in group.items() if key != "items"}
                            for group in tree["groups"]],
             }
-        if section == "creation_options":
-            return archive.creation.options(root)
+        if section in {"creation_options", "plan_alignment"}:
+            return _catalog_section(archive, root, section)
         if section == "recycle_bin":
             payload = archive.projections.recycle_bin(root)
             items = payload["items"]
             return {**payload, "items": items[offset:offset + 30], "offset": offset,
                     "has_more": offset + 30 < len(items)}
         if not asset_id:
-            raise ValueError("project_archive_read requires asset_id for detail or history")
+            raise ValueError("project_archive_read requires asset_id for detail, fields, or history")
+        if section == "fields":
+            asset = archive.loader.load(root, asset_id)
+            return archive.structured_editor.project(root, asset_id, asset.content)
         if section == "history":
             payload = archive.projections.history(root, asset_id)
             transactions, revisions = payload["transactions"], payload["revisions"]
@@ -55,6 +60,10 @@ def archive_read_action(archive: Any):
     return read
 
 
+def _catalog_section(archive: Any, root: Path, section: str) -> Mapping[str, Any]:
+    return archive.creation.options(root) if section == "creation_options" else lean_asset_alignment(root)
+
+
 def archive_change_action(archive: Any, invalidate_project: Any | None = None):
     def change(root: Path, arguments: Mapping[str, Any]) -> Mapping[str, Any]:
         operation = str(arguments.get("operation") or "").strip().lower()
@@ -64,6 +73,8 @@ def archive_change_action(archive: Any, invalidate_project: Any | None = None):
             raise ValueError("project_archive_change requires an explanatory reason")
         if operation == "create":
             asset_id, receipt = _create_asset(archive, root, arguments, reason)
+        elif operation == "fields":
+            receipt = _change_fields(archive, root, asset_id, arguments, reason)
         elif operation == "replace":
             definition, _ = archive.registry.parse_asset_id(asset_id)
             transaction = OwnerOverrideTransaction.create(
@@ -81,7 +92,7 @@ def archive_change_action(archive: Any, invalidate_project: Any | None = None):
                 root, asset_id, entry_id=str(arguments.get("entry_id") or ""), reason=reason,
             )
         else:
-            raise ValueError("project_archive_change operation must be create, replace, archive, or restore")
+            raise ValueError("project_archive_change operation must be create, fields, replace, archive, or restore")
         if invalidate_project is not None:
             invalidate_project(root, "project-agent-archive")
         return {
@@ -103,6 +114,27 @@ def _create_asset(archive: Any, root: Path, arguments: Mapping[str, Any], reason
     preview = archive.creation.preview(root, creation)
     receipt = archive.creation.create(root, creation, preview_digest=str(preview["preview_digest"]))
     return asset_id, receipt
+
+
+def _change_fields(
+    archive: Any, root: Path, asset_id: str, arguments: Mapping[str, Any], reason: str,
+) -> Mapping[str, Any]:
+    fields = arguments.get("fields")
+    if not isinstance(fields, Mapping) or not fields:
+        raise ValueError("project_archive_change fields requires a nonempty field mapping")
+    asset = archive.loader.load(root, asset_id)
+    base_revision = str(arguments.get("base_revision") or "")
+    if asset.revision != base_revision:
+        raise AssetVersionConflictError("archive asset changed after this editor revision was opened")
+    rendered = archive.structured_editor.render(
+        root, asset_id, asset.content, asset.revision, fields,
+    )
+    transaction = OwnerOverrideTransaction.create(
+        asset_id=asset_id, asset_type=asset.asset_type,
+        base_revision=base_revision, content=str(rendered["content"]),
+        semantic_review=SemanticReview.WAIVED, reason=reason,
+    )
+    return archive.transactions.commit(root, transaction)
 
 
 def _content(arguments: Mapping[str, Any]) -> str:

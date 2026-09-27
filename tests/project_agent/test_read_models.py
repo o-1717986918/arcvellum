@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 import tempfile
 
-from literary_engineering_studio.project_agent.read_models import _fit_payload, dependencies_from_read_models
+from literary_engineering_studio.project_agent.read_models import _fit_payload, _style_version_page, dependencies_from_read_models
 from literary_engineering_studio.project_agent.scope import work_id_for_root
 
 
@@ -191,6 +191,59 @@ class ProjectAgentReadModelTests(unittest.TestCase):
         self.assertEqual(result["classification"], "decision_required")
         self.assertFalse(result["recoverable"])
         self.assertEqual(result["recommended_tool"], "project_decision_resolve")
+
+    def test_diagnose_does_not_call_a_planned_scene_unmigrated_formal_work(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            scene = root / "scenes" / "scene_0001.yaml"
+            scene.parent.mkdir()
+            scene.write_text("scene_id: scene_0001\n", encoding="utf-8")
+
+            self.assertFalse(self.dependencies.project_diagnose(root, {})["unmigrated_formal_work"])
+
+            prose = root / "drafts" / "scenes" / "scene_0001.md"
+            prose.parent.mkdir(parents=True)
+            prose.write_text("旧正文", encoding="utf-8")
+            self.assertTrue(self.dependencies.project_diagnose(root, {})["unmigrated_formal_work"])
+
+    def test_diagnose_compares_only_project_yaml_with_planning_digest(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            project = root / "project.yaml"
+            project.write_text("title: 文学少女\n", encoding="utf-8")
+            plan = root / "plot" / "lean_project_plan.json"
+            plan.parent.mkdir()
+            plan.write_text(json.dumps({
+                "project_digest": hashlib.sha256(project.read_bytes()).hexdigest(),
+                "scenes": [],
+            }), encoding="utf-8")
+            (root / "characters").mkdir()
+            (root / "characters" / "hero.yaml").write_text(
+                "name: 新性格\n", encoding="utf-8",
+            )
+
+            aligned = self.dependencies.project_diagnose(root, {})
+            self.assertEqual(aligned["plan_alignment"]["status"], "aligned")
+            self.assertEqual(aligned["plan_alignment"]["compared_source"], "project.yaml")
+
+            project.write_text("title: 文学少女\ngenre: 奇幻\n", encoding="utf-8")
+            stale = self.dependencies.project_diagnose(root, {})
+            self.assertEqual(stale["plan_alignment"]["status"], "stale")
+            self.assertNotEqual(
+                stale["plan_alignment"]["current_digest"],
+                stale["plan_alignment"]["planned_digest"],
+            )
+
+    def test_style_catalog_exposes_display_name_instead_of_only_legacy_id(self):
+        result = _style_version_page({
+            "versions": [{
+                "style_id": "arcvellum-clear-plain-prose",
+                "display_name": "弹性叙事",
+                "version_id": "v1",
+                "mounted": True,
+            }],
+        }, {})
+        self.assertEqual(result["versions"][0]["display_name"], "弹性叙事")
 
 
 def _root():

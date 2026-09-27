@@ -27,9 +27,6 @@ from literary_engineering_studio.runtimes.pi_scene_transaction import (
     render_scene_review_prompt,
 )
 from literary_engineering_studio.runtimes.pi_scene_payload import _answer_payload
-from literary_engineering_studio.runtimes.scene_length_completion import (
-    render_scene_length_completion_prompt,
-)
 from literary_engineering_studio_engine.literary.scene.transaction import (
     ChangeProposal,
     CreativeResult,
@@ -146,15 +143,18 @@ class LeanKernelV2PiRuntimeTests(unittest.TestCase):
         self.assertIn("逐字沿用已确定的人名、日期、年份、数量和时间差", prompt)
         self.assertIn("逐字沿用已确定的人名、日期、年份、数量和时间差", prompt)
         self.assertIn("实现 SceneBrief 的 objective、participants、scene_function 与 incoming_handoff", prompt)
-        self.assertIn("人物正在渴望、回避或误解什么", prompt)
-        self.assertIn("不同的人在不同关系里会换声调", prompt)
+        self.assertIn("人物的渴望、回避、误解", prompt)
+        self.assertIn("不同的人在不同关系里可以换声调", prompt)
         self.assertIn("核对破折号", prompt)
         self.assertIn("Style Reference Priority", prompt)
         self.assertIn("若资料中有文风参考，借用与本场相关的表达机制", prompt)
-        self.assertIn("## Literary Rendering", prompt)
-        self.assertIn("让引语、心理和环境跟着人物的注意力自然交织", prompt)
-        self.assertIn("对白可以绕路", prompt)
-        self.assertIn("以眼前小说的阅读效果决定篇幅和次序", prompt)
+        self.assertIn("## Editable Literary Guidance", prompt)
+        self.assertIn("让人物、视角心理、环境与对白随本场意图交织", prompt)
+        self.assertIn("留白与误导要有读者可以回看的线索", prompt)
+        self.assertIn("若短场、突停或留白更有效", prompt)
+        customized = render_scene_create_prompt(_brief(), literary_guidance="写成冷静的日常，不点破误会。")
+        self.assertIn("写成冷静的日常，不点破误会。", customized)
+        self.assertNotIn("可以推进外部情节，也可以停留于日常", customized)
         self.assertIn("新增精确数字默认不用", prompt)
         self.assertIn("“一个又一个”“一次次”等虚指反复并非精确计数", prompt)
         self.assertIn("当场问答、人物选择或谈判", prompt)
@@ -168,22 +168,6 @@ class LeanKernelV2PiRuntimeTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "text after its JSON object"):
             _answer_payload('{"scene_id":"scene_0001"},"actor_prompts":{}')
 
-    def test_length_completion_preserves_expression_and_stops_after_evidence(self) -> None:
-        prompt = render_scene_length_completion_prompt(
-            _brief(), "她把信压在杯底。\n\n妹妹仍站在门边。", 420
-        )
-
-        self.assertIn("沿用已有正文的叙述距离与声音", prompt)
-        self.assertIn("让语言随感受变化而舒展", prompt)
-        self.assertIn("动作、意象、对白或物证已经传意时停笔", prompt)
-        self.assertNotIn("不追加解释性尾句", prompt)
-        owned = render_scene_length_completion_prompt(
-            _brief(), "妹妹仍站在门边。", 420, actor_owned=True,
-            performance_material_block="一级素材：她没有说话，但怕他离开。",
-        )
-        self.assertIn("同一份一级角色与环境素材", owned)
-        self.assertIn("一级素材：她没有说话", owned)
-        self.assertIn("当前视角内展开未出口的心理", owned)
 
     def test_review_treats_hard_continuity_conflicts_as_revision(self) -> None:
         result = CreativeResult("第一版正文。", "初稿", SceneDelta())
@@ -287,25 +271,23 @@ class LeanKernelV2PiRuntimeTests(unittest.TestCase):
         )
 
         self.assertIn('"character/protagonist"', create)
-        self.assertIn("EMOTION_ARC / EMOTION_CONTRADICTION / EMOTION_RESIDUE", create)
+        self.assertIn("情绪主轴可借助欲望、身体感受", create)
         self.assertIn("只能逐字选自 Allowed Existing Refs", create)
         self.assertIn("Existing SceneDelta", revision)
         self.assertIn("情绪修订轴", revision)
         self.assertIn("invented-id", revision)
         self.assertIn("不得保留空对象", revision)
-        self.assertIn("让修订首先服务人物、情绪和整场叙事的生长", revision)
+        self.assertIn("你是本场原主创", revision)
         with_materials = render_scene_create_prompt(brief, performance_material_block="一级角色素材")
         self.assertIn("让对话对象、回应的前因及关系后果", with_materials)
-        self.assertIn("人物正在渴望、回避或误解什么", create)
+        self.assertIn("人物的渴望、回避、误解", create)
         self.assertIn("既有变化组的 target_ref 只能逐字选自 Allowed Existing Refs", revision)
-        self.assertIn("亲自写出下一版完整小说", revision)
-        self.assertIn("一级角色 entries 是可取舍的第一手素材", revision)
+        self.assertIn("只重写确有阅读损害之处", revision)
+        self.assertIn("角色候选可取舍、改写或续演", revision)
         self.assertIn("保留候选中有效的语言运动", revision)
         self.assertIn("新增精确数字默认不用", revision)
         self.assertIn("不要求五项同时成立", revision)
-        self.assertIn("也可以重排场景、拓展心理与环境、改写对白的走向", revision)
-        self.assertIn("主创可改写和补写言行", revision)
-        self.assertIn("人物问答应有可辨认的对象与前因", revision)
+        self.assertIn("可以重排场景、拓展心理与环境、改写对白走向", revision)
         self.assertGreater(revision.rfind("## Final Prose Pass"), revision.rfind("## Output"))
 
     def test_first_level_materials_reach_create_completion_and_revision(self) -> None:
@@ -318,27 +300,19 @@ class LeanKernelV2PiRuntimeTests(unittest.TestCase):
             )
             marker = ('角色素材：妹妹没说出口的恐惧；唯一对白是信是我拿的。\n'
                       '{"actor_entries":[{"speaker":"character/protagonist","spoken":"信是我拿的。"}]}')
-            with patch("literary_engineering_studio.runtimes.pi_scene_transaction.scene_performance_materials", return_value=marker):
-                result = runtime.create_scene("tx-owned", _brief())
+            result = runtime.create_scene("tx-owned", _brief())
             runtime.review_scene("tx-owned", _brief(), result, VerificationReport("scene_0001", 20))
             runtime.revise_scene(
                 "tx-owned", _brief(), result, VerificationReport("scene_0001", 20), None, attempt=1,
             )
             self.assertEqual(len(list((root / ".studio" / "scene-transactions" / "tx-owned")
-                              .glob("revision_result_1_director_v1_*.json"))), 1)
+                              .glob("revision_result_1_prompt_v5_*.json"))), 1)
             prompts = [prompt for _, prompt in gateway.calls
                        if not prompt.startswith("# First-Level Visible Action Source Audit")]
-            self.assertNotIn(marker, prompts[0])
-            self.assertIn('"spoken":"信是我拿的。"', prompts[0])
-            self.assertIn("按轮次排列的角色言行", prompts[0])
-            self.assertIn(marker, prompts[1])
-            self.assertIn('"spoken":"信是我拿的。"', prompts[-2])
-            self.assertNotIn("角色素材：妹妹没说出口的恐惧", prompts[-2])
-            self.assertIn("主创可以为因果衔接和文学效果补写必要言行", prompts[-2])
-            self.assertIn('"spoken":"信是我拿的。"', prompts[-1])
-            self.assertIn("Original First-Level Character And Environment Materials", prompts[-1])
-            self.assertIn("主创可改写和补写言行", prompts[-1])
-            self.assertIn("一级角色 entries 是可取舍的第一手素材", prompts[-1])
+            self.assertEqual(len(prompts), 3)
+            self.assertTrue(all(marker not in prompt for prompt in prompts))
+            self.assertIn("Working Literary Intent", prompts[0])
+            self.assertIn("未启用一级角色素材", prompts[1])
 
     def test_revision_does_not_invent_missing_first_level_source(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -386,13 +360,13 @@ class LeanKernelV2PiRuntimeTests(unittest.TestCase):
             second = runtime.create_scene("tx-1", brief)
 
             self.assertEqual(first, second)
-            self.assertEqual(len(gateway.calls), 2)
+            self.assertEqual(len(gateway.calls), 1)
             self.assertIn("人物怕失去妹妹的信任", gateway.calls[0][1])
             self.assertIn("R25：结尾以行动落定。", gateway.calls[0][1])
             self.assertNotIn("不应读取", gateway.calls[0][1])
-            self.assertEqual(runtime.metrics.provider_calls, 2)
+            self.assertEqual(runtime.metrics.provider_calls, 1)
             self.assertEqual(runtime.metrics.cache_hits, 1)
-            self.assertGreaterEqual(len(first.prose), 600)
+            self.assertLess(len(first.prose), 600)
             self.assertEqual(
                 first.scene_delta.character_changes[0].attributes,
                 (("trust", "lower"),),
@@ -432,7 +406,7 @@ class LeanKernelV2PiRuntimeTests(unittest.TestCase):
             committed = service.commit(transaction.transaction_id)
 
             self.assertEqual(committed.status, SceneTransactionStatus.COMMITTED)
-            self.assertEqual([call[0] for call in gateway.calls], ["worker", "worker", "reviewer"])
+            self.assertEqual([call[0] for call in gateway.calls], ["worker", "reviewer"])
 
     def test_review_cache_is_bound_to_the_exact_candidate(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

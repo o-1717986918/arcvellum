@@ -9,6 +9,7 @@ except ImportError:  # pragma: no cover
     TestClient = None
 
 from literary_engineering_studio.api_server import create_app
+from literary_engineering_studio.api.models import ProjectAgentTurnRequest
 from literary_engineering_studio.config import default_config
 from literary_engineering_studio.project_agent import ProjectAgentDependencies, ProjectAgentTurnResult
 
@@ -28,6 +29,9 @@ class _Runtime:
 
 @unittest.skipIf(TestClient is None, "FastAPI test dependencies are not installed")
 class ProjectAgentApiTests(unittest.TestCase):
+    def test_default_turn_timeout_covers_long_project_planning(self):
+        self.assertEqual(ProjectAgentTurnRequest(message="重排未写场景").timeout, 4200)
+
     def test_workspace_session_and_queued_turn_stop_without_a_selected_work(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

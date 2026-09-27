@@ -16,6 +16,9 @@ from .sandbox import SandboxManifest, stage_task, update_run_manifest
 def worker_execution_config(config: Mapping[str, Any], runtime_id: str) -> dict[str, Any]:
     worker = config.get("worker")
     settings = dict(worker) if isinstance(worker, Mapping) else {}
+    application = config.get("application")
+    if isinstance(application, Mapping) and application.get("data_root"):
+        settings["prompt_registry_data_root"] = str(application["data_root"])
     if runtime_id == "pi-worker":
         settings["selected_thinking"] = get_pi_thinking_preferences(dict(config))["creative"]
     return settings
@@ -57,7 +60,10 @@ def _mapping(value: object) -> Mapping[str, Any]:
 
 
 def prompt_program_settings(worker_config: Mapping[str, Any]) -> Mapping[str, Any]:
-    return _mapping(worker_config.get("prompt_program"))
+    settings = dict(_mapping(worker_config.get("prompt_program")))
+    if worker_config.get("prompt_registry_data_root"):
+        settings["registry_data_root"] = str(worker_config["prompt_registry_data_root"])
+    return settings
 
 
 def persist_initial_execution_profile(

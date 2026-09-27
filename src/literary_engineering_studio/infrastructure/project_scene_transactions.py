@@ -248,11 +248,13 @@ def _source_refs(root: Path, facts: SceneFacts) -> tuple[str, ...]:
     previous = _previous_scene_id(root, facts)
     if previous and (root / f"drafts/scenes/{previous}.md").is_file():
         refs.append(f"drafts/scenes/{previous}.md")
+    if previous:
+        _append_existing(refs, root, f"workflow/scene_deltas/{previous}.json")
+    _append_existing(refs, root, "workflow/continuity/current.json")
+    refs.extend(reference for reference in _CORE_CANON if (root / reference).is_file())
     _append_existing(refs, root, _USER_DIRECTIONS)
     refs.extend(_character_sources(root, facts.participants))
     refs.extend(reference for reference in facts.canon_refs if _safe_file(root, reference))
-    refs.extend(reference for reference in _CORE_CANON if (root / reference).is_file())
-    _append_existing(refs, root, "workflow/continuity/current.json")
     refs.extend(_rel(path, root) for path in active_style_evidence_paths(root))
     for reference in (
         "plot/rhythm_plan.json",
@@ -262,12 +264,7 @@ def _source_refs(root: Path, facts: SceneFacts) -> tuple[str, ...]:
         if reference and (root / reference).is_file():
             refs.append(reference)
     if previous:
-        for reference in (
-            f"workflow/scene_deltas/{previous}.json",
-            f"workflow/scene_commits/{previous}.json",
-        ):
-            if (root / reference).is_file():
-                refs.append(reference)
+        _append_existing(refs, root, f"workflow/scene_commits/{previous}.json")
     return tuple(dict.fromkeys(refs))
 
 

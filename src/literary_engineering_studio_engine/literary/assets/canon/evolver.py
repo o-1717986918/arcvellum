@@ -514,11 +514,6 @@ def _render_apply_report(payload: dict[str, Any], root: Path) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _append_changelog(changelog: Path, patch_id: str, patch_payload: dict[str, Any], apply_payload: dict[str, Any]) -> None:
-    previous = changelog.read_text(encoding="utf-8") if changelog.exists() else "# Canon Change Log\n\n"
-    atomic_write_batch({changelog: previous.rstrip() + "\n\n" + _render_changelog_entry(patch_id, patch_payload, apply_payload)})
-
-
 def _render_changelog_entry(patch_id: str, patch_payload: dict[str, Any], apply_payload: dict[str, Any]) -> str:
     lines = [
         f"## {patch_id}",

@@ -232,3 +232,5 @@ class ProjectAgentActionDependencies:
     update_actor_persona: ProjectAction | None = None
     archive_change: ProjectAction | None = None
     owner_style_write: ProjectAction | None = None
+    reconcile_assets: ProjectAction | None = None
+    prepare_plan: ProjectAction | None = None

@@ -192,6 +192,42 @@ describe("Project Agent bridge protocol", () => {
 		expect(calls).toEqual(["project_style_versions", "project_archive_read", "project_owner_style_write"]);
 	});
 
+	it("passes archive field edits through the project tool bridge", async () => {
+		const faux = createFauxCore({
+			provider: "arcvellum-faux-fields",
+			models: [{ id: "project-agent-fields", reasoning: false }],
+		});
+		faux.setResponses([
+			fauxAssistantMessage(fauxToolCall("project_archive_read", {
+				section: "fields", asset_id: "character:lin",
+			}), { stopReason: "toolUse" }),
+			fauxAssistantMessage(fauxToolCall("project_archive_change", {
+				operation: "fields", asset_id: "character:lin",
+				base_revision: "sha256:old", fields: { background_story: { origin: "海边" } },
+				reason: "补足人物来历与当前选择之间的联系。",
+			}), { stopReason: "toolUse" }),
+			fauxAssistantMessage("人物背景已更新。"),
+		]);
+		const calls: string[] = [];
+		let bridge: ProjectToolBridge;
+		const write = (value: BridgeEnvelope) => {
+			if (value.type !== "tool.call") return;
+			calls.push(String(value.payload.name));
+			queueMicrotask(() => bridge.receive(envelope("tool.result", "turn-fields", {
+				request_id: value.payload.request_id, name: value.payload.name,
+				ok: true, result: { ok: true },
+			})));
+		};
+		bridge = new ProjectToolBridge("turn-fields", write, 1_000);
+		const result = await runProjectAgentTurn({
+			sessionId: "session-fields", turnId: "turn-fields", prompt: "补全人物背景。",
+			systemPrompt: "使用注册档案字段。",
+			allowedTools: ["project_archive_read", "project_archive_change"],
+		}, { model: faux.getModel(), streamFn: faux.streamSimple }, bridge, write);
+		expect(result.status).toBe("completed");
+		expect(calls).toEqual(["project_archive_read", "project_archive_change"]);
+	});
+
 	it("rejects timed out and cancelled tool requests without leaking pending calls", async () => {
 		const timed = new ProjectToolBridge("turn-timeout", () => undefined, 5);
 		await expect(timed.request("project_overview", {})).rejects.toThrow("timed out");
@@ -202,6 +238,62 @@ describe("Project Agent bridge protocol", () => {
 		waiting.cancel("turn cancelled");
 		await expect(request).rejects.toMatchObject({ name: "AbortError" });
 		expect(waiting.pendingCount).toBe(0);
+	});
+
+	it("keeps a planning tool pending beyond the ordinary tool deadline", async () => {
+		let bridge: ProjectToolBridge;
+		const write = (value: BridgeEnvelope) => {
+			if (value.type !== "tool.call") return;
+			setTimeout(() => bridge.receive(envelope("tool.result", "turn-plan", {
+				request_id: value.payload.request_id,
+				name: value.payload.name,
+				ok: true,
+				result: { committed_prefix_count: 5, future_scene_count: 51 },
+			})), 30);
+		};
+		bridge = new ProjectToolBridge("turn-plan", write, 5, 100);
+		await expect(bridge.request("project_future_replan", {})).resolves.toMatchObject({
+			committed_prefix_count: 5,
+		});
+		expect(bridge.pendingCount).toBe(0);
+		await expect(bridge.request("project_planning_prepare", {})).resolves.toMatchObject({
+			future_scene_count: 51,
+		});
+		expect(bridge.pendingCount).toBe(0);
+	});
+
+	it("allows the Agent to inspect alignment and run the standard asset route", async () => {
+		const faux = createFauxCore({
+			provider: "arcvellum-faux-asset-reconcile",
+			models: [{ id: "project-agent-asset-reconcile", reasoning: false }],
+		});
+		faux.setResponses([
+			fauxAssistantMessage(fauxToolCall("project_archive_read", {
+				section: "plan_alignment",
+			}), { stopReason: "toolUse" }),
+			fauxAssistantMessage(fauxToolCall("project_assets_reconcile", {
+				asset_id: "character:lin", reason: "补齐规划内缺失的人物档案。",
+			}), { stopReason: "toolUse" }),
+			fauxAssistantMessage("人物档案已补齐。"),
+		]);
+		const calls: string[] = [];
+		let bridge: ProjectToolBridge;
+		const write = (value: BridgeEnvelope) => {
+			if (value.type !== "tool.call") return;
+			calls.push(String(value.payload.name));
+			setTimeout(() => bridge.receive(envelope("tool.result", "turn-reconcile", {
+				request_id: value.payload.request_id, name: value.payload.name,
+				ok: true, result: { ok: true },
+			})), value.payload.name === "project_assets_reconcile" ? 30 : 0);
+		};
+		bridge = new ProjectToolBridge("turn-reconcile", write, 5, 100);
+		const result = await runProjectAgentTurn({
+			sessionId: "session-reconcile", turnId: "turn-reconcile", prompt: "补齐规划档案。",
+			systemPrompt: "先检查身份匹配。",
+			allowedTools: ["project_archive_read", "project_assets_reconcile"],
+		}, { model: faux.getModel(), streamFn: faux.streamSimple }, bridge, write);
+		expect(result.status).toBe("completed");
+		expect(calls).toEqual(["project_archive_read", "project_assets_reconcile"]);
 	});
 
 	it("exposes search and creation observation as separate bounded tools", async () => {

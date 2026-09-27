@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 import tempfile
 import unittest
@@ -10,6 +11,7 @@ from literary_engineering_studio.infrastructure.project_scene_transactions impor
     ProjectSceneBriefProvider,
     known_scene_refs,
 )
+from literary_engineering_studio.runtimes.scene_source_evidence import scene_source_evidence
 from literary_engineering_studio_engine.literary.scene.transaction import (
     ChangeProposal,
     ReviewDecision,
@@ -87,6 +89,30 @@ def _plan(prepared, transaction_id="tx-1") -> SceneCommitPlan:
 
 
 class LeanProjectAdapterTests(unittest.TestCase):
+    def test_next_scene_sees_committed_reader_questions_without_promoting_candidates(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _project(root)
+            first = ProjectSceneBriefProvider().prepare(root, "scene_0001", SceneExecutionMode.STANDARD)
+            plan = _plan(first)
+            plan = replace(plan, scene_delta=replace(plan.scene_delta,
+                reader_question_updates=(ChangeProposal("question/ferry", "是谁先解开了船绳", "阿禾看到松开的绳结"),),
+                promise_updates=(ChangeProposal("promise/ferry", "阿禾仍想履约", "她等到潮退"),),
+            ))
+            AtomicProjectSceneCommitter(root).commit(plan)
+            (root / "scenes/scene_0002.yaml").write_text(
+                "scene_id: scene_0002\nchapter_id: chapter_01\nscene_goal: 追查失约原因\n"
+                "participants: [阿禾]\nlocation: 渡口\nviewpoint: 阿禾\n"
+                "word_count_target: 900\nword_count_min: 700\nword_count_max: 1200\n", encoding="utf-8")
+            second = ProjectSceneBriefProvider().prepare(root, "scene_0002", SceneExecutionMode.STANDARD)
+            evidence = scene_source_evidence(root, second.brief, purpose="create", indexed_style=False)
+            self.assertIn("阿禾终于站了起来", evidence)
+            self.assertIn("是谁先解开了船绳", evidence)
+            self.assertIn("阿禾仍想履约", evidence)
+            self.assertIn("渡船即将停航", second.brief.incoming_handoff)
+            self.assertIn("待确认候选", evidence)
+            self.assertIn("不等于 Canon 确认", evidence)
+
     def test_reused_identity_ref_with_different_roles_is_visible_as_a_conflict(self):
         first = SceneDelta(new_asset_candidates=(
             ChangeProposal("老周", "复核组同事", "电话中确认流程", operation="create"),

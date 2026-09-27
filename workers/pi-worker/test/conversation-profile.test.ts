@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { actorHistoryMessages, actorTurnEnvelope, conversationMessages, conversationSystemPrompt } from "../src/conversation.ts";
+import { actorHistoryMessages, actorTurnEnvelope, conversationMessages, conversationSystemPrompt, roleTurnEnvelope } from "../src/conversation.ts";
 
 describe("bounded scene performance profiles", () => {
 	it("gives the character actor no competing system prompt", () => {
@@ -37,7 +37,23 @@ describe("bounded scene performance profiles", () => {
 			.toThrow("actor turn requires");
 	});
 
+	it("initializes each describer with bounded scene history and no competing system prompt", () => {
+		for (const role of ["character-describer", "object-describer", "scene-describer"] as const) {
+			expect(conversationSystemPrompt(role)).toBe("");
+			const envelope = JSON.stringify({ schema: "arcvellum/role-conversation/v1",
+				initialization: "观察方式", initialization_answer: "",
+				history: [{ prompt: "第一轮", answer: "候选" }], prompt: "第二轮" });
+			expect(roleTurnEnvelope(envelope)?.history).toEqual([{ prompt: "第一轮", answer: "候选" }]);
+		}
+	});
+
 	it("retains the legacy conversation identity for other roles", () => {
 		expect(conversationSystemPrompt("default")).toContain("ArcVellum role worker");
+		const envelope = JSON.stringify({ schema: "arcvellum/default-conversation/v1",
+			system_prompt: conversationSystemPrompt("default"), prompt: "本轮任务" });
+		expect(conversationMessages("default", envelope)).toEqual(["本轮任务"]);
+		expect(() => conversationMessages("default", JSON.stringify({
+			schema: "arcvellum/default-conversation/v1", system_prompt: "", prompt: "本轮任务",
+		}))).toThrow("requires system prompt");
 	});
 });

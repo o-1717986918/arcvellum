@@ -56,7 +56,7 @@ def build_project_agent_router(deps: ProjectAgentRouterDependencies) -> APIRoute
                 **deps.service.start_turn(
                     session_id,
                     payload.message,
-                    timeout=max(10, min(600, payload.timeout)),
+                    timeout=max(10, min(4500, payload.timeout)),
                 ),
             }
         )

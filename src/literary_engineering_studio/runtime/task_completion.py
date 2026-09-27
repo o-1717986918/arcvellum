@@ -5,6 +5,8 @@ from __future__ import annotations
 from pathlib import PurePosixPath
 from typing import Any, Mapping, Sequence
 
+from literary_engineering_studio_engine.public.prompting import render_prompt_template
+
 from ..contracts import TaskPackage
 
 
@@ -92,31 +94,21 @@ def completion_program_fields(
         _output_line(index, item)
         for index, item in enumerate(output_rows, start=1)
         if isinstance(item, Mapping)
-    ) or "- 本任务没有 Agent 创作文件输出。"
+    ) or render_prompt_template("formal.completion.empty-output.protocol", ()).strip()
 
     pass_condition = contract.get("semantic_pass_condition")
     semantic = pass_condition if isinstance(pass_condition, Mapping) else {}
     checks = semantic.get("required_checks")
     check_rows = checks if isinstance(checks, list) else []
-    pass_lines = "\n".join(f"- `{item}`" for item in check_rows) or "- Studio 确定性预检通过。"
+    pass_lines = "\n".join(f"- `{item}`" for item in check_rows) or render_prompt_template("formal.completion.empty-checks.protocol", ()).strip()
     review_requirement = str(semantic.get("review_conclusion") or "")
-    if review_requirement == "pass":
-        pass_lines += "\n- 审查 Markdown 必须包含独占机器行：`- 结论： pass`。标题、代码字段或普通段落不能替代。"
-    elif review_requirement == "recorded":
-        pass_lines += (
-            "\n- 审查 Markdown 必须包含独占机器行：`- 结论： pass`、"
-            "`- 结论： revise_required` 或 `- 结论： reject`。标题、代码字段或普通段落不能替代。"
-        )
+    if review_requirement in {"pass", "recorded"}:
+        layer_id = f"formal.completion.{review_requirement}-conclusion.protocol"
+        pass_lines += "\n" + render_prompt_template(layer_id, ()).strip()
 
     stop = contract.get("stop_condition")
     stop_payload = stop if isinstance(stop, Mapping) else {}
-    stop_lines = "\n".join(
-        (
-            "- 所有 Agent-owned 文件写完并逐项自检后，立即把控制权交还 Studio。",
-            "- 不用聊天文本宣告完成；聊天内容不计入产物。",
-            "- 不创建或修改 Studio 托管的 completion evidence。",
-        )
-    )
+    stop_lines = render_prompt_template("formal.completion.stop.protocol", ()).strip()
     if not bool(stop_payload.get("do_not_create_completion_evidence", True)):
         stop_lines = stop_lines.rsplit("\n", 1)[0]
     return {
@@ -138,10 +130,10 @@ def _reading_lines(
     on_demand = exact if isinstance(exact, list) else []
     return "\n".join(
         [
-            *(f"- 首轮必须使用：`{item}`" for item in required),
-            *(f"- 仅在一条具体判断缺证据时按需读取：`{item}`" for item in on_demand),
+            *(render_prompt_template("formal.completion.required-read.protocol", (item,)).strip() for item in required),
+            *(render_prompt_template("formal.completion.on-demand-read.protocol", (item,)).strip() for item in on_demand),
         ]
-    ) or "- 本任务没有额外项目资料；只使用任务包内联合同。"
+    ) or render_prompt_template("formal.completion.empty-read.protocol", ()).strip()
 
 
 def _output_line(index: int, item: Mapping[str, Any]) -> str:
@@ -150,7 +142,9 @@ def _output_line(index: int, item: Mapping[str, Any]) -> str:
     output_format = str(item.get("format") or "file")
     schema_name = str(item.get("schema_name") or "")
     schema_note = f"，schema=`{schema_name}`" if schema_name else ""
-    return f"{index}. `{path}`：{kind}，{output_format}{schema_note}；必须存在、非空并通过预检。"
+    return render_prompt_template("formal.completion.output-line.protocol", (
+        index, path, kind, output_format, schema_note,
+    )).strip()
 
 
 def _review_conclusion_requirement(task: TaskPackage) -> str:

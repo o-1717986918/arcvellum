@@ -22,6 +22,81 @@ class _Gateway:
 
 
 class LeanLongformPlanningServiceTests(unittest.TestCase):
+    def test_initial_plan_preserves_an_existing_authored_scene(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "project.yaml").write_text(
+                "target_length: 6000\ntarget_chapters: 1\ntarget_scenes: 1\n",
+                encoding="utf-8",
+            )
+            scene = root / "scenes" / "scene_0001.yaml"
+            scene.parent.mkdir()
+            authored = (
+                "scene_id: scene_0001\nchapter_id: chapter_0001\n"
+                "word_count_target: 6000\nparticipants:\n- 林昭\n"
+                "scene_goal: 用户亲自确定的旧承诺交锋\n"
+            )
+            scene.write_text(authored, encoding="utf-8")
+            answer = {
+                "premise": "旧承诺使林昭欠下一笔债",
+                "central_question": "他会怎样履约？",
+                "ending_choice": "保住盟友或完成承诺",
+                "volume_obligations": ["债务变得不可撤销"],
+                "chapters": [{
+                    "title": "信件", "dramatic_turn": "承诺公开",
+                    "obligation": "建立债务", "reader_question": "谁留下信？",
+                }],
+                "first_window": [_scene("拆信")],
+            }
+            gateway = _Gateway([answer])
+            service = LeanLongformPlanningService({}, data_root=root / "data", gateway=gateway)
+            record_direction(root, "保留旧承诺的代价。")
+            record_direction(root, "保留旧承诺的代价。")
+
+            plan = service.ensure_initial(root)
+
+            self.assertEqual(len(plan["scenes"]), 1)
+            self.assertEqual(scene.read_text(encoding="utf-8"), authored)
+            self.assertTrue(longform_materialization_status(root)[0])
+            self.assertIn("用户亲自确定的旧承诺交锋", gateway.calls[0][1])
+            self.assertEqual(gateway.calls[0][1].count("保留旧承诺的代价。"), 1)
+
+    def test_existing_scene_participants_are_repaired_before_plan_write(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "project.yaml").write_text(
+                "target_length: 6000\ntarget_chapters: 1\ntarget_scenes: 1\n",
+                encoding="utf-8",
+            )
+            scene = root / "scenes" / "scene_0001.yaml"
+            scene.parent.mkdir()
+            scene.write_text(
+                "scene_id: scene_0001\nchapter_id: chapter_0001\n"
+                "word_count_target: 6000\nparticipants:\n- 林昭\n",
+                encoding="utf-8",
+            )
+            base = {
+                "premise": "旧承诺使林昭欠下一笔债",
+                "central_question": "他会怎样履约？",
+                "ending_choice": "保住盟友或完成承诺",
+                "volume_obligations": ["债务变得不可撤销"],
+                "chapters": [{
+                    "title": "信件", "dramatic_turn": "承诺公开",
+                    "obligation": "建立债务", "reader_question": "谁留下信？",
+                }],
+            }
+            gateway = _Gateway([
+                {**base, "first_window": [{**_scene("拆信"), "participants": ["路人"]}]},
+                {**base, "first_window": [_scene("拆信")]},
+            ])
+            service = LeanLongformPlanningService({}, data_root=root / "data", gateway=gateway)
+
+            service.ensure_initial(root)
+
+            self.assertEqual(len(gateway.calls), 2)
+            self.assertIn("participants are ['林昭']", gateway.calls[1][1])
+            self.assertTrue((root / "plot" / "lean_project_plan.json").is_file())
+
     def test_initial_plan_and_next_chapter_are_resumable_without_legacy_tasks(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

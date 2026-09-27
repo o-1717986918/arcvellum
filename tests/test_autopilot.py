@@ -6,7 +6,7 @@ import threading
 import unittest
 from unittest.mock import MagicMock, patch
 
-from literary_engineering_studio.autopilot import (
+from literary_engineering_studio.automation.controller import (
     AutopilotService,
     DelegationPolicy,
     ROUTE_ORDER,
@@ -30,7 +30,7 @@ from literary_engineering_studio.creative_steward import (
 from literary_engineering_studio.jobs import JobStore
 from literary_engineering_studio.project_manager import record_direction
 from literary_engineering_studio.worker import WorkerRunResult
-from literary_engineering_studio.whole_book_release import WholeBookReleaseCoordinator
+from literary_engineering_studio.projections.whole_book_release import WholeBookReleaseCoordinator
 from literary_engineering_studio_engine.projections.interaction.choice_recording import record_human_choice
 
 
@@ -565,9 +565,9 @@ class AutopilotTests(unittest.TestCase):
             service = AutopilotService({"application": {"data_root": str(root)}}, store)
 
             with (
-                patch("literary_engineering_studio.autopilot.AgentWorker", EmptyCompleteWorker),
-                patch("literary_engineering_studio.autopilot.current_choices", return_value={"choices": []}),
-                patch("literary_engineering_studio.autopilot.ROUTE_ORDER", ("longform-planning",)),
+                patch("literary_engineering_studio.automation.controller.AgentWorker", EmptyCompleteWorker),
+                patch("literary_engineering_studio.automation.controller.current_choices", return_value={"choices": []}),
+                patch("literary_engineering_studio.automation.controller.ROUTE_ORDER", ("longform-planning",)),
             ):
                 service._run(run["run_id"], threading.Event())
 
@@ -616,9 +616,9 @@ class AutopilotTests(unittest.TestCase):
             service = AutopilotService({"application": {"data_root": str(root)}}, store)
 
             with (
-                patch("literary_engineering_studio.autopilot.AgentWorker", ChurningWorker),
-                patch("literary_engineering_studio.autopilot.current_choices", return_value={"choices": []}),
-                patch("literary_engineering_studio.autopilot.ROUTE_ORDER", ("longform-planning",)),
+                patch("literary_engineering_studio.automation.controller.AgentWorker", ChurningWorker),
+                patch("literary_engineering_studio.automation.controller.current_choices", return_value={"choices": []}),
+                patch("literary_engineering_studio.automation.controller.ROUTE_ORDER", ("longform-planning",)),
             ):
                 service._run(run["run_id"], threading.Event())
 
@@ -669,10 +669,10 @@ class AutopilotTests(unittest.TestCase):
             service = AutopilotService({"application": {"data_root": str(root)}}, store)
 
             with (
-                patch("literary_engineering_studio.autopilot.AgentWorker", ProgressingWorker),
-                patch("literary_engineering_studio.autopilot.WholeBookReleaseCoordinator", FakeRelease),
-                patch("literary_engineering_studio.autopilot.current_choices", return_value={"choices": []}),
-                patch("literary_engineering_studio.autopilot.ROUTE_ORDER", ("longform-planning",)),
+                patch("literary_engineering_studio.automation.controller.AgentWorker", ProgressingWorker),
+                patch("literary_engineering_studio.automation.controller.WholeBookReleaseCoordinator", FakeRelease),
+                patch("literary_engineering_studio.automation.controller.current_choices", return_value={"choices": []}),
+                patch("literary_engineering_studio.automation.controller.ROUTE_ORDER", ("longform-planning",)),
             ):
                 service._run(run["run_id"], threading.Event())
 
@@ -815,10 +815,10 @@ class AutopilotTests(unittest.TestCase):
             service = AutopilotService({"application": {"data_root": str(root)}}, store)
 
             with (
-                patch("literary_engineering_studio.autopilot.AgentWorker", RecoveringWorker),
-                patch("literary_engineering_studio.autopilot.WholeBookReleaseCoordinator", FakeRelease),
-                patch("literary_engineering_studio.autopilot.current_choices", return_value={"choices": []}),
-                patch("literary_engineering_studio.autopilot.ROUTE_ORDER", ("longform-planning",)),
+                patch("literary_engineering_studio.automation.controller.AgentWorker", RecoveringWorker),
+                patch("literary_engineering_studio.automation.controller.WholeBookReleaseCoordinator", FakeRelease),
+                patch("literary_engineering_studio.automation.controller.current_choices", return_value={"choices": []}),
+                patch("literary_engineering_studio.automation.controller.ROUTE_ORDER", ("longform-planning",)),
             ):
                 service._run(run["run_id"], threading.Event())
 
@@ -898,10 +898,10 @@ class AutopilotTests(unittest.TestCase):
             service = AutopilotService({"application": {"data_root": str(root)}}, store)
 
             with (
-                patch("literary_engineering_studio.autopilot.AgentWorker", WritebackWorker),
-                patch("literary_engineering_studio.autopilot.WholeBookReleaseCoordinator", FakeRelease),
-                patch("literary_engineering_studio.autopilot.current_choices", return_value={"choices": []}),
-                patch("literary_engineering_studio.autopilot.ROUTE_ORDER", ("scene-development",)),
+                patch("literary_engineering_studio.automation.controller.AgentWorker", WritebackWorker),
+                patch("literary_engineering_studio.automation.controller.WholeBookReleaseCoordinator", FakeRelease),
+                patch("literary_engineering_studio.automation.controller.current_choices", return_value={"choices": []}),
+                patch("literary_engineering_studio.automation.controller.ROUTE_ORDER", ("scene-development",)),
             ):
                 service._run(run["run_id"], threading.Event())
 
@@ -950,9 +950,9 @@ class AutopilotTests(unittest.TestCase):
             service = AutopilotService({"application": {"data_root": str(root)}}, store)
 
             with (
-                patch("literary_engineering_studio.autopilot.AgentWorker", WaitingWorker),
-                patch("literary_engineering_studio.autopilot.current_choices", return_value={"choices": []}),
-                patch("literary_engineering_studio.autopilot.ROUTE_ORDER", ("longform-planning",)),
+                patch("literary_engineering_studio.automation.controller.AgentWorker", WaitingWorker),
+                patch("literary_engineering_studio.automation.controller.current_choices", return_value={"choices": []}),
+                patch("literary_engineering_studio.automation.controller.ROUTE_ORDER", ("longform-planning",)),
             ):
                 service._run(run["run_id"], threading.Event())
 
@@ -999,9 +999,9 @@ class AutopilotTests(unittest.TestCase):
             service = AutopilotService({"application": {"data_root": str(root)}}, store)
 
             with (
-                patch("literary_engineering_studio.autopilot.AgentWorker", RejectedRecoveryWorker),
-                patch("literary_engineering_studio.autopilot.current_choices", return_value={"choices": []}),
-                patch("literary_engineering_studio.autopilot.ROUTE_ORDER", ("longform-planning",)),
+                patch("literary_engineering_studio.automation.controller.AgentWorker", RejectedRecoveryWorker),
+                patch("literary_engineering_studio.automation.controller.current_choices", return_value={"choices": []}),
+                patch("literary_engineering_studio.automation.controller.ROUTE_ORDER", ("longform-planning",)),
             ):
                 service._run(run["run_id"], threading.Event())
 
@@ -1056,9 +1056,9 @@ class AutopilotTests(unittest.TestCase):
             service = AutopilotService({"application": {"data_root": str(root)}}, store)
 
             with (
-                patch("literary_engineering_studio.autopilot.AgentWorker", QuotaWorker),
-                patch("literary_engineering_studio.autopilot.current_choices", return_value={"choices": []}),
-                patch("literary_engineering_studio.autopilot.ROUTE_ORDER", ("longform-planning",)),
+                patch("literary_engineering_studio.automation.controller.AgentWorker", QuotaWorker),
+                patch("literary_engineering_studio.automation.controller.current_choices", return_value={"choices": []}),
+                patch("literary_engineering_studio.automation.controller.ROUTE_ORDER", ("longform-planning",)),
             ):
                 service._run(run["run_id"], threading.Event())
 
@@ -1161,10 +1161,10 @@ class AutopilotTests(unittest.TestCase):
             }
             service = AutopilotService({"application": {"data_root": str(root)}}, store)
             with (
-                patch("literary_engineering_studio.autopilot.AgentWorker", FakeWorker),
-                patch("literary_engineering_studio.autopilot.CreativeSteward", FakeSteward),
-                patch("literary_engineering_studio.autopilot.WholeBookReleaseCoordinator", FakeRelease),
-                patch("literary_engineering_studio.autopilot.current_choices", return_value=choices),
+                patch("literary_engineering_studio.automation.controller.AgentWorker", FakeWorker),
+                patch("literary_engineering_studio.automation.controller.CreativeSteward", FakeSteward),
+                patch("literary_engineering_studio.automation.controller.WholeBookReleaseCoordinator", FakeRelease),
+                patch("literary_engineering_studio.automation.controller.current_choices", return_value=choices),
             ):
                 service._run(run["run_id"], threading.Event())
 
@@ -1282,10 +1282,10 @@ class AutopilotTests(unittest.TestCase):
             }
             service = AutopilotService({"application": {"data_root": str(root)}}, store)
             with (
-                patch("literary_engineering_studio.autopilot.AgentWorker", FakeWorker),
-                patch("literary_engineering_studio.autopilot.CreativeSteward", FakeSteward),
-                patch("literary_engineering_studio.autopilot.WholeBookReleaseCoordinator", FakeRelease),
-                patch("literary_engineering_studio.autopilot.current_choices", return_value={"choices": [choice]}),
+                patch("literary_engineering_studio.automation.controller.AgentWorker", FakeWorker),
+                patch("literary_engineering_studio.automation.controller.CreativeSteward", FakeSteward),
+                patch("literary_engineering_studio.automation.controller.WholeBookReleaseCoordinator", FakeRelease),
+                patch("literary_engineering_studio.automation.controller.current_choices", return_value={"choices": [choice]}),
             ):
                 service._run(run["run_id"], threading.Event())
 
@@ -1455,9 +1455,9 @@ class AutopilotTests(unittest.TestCase):
             service = AutopilotService({"application": {"data_root": str(root)}}, store)
 
             with (
-                patch("literary_engineering_studio.autopilot.AgentWorker", ThreeChapterWorker),
-                patch("literary_engineering_studio.autopilot.current_choices", return_value={"choices": []}),
-                patch("literary_engineering_studio.whole_book_release.CoreBridge.route_audit", return_value=_Audit()),
+                patch("literary_engineering_studio.automation.controller.AgentWorker", ThreeChapterWorker),
+                patch("literary_engineering_studio.automation.controller.current_choices", return_value={"choices": []}),
+                patch("literary_engineering_studio.projections.whole_book_release.CoreBridge.route_audit", return_value=_Audit()),
             ):
                 service._run(run["run_id"], threading.Event())
 
@@ -1502,12 +1502,12 @@ class AutopilotTests(unittest.TestCase):
             service = AutopilotService({"application": {"data_root": str(root)}}, store)
 
             with (
-                patch("literary_engineering_studio.autopilot.AgentWorker", DependencyWorker),
-                patch("literary_engineering_studio.autopilot.WholeBookReleaseCoordinator", FakeRelease),
-                patch("literary_engineering_studio.autopilot.current_choices", return_value={"choices": []}),
-                patch("literary_engineering_studio.autopilot.ROUTE_ORDER", ("scene-development",)),
+                patch("literary_engineering_studio.automation.controller.AgentWorker", DependencyWorker),
+                patch("literary_engineering_studio.automation.controller.WholeBookReleaseCoordinator", FakeRelease),
+                patch("literary_engineering_studio.automation.controller.current_choices", return_value={"choices": []}),
+                patch("literary_engineering_studio.automation.controller.ROUTE_ORDER", ("scene-development",)),
                 patch(
-                    "literary_engineering_studio.autopilot._pending_asset_dependency",
+                    "literary_engineering_studio.automation.controller._pending_asset_dependency",
                     side_effect=[False, True, False, False],
                 ),
             ):

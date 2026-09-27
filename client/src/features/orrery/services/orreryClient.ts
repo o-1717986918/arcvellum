@@ -1,6 +1,5 @@
 import type { ApiTransport } from "@/services/api";
 import { featureTransport } from "@/services/featureTransport";
-import type { NarrativeProjection } from "@/types/api";
 import type { SpatialNarrativeProjection, SpatialNarrativeProjectionPatch, SpatialNodeDetail } from "@/types/spatial";
 
 export interface OrreryViewQuery {
@@ -18,13 +17,6 @@ export function createOrreryClient(transport: ApiTransport = featureTransport) {
     grammar: view.grammar,
   });
   return {
-    projection: (projectRoot: string, level: string, focus: string) => transport.request<NarrativeProjection>(
-      `/narrative/projection?${transport.query({ project_root: projectRoot, level, focus })}`,
-    ),
-    observeProjection: (projectRoot: string, level: string, focus: string, onProjection: (value: NarrativeProjection) => void) => transport.connect(
-      `/narrative/stream?${transport.query({ project_root: projectRoot, level, focus, interval_seconds: 2 })}`,
-      (event, data) => { if (event === "narrative.projection") onProjection(data as unknown as NarrativeProjection); },
-    ),
     spatialProjection: (view: OrreryViewQuery) => transport.request<SpatialNarrativeProjection>(`/narrative/projection/v4?${params(view)}`),
     observeSpatialProjection: (
       view: OrreryViewQuery,

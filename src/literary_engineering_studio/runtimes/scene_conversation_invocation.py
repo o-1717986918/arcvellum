@@ -17,15 +17,6 @@ def invoke_role(
                        event_sink=_observer(event_sink, transaction_id)).answer
 
 
-def invoke_role_sequence(
-    gateway: RoleConversationGateway, project_root: Path, timeout: int,
-    event_sink: Callable[[str, dict[str, Any]], None] | None, transaction_id: str,
-    messages: tuple[str, ...], role: str,
-) -> str:
-    return gateway.run_sequence(project_root, messages, role=role, timeout=timeout,
-                                event_sink=_observer(event_sink, transaction_id)).answer
-
-
 def invoke_actor_turn(
     gateway: RoleConversationGateway, project_root: Path, timeout: int,
     event_sink: Callable[[str, dict[str, Any]], None] | None, transaction_id: str,
@@ -40,6 +31,18 @@ def invoke_actor_turn(
     return response.answer, response.initialization_answer
 
 
+def invoke_initialized_role_turn(
+    gateway: RoleConversationGateway, project_root: Path, timeout: int,
+    event_sink: Callable[[str, dict[str, Any]], None] | None, transaction_id: str,
+    role: str, initialization: str, history: tuple[tuple[str, str], ...], prompt: str,
+) -> tuple[str, str]:
+    response = gateway.run_role_turn(
+        project_root, role=role, initialization=initialization, history=history,
+        prompt=prompt, timeout=timeout, event_sink=_observer(event_sink, transaction_id),
+    )
+    return response.answer, response.initialization_answer
+
+
 def _observer(
     sink: Callable[[str, dict[str, Any]], None] | None, transaction_id: str,
 ) -> Callable[[str, dict[str, Any]], None] | None:
@@ -48,4 +51,4 @@ def _observer(
     return lambda event, data: sink(event, {**data, "scene_transaction_id": transaction_id})
 
 
-__all__ = ["invoke_role", "invoke_role_sequence", "invoke_actor_turn"]
+__all__ = ["invoke_role", "invoke_actor_turn", "invoke_initialized_role_turn"]

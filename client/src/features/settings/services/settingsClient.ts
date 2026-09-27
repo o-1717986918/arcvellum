@@ -8,6 +8,15 @@ export interface ThinkingPreferences { creative: ThinkingLevel; project: Thinkin
 interface ThinkingResponse { ok: boolean; preferences: ThinkingPreferences }
 export interface ScenePerformancePreferences { enabled: boolean; max_actor_calls: number }
 interface ScenePerformanceResponse { ok: boolean; preferences: ScenePerformancePreferences }
+export interface PromptLayerSummary {
+  layer_id: string; responsibility: string; purpose: string; source: string; version: string;
+  digest: string; editable: boolean; default_text: string; effective_text: string; owner: string;
+  usage_status: "active" | "legacy" | "legacy-project" | "dynamic" | "formal-route";
+}
+export interface PromptCatalog { schema: string; layers: PromptLayerSummary[]; formal_assets: Array<Record<string, unknown>> }
+export interface PromptHistory { layer_id: string; scope: string; versions: Array<{ version: number; text: string; created_at: string }> }
+export interface PromptPreview { schema: string; digest: string; layers: Array<Record<string, unknown>>;
+  texts: Record<string, string>; assembled_template: string | null; assembly_kind: string }
 
 export function createSettingsClient(
   transport: ApiTransport = featureTransport,
@@ -44,6 +53,27 @@ export function createSettingsClient(
     saveScenePerformancePreferences: (preferences: ScenePerformancePreferences) => transport.request<ScenePerformanceResponse>(
       "/model-connections/pi-worker/scene-performance",
       { method: "PUT", body: JSON.stringify(preferences) },
+    ),
+    promptCatalog: (projectRoot = "") => transport.request<PromptCatalog>(
+      `/prompts/catalog?project_root=${encodeURIComponent(projectRoot)}`,
+    ),
+    promptHistory: (layerId: string, scope: "global" | "project", projectRoot = "") => transport.request<PromptHistory>(
+      `/prompts/layers/${encodeURIComponent(layerId)}/history?scope=${scope}&project_root=${encodeURIComponent(projectRoot)}`,
+    ),
+    savePromptLayer: (layerId: string, payload: { scope: "global" | "project"; project_root: string; text: string; expected_digest?: string }) => transport.request(
+      `/prompts/layers/${encodeURIComponent(layerId)}`,
+      { method: "PUT", body: JSON.stringify(payload) },
+    ),
+    activatePromptVersion: (layerId: string, payload: { scope: "global" | "project"; project_root: string; version: number; expected_digest?: string }) => transport.request(
+      `/prompts/layers/${encodeURIComponent(layerId)}/activate`,
+      { method: "POST", body: JSON.stringify(payload) },
+    ),
+    resetPromptLayer: (layerId: string, payload: { scope: "global" | "project"; project_root: string; expected_digest?: string }) => transport.request(
+      `/prompts/layers/${encodeURIComponent(layerId)}/reset`,
+      { method: "POST", body: JSON.stringify(payload) },
+    ),
+    previewPromptLayers: (layerIds: string[], projectRoot = "") => transport.request<PromptPreview>(
+      "/prompts/preview", { method: "POST", body: JSON.stringify({ layer_ids: layerIds, project_root: projectRoot }) },
     ),
     exportDiagnostics: () => transport.authorizedFetch("/application/diagnostics/export", { method: "POST" }),
   };

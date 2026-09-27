@@ -2,9 +2,11 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
-from literary_engineering_studio.application.lean_assets import ensure_lean_planning_assets
+from literary_engineering_studio.application.lean_assets import ensure_lean_planning_assets, lean_asset_alignment
 from literary_engineering_studio.application.lean_asset_enrichment import enrich_lean_planning_assets, _validated_rows
+from literary_engineering_studio.api.project_agent_composition import _reconcile_lean_assets
 
 
 class _Gateway:
@@ -54,6 +56,97 @@ class _Gateway:
 
 
 class LeanAssetsTests(unittest.TestCase):
+    def test_project_agent_reuses_initialization_and_enrichment_route(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for folder in ("plot", "canon", "characters"):
+                (root / folder).mkdir()
+            (root / "project.yaml").write_text("title: 测试\n", encoding="utf-8")
+            (root / "plot/lean_project_plan.json").write_text(json.dumps({
+                "characters": [{"name": "林昭", "role": "主角", "importance": "major", "background": "馆员", "desire": "履约"}],
+                "world_facts": [],
+            }, ensure_ascii=False), encoding="utf-8")
+            gateway = _Gateway()
+            with patch("literary_engineering_studio.api.project_agent_composition.RoleConversationGateway", return_value=gateway):
+                result = _reconcile_lean_assets({"application": {"data_root": temporary}}, root,
+                                                target_asset_id="character:林昭")
+            self.assertEqual(result["characters_created"], 1)
+            self.assertEqual(result["background_stories_created"], 1)
+            self.assertEqual(result["alignment"]["status"], "matched")
+            self.assertIn("speech_style", (root / "characters/林昭.yaml").read_text(encoding="utf-8"))
+            with self.assertRaisesRegex(ValueError, "not in the lean plan"):
+                _reconcile_lean_assets({}, root, target_asset_id="character:陌生人")
+
+    def test_reconcile_one_planned_asset_without_creating_others(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for folder in ("plot", "canon", "characters"):
+                (root / folder).mkdir()
+            (root / "project.yaml").write_text("title: 测试\n", encoding="utf-8")
+            (root / "plot/lean_project_plan.json").write_text(json.dumps({
+                "characters": [
+                    {"name": "林昭", "role": "主角", "importance": "major", "background": "馆员", "desire": "履约"},
+                    {"name": "陆遥", "role": "朋友", "importance": "secondary", "background": "画家", "desire": "离开"},
+                ],
+                "world_facts": ["馆藏原件需要登记"],
+            }, ensure_ascii=False), encoding="utf-8")
+            self.assertEqual(ensure_lean_planning_assets(root, target_asset_id="character:林昭"), {
+                "characters_created": 1, "world_rules_created": 0,
+            })
+            self.assertFalse((root / "characters/陆遥.yaml").exists())
+            self.assertFalse((root / "canon/world_rules.yaml").exists())
+            gateway = _Gateway()
+            self.assertEqual(enrich_lean_planning_assets(root, gateway, target_asset_id="character:林昭"), {
+                "background_stories_created": 1, "world_rules_enriched": 0,
+            })
+            self.assertEqual(gateway.calls, 2)
+            with self.assertRaisesRegex(ValueError, "not in the lean plan"):
+                ensure_lean_planning_assets(root, target_asset_id="character:陌生人")
+
+    def test_name_mismatch_is_reported_without_creating_duplicate(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "plot").mkdir()
+            (root / "characters").mkdir()
+            (root / "plot/lean_project_plan.json").write_text(json.dumps({
+                "characters": [{"name": "林昭", "role": "主角", "importance": "major", "background": "馆员", "desire": "履约"}],
+                "world_facts": [],
+            }, ensure_ascii=False), encoding="utf-8")
+            (root / "characters/other.yaml").write_text(
+                "character_id: other\nname: 林昭\nimportance: major\n", encoding="utf-8",
+            )
+            item = lean_asset_alignment(root)["items"][0]
+            self.assertEqual(item["status"], "identity_mismatch")
+            self.assertEqual(item["matching_asset_ids"], ["character:other"])
+            self.assertEqual(ensure_lean_planning_assets(root), {
+                "characters_created": 0, "world_rules_created": 0,
+            })
+            self.assertFalse((root / "characters/林昭.yaml").exists())
+
+    def test_enrichment_does_not_replace_a_stub_edited_during_model_call(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for folder in ("plot", "canon", "characters"):
+                (root / folder).mkdir()
+            (root / "project.yaml").write_text("title: 测试\n", encoding="utf-8")
+            (root / "plot/lean_project_plan.json").write_text(json.dumps({
+                "characters": [{"name": "林昭", "role": "主角", "importance": "major", "background": "馆员", "desire": "履约"}],
+                "world_facts": [],
+            }, ensure_ascii=False), encoding="utf-8")
+            ensure_lean_planning_assets(root)
+            path = root / "characters/林昭.yaml"
+
+            class EditingGateway(_Gateway):
+                def run(self, workspace, prompt, *, role, timeout):
+                    answer = super().run(workspace, prompt, role=role, timeout=timeout)
+                    if prompt.startswith("# 人物语言声音"):
+                        path.write_text("character_id: 林昭\nname: 林昭\nimportance: major\nrole: 作者已改\n", encoding="utf-8")
+                    return answer
+
+            result = enrich_lean_planning_assets(root, EditingGateway())
+            self.assertEqual(result["background_stories_created"], 0)
+            self.assertIn("作者已改", path.read_text(encoding="utf-8"))
+
     def test_extra_character_is_ignored_but_requested_name_is_required_once(self):
         gateway = _Gateway()
         payload = json.loads(gateway.run(None, "", role="worker", timeout=1).answer)

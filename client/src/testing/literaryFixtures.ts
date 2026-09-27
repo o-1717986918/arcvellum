@@ -1,5 +1,5 @@
 import type { QualityProfile } from "@/features/quality/types";
-import type { AdvisorSession, DashboardResponse, ProjectSummary } from "@/types/api";
+import type { DashboardResponse, ProjectSummary } from "@/types/api";
 import type { SpatialNarrativeProjection } from "@/types/spatial";
 
 export function projectSummaryFixture(): ProjectSummary {
@@ -24,15 +24,6 @@ export function dashboardFixture(): DashboardResponse {
     workflow_state: { route: "scene-development", status: "active" },
     current_task: { task_id: "scene-0001-compose", title: "构成第一场" },
     route_audits: [],
-  };
-}
-
-export function advisorSessionFixture(messages: AdvisorSession["messages"] = []): AdvisorSession {
-  return {
-    session_id: "advisor-session-1",
-    project_root: projectSummaryFixture().path,
-    title: "潮汐之后创作对话",
-    messages,
   };
 }
 

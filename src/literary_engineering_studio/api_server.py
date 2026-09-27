@@ -9,7 +9,7 @@ import threading
 from typing import Any, Callable
 
 from . import __version__
-from .application_info import build_application_info, build_diagnostic_report, build_legal_documents, export_diagnostic_report
+from .application.application_info import build_application_info, build_diagnostic_report, build_legal_documents, export_diagnostic_report
 from .application.container import ApplicationContainer
 from .application.strategy_projection import strategy_projection as _strategy_projection, typed_plan_events as _typed_plan_events
 from .api.dependencies import archaeology_router_dependencies, style_lab_dependencies
@@ -29,6 +29,7 @@ from .api.routers.archive import build_archive_router, default_archive_dependenc
 from .api.routers.archaeology import build_archaeology_router
 from .api.routers.runners import RunnerRouterDependencies, build_runner_router
 from .api.routers.pi_worker import build_pi_worker_router
+from .api.routers.prompts import build_prompts_router
 from .api.routers.projects import ProjectRouterDependencies, build_project_router
 from .api.routers.advisor import AdvisorRouterDependencies, build_advisor_router
 from .api.routers.automation import AutomationRouterDependencies, build_automation_router
@@ -41,20 +42,20 @@ from .api.routers.style_lab import build_style_lab_router
 from .api.routers.strategy import StrategyRouterDependencies, build_strategy_router
 from .api.routers.project_details import ProjectDetailRouterDependencies, build_project_detail_router
 from .api.routers.worker import WorkerRouterDependencies, build_worker_router, launch_worker
-from .agent_observability import build_agent_observability
-from .api_read_models import ProjectReadModels
+from .observability.agent_observability import build_agent_observability
+from .projections.api_read_models import ProjectReadModels
 from .advisor_inbox import refresh_advisor_inbox, save_inbox_settings
 from .advisor_personas import persona_catalog, save_custom_persona, select_persona
-from .config import default_projects_root, save_config
-from .core_read_models import build_activity, build_dashboard, build_task_summary, current_choices
-from .core_read_models import record_choice, record_ui_note, save_display_field
-from .delivery import delivery_content_type, resolve_delivery_file
+from .application.config import default_projects_root, save_config
+from .projections.core_read_models import build_activity, build_dashboard, build_task_summary, current_choices
+from .projections.core_read_models import record_choice, record_ui_note, save_display_field
+from .projections.delivery import delivery_content_type, resolve_delivery_file
 from .projections.partial_delivery import create_partial_docx
 from .infrastructure.composition import resolve_application_container
-from .live_events import coalesce_live_events
-from .model_connections import model_connection_status
-from .narrative_projection import build_narrative_projection, projection_delta, projection_motion_events
-from .narrative_projection_v3 import (
+from .observability.live_events import coalesce_live_events
+from .integrations.model_connections import model_connection_status
+from .projections.narrative_projection import build_narrative_projection, projection_delta, projection_motion_events
+from .projections.narrative_projection_v3 import (
     build_narrative_node_detail_v3,
     build_narrative_projection_v3,
     build_spatial_projection_patch,
@@ -67,7 +68,7 @@ from .projections.narrative_projection_v4 import (
 )
 from .orchestration import orchestration_settings as _orchestration_settings
 from .integrations.runner_probe import probe_agent_runner
-from .project_manager import (
+from .application.project_manager import (
     clone_bundled_demo,
     create_project,
     current_project,
@@ -79,10 +80,21 @@ from .project_manager import (
     register_project,
     validate_project_location,
 )
-from .reader import build_reader_manifest, public_reader_manifest, read_reader_unit, search_reader
-from .supervisor import project_lock_key
-from .worker import AgentWorker
+from .projections.reader import build_reader_manifest, public_reader_manifest, read_reader_unit, search_reader
+from .runtime.supervisor import project_lock_key
+from .runtime.worker import AgentWorker
 from literary_engineering_studio_engine.public.literary import load_creative_quality_profile
+
+def _register_model_workbench_routers(app, config, container: ApplicationContainer) -> None:
+    app.include_router(build_pi_worker_router(config))
+    if container.services.prompts is not None:
+        app.include_router(build_prompts_router(container.services.prompts))
+
+
+def _advisor_persona_operation(operation, prompts, *args, **kwargs):
+    resolver = (lambda layer_id, root: prompts.resolve(layer_id, root).text) if prompts is not None else None
+    return operation(*args, prompt_resolver=resolver, **kwargs)
+
 
 def _register_strategy_router(app, config) -> None:
     app.include_router(
@@ -258,7 +270,7 @@ def create_app(
         style_mounts=style_mounts,
         read_models=read_models,
         archive_dependencies=archive_dependencies,
-        worker_dependencies=worker_dependencies,
+        worker_dependencies=worker_dependencies, prompts=services.prompts,
     )
     app.state.project_agent = project_agent
 
@@ -301,7 +313,7 @@ def create_app(
             )
         )
     )
-    app.include_router(build_pi_worker_router(config))
+    _register_model_workbench_routers(app, config, container)
     app.include_router(build_project_router(_project_router_dependencies(config)))
     register_project_agent_router(app, project_agent, lifecycle.persistence.worker)
     register_quality_router(app, read_models)
@@ -315,8 +327,8 @@ def create_app(
                 jobs=jobs,
                 advisor=advisor,
                 dashboard_snapshot=dashboard_snapshot,
-                persona_catalog=lambda *args, **kwargs: persona_catalog(*args, **kwargs),
-                select_persona=lambda *args, **kwargs: select_persona(*args, **kwargs),
+                persona_catalog=lambda *args, **kwargs: _advisor_persona_operation(persona_catalog, container.services.prompts, *args, **kwargs),
+                select_persona=lambda *args, **kwargs: _advisor_persona_operation(select_persona, container.services.prompts, *args, **kwargs),
                 save_custom_persona=lambda *args, **kwargs: save_custom_persona(*args, **kwargs),
                 refresh_advisor_inbox=lambda *args, **kwargs: refresh_advisor_inbox(*args, **kwargs),
                 save_inbox_settings=lambda *args, **kwargs: save_inbox_settings(*args, **kwargs),

@@ -30,11 +30,13 @@ class ProjectAdvisor:
         runtime_pool=None,
         data_root: Path | None = None,
         session_event_tracker: Callable[..., object] | None = None,
+        prompt_resolver: Callable[[str, Path | None], str] | None = None,
     ):
         self.config = config
         self.sessions = sessions
         self.runtime_pool = runtime_pool
         self._configured_data_root = data_root.expanduser().resolve() if data_root is not None else None
+        self._prompt_resolver = prompt_resolver
         self._session_event_tracker = session_event_tracker or (
             lambda **fields: track_agent_session_event(sessions, **fields)
         )
@@ -64,7 +66,7 @@ class ProjectAdvisor:
         project = Path(session["project_root"]).resolve()
         before = project_hashes(project)
         snapshot = self._snapshot(project)
-        persona = active_persona(self._data_root(), project)
+        persona = active_persona(self._data_root(), project, prompt_resolver=self._prompt_resolver)
         stale = snapshot.digest != session["snapshot_digest"]
         self.sessions.append_advisor_message(session_id, "user", {"question": normalized})
         answer = self._run(
@@ -149,6 +151,8 @@ class ProjectAdvisor:
                 session_summary=session_summary,
                 pinned_preferences=pinned_preferences,
                 persona=persona,
+                literary_guidance=self._prompt_resolver("advisor.identity", project_root)
+                if self._prompt_resolver is not None else "",
             ),
             timeout=timeout,
             event_sink=event_sink,

@@ -1,0 +1,3 @@
+- 所有 Agent-owned 文件写完并逐项自检后，立即把控制权交还 Studio。
+- 不用聊天文本宣告完成；聊天内容不计入产物。
+- 不创建或修改 Studio 托管的 completion evidence。

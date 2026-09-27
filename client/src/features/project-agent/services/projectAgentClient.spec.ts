@@ -3,6 +3,16 @@ import type { ApiTransport } from "@/services/api";
 import { createProjectAgentClient } from "./projectAgentClient";
 
 describe("projectAgentClient", () => {
+  it("allows a turn to await slow project planning tools", async () => {
+    const transport = fakeTransport(vi.fn());
+    const client = createProjectAgentClient(transport);
+    await client.startTurn("session-1", "重排未写场景");
+    expect(transport.request).toHaveBeenCalledWith(
+      "/project-agent/sessions/session-1/turns",
+      expect.objectContaining({ method: "POST", body: JSON.stringify({ message: "重排未写场景", timeout: 4200 }) }),
+    );
+  });
+
   it("resumes durable events from the last SSE cursor", async () => {
     const fetch = vi.fn()
       .mockResolvedValueOnce(response("id: 3\nevent: project_agent.event\ndata: {\"event\":\"text.delta\",\"text\":\"先看\"}\n\n"))

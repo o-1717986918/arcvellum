@@ -22,7 +22,11 @@ class _Autopilot:
 
     def save_policy(self, _root, payload):
         self.current_policy = {**self.current_policy, **payload}
-        return {"policy": dict(self.current_policy)}
+        result = {"policy": dict(self.current_policy)}
+        if self.run is not None and self.run["status"] in {"paused", "blocked", "failed"}:
+            self.run = {**self.run, "policy": dict(self.current_policy)}
+            result["run"] = self.run
+        return result
 
     def start(self, root):
         self.run = {
@@ -135,7 +139,7 @@ class ProjectAgentActionTests(unittest.TestCase):
             self.assertEqual(result["appended_scene_ids"], ["scene_0007"])
             self.assertTrue(result["receipt"]["token"])
 
-    def test_historical_formal_work_keeps_its_saved_kernel(self):
+    def test_planned_scene_without_formal_prose_uses_lean_kernel(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             (root / "scenes").mkdir()
@@ -148,8 +152,115 @@ class ProjectAgentActionTests(unittest.TestCase):
                 autopilot=autopilot,
             )
             result = actions.manage_goal(root, {"operation": "start", "objective": "续写这一章"})
+            self.assertEqual(result["run"]["policy"]["literary_kernel"], "lean-v2")
+            self.assertEqual(autopilot.managed_goals[0][1]["literary_kernel"], "lean-v2")
+
+    def test_creation_control_accepts_a_planned_scene_without_formal_output(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            scene = root / "scenes" / "scene_0001.yaml"
+            scene.parent.mkdir()
+            scene.write_text("scene_id: scene_0001\n", encoding="utf-8")
+            autopilot = _Autopilot()
+            autopilot.current_policy["literary_kernel"] = "lean-v2"
+            actions = dependencies_from_actions(
+                record_direction=lambda *_args, **_kwargs: {}, autopilot=autopilot,
+            )
+
+            result = actions.creation_control(root, {"operation": "start"})
+
+            self.assertEqual(result["literary_kernel"], "lean-v2")
+            self.assertEqual(result["run"]["status"], "running")
+
+    def test_unreceipted_scene_delta_remains_a_historical_formal_output(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            delta = root / "workflow" / "scene_deltas" / "scene_0001.json"
+            delta.parent.mkdir(parents=True)
+            delta.write_text("{}", encoding="utf-8")
+            autopilot = _Autopilot()
+            autopilot.current_policy["literary_kernel"] = "lean-v2"
+            actions = dependencies_from_actions(
+                record_direction=lambda *_args, **_kwargs: {}, autopilot=autopilot,
+            )
+
+            with self.assertRaisesRegex(ValueError, "历史正式正文"):
+                actions.manage_goal(root, {"operation": "start", "objective": "续写"})
+
+    def test_historical_formal_prose_keeps_strict_kernel(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            draft = root / "drafts" / "scenes" / "scene_0001.md"
+            draft.parent.mkdir(parents=True)
+            draft.write_text("旧正式正文", encoding="utf-8")
+            autopilot = _Autopilot()
+            actions = dependencies_from_actions(
+                record_direction=lambda *_args, **_kwargs: {}, autopilot=autopilot,
+            )
+
+            result = actions.manage_goal(root, {"operation": "start", "objective": "续写这一章"})
+
             self.assertEqual(result["run"]["policy"]["literary_kernel"], "strict-v1")
-            self.assertEqual(autopilot.managed_goals[0][1]["literary_kernel"], "strict-v1")
+
+    def test_lean_with_unmigrated_prose_rejects_without_recording_direction(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            draft = root / "drafts" / "scenes" / "scene_0001.md"
+            draft.parent.mkdir(parents=True)
+            draft.write_text("旧正式正文", encoding="utf-8")
+            autopilot = _Autopilot()
+            autopilot.current_policy["literary_kernel"] = "lean-v2"
+            recorded = []
+            actions = dependencies_from_actions(
+                record_direction=lambda *_args, **_kwargs: recorded.append(True) or {},
+                autopilot=autopilot,
+            )
+
+            with self.assertRaisesRegex(ValueError, "历史正式正文"):
+                actions.manage_goal(root, {"operation": "start", "objective": "续写这一章"})
+            self.assertEqual(recorded, [])
+
+    def test_planning_prepare_reuses_standard_service_without_starting_autopilot(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "scenes").mkdir()
+            (root / "scenes" / "scene_0001.yaml").write_text(
+                "scene_id: scene_0001\nchapter_id: chapter_0001\n", encoding="utf-8",
+            )
+            autopilot = _Autopilot()
+            autopilot.current_policy["literary_kernel"] = "lean-v2"
+            prepared = []
+            actions = dependencies_from_actions(
+                record_direction=lambda *_args, **_kwargs: {}, autopilot=autopilot,
+                prepare_plan=lambda project: prepared.append(project) or {
+                    "chapters": [{"chapter_id": "chapter_0001"}],
+                    "scenes": [{"scene_id": "scene_0001"}],
+                },
+            )
+
+            result = actions.prepare_plan(root, {})
+
+            self.assertEqual(result["status"], "prepared")
+            self.assertEqual(result["scene_ids"], ["scene_0001"])
+            self.assertFalse(result["autopilot_started"])
+            self.assertIsNone(autopilot.run)
+            self.assertEqual(prepared, [root])
+
+    def test_planning_prepare_rejects_genuine_unmigrated_formal_prose(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            draft = root / "drafts" / "scenes" / "scene_0001.md"
+            draft.parent.mkdir(parents=True)
+            draft.write_text("旧正式正文", encoding="utf-8")
+            prepared = []
+            actions = dependencies_from_actions(
+                record_direction=lambda *_args, **_kwargs: {}, autopilot=_Autopilot(),
+                prepare_plan=lambda project: prepared.append(project) or {},
+            )
+
+            with self.assertRaisesRegex(ValueError, "历史正式正文"):
+                actions.prepare_plan(root, {})
+            self.assertEqual(prepared, [])
 
     def test_actions_reuse_direction_and_autopilot_services(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -307,6 +418,45 @@ class ProjectAgentActionTests(unittest.TestCase):
         self.assertFalse(result["ok"])
         self.assertEqual(result["status"], "decision_required")
         self.assertEqual(result["recommended_tool"], "project_decision_resolve")
+
+    def test_resume_updates_formal_scene_checkpoint_before_running(self):
+        root = Path("C:/work")
+        autopilot = _Autopilot()
+        actions = dependencies_from_actions(
+            record_direction=lambda *_args, **_kwargs: {}, autopilot=autopilot,
+        )
+        actions.manage_goal(root, {
+            "operation": "start", "objective": "完成全书", "stop_after_formal_units": 0,
+        })
+        autopilot.pause("run-1", reason="user-request")
+
+        result = actions.manage_goal(root, {
+            "operation": "resume", "stop_after_formal_units": 7,
+        })
+
+        self.assertEqual(result["status"], "accepted")
+        self.assertEqual(result["run"]["policy"]["limits"]["stop_after_formal_units"], 7)
+        self.assertEqual(autopilot.current_policy["limits"]["stop_after_formal_units"], 7)
+
+    def test_checkpoint_mismatch_does_not_change_formal_scene_limit(self):
+        root = Path("C:/work")
+        autopilot = _Autopilot()
+        actions = dependencies_from_actions(
+            record_direction=lambda *_args, **_kwargs: {}, autopilot=autopilot,
+        )
+        actions.manage_goal(root, {
+            "operation": "start", "objective": "完成全书", "stop_after_formal_units": 5,
+        })
+        autopilot.pause("run-1", reason="controller-error")
+
+        result = actions.manage_goal(root, {
+            "operation": "recover", "expected_stop_reason": "goal-scope-complete",
+            "stop_after_formal_units": 7,
+        })
+
+        self.assertEqual(result["status"], "checkpoint_changed")
+        self.assertEqual(autopilot.current_policy["limits"]["stop_after_formal_units"], 5)
+        self.assertIsNone(autopilot.authorized)
 
     def test_checkpoint_recover_preserves_newer_user_pause(self):
         autopilot = _Autopilot()

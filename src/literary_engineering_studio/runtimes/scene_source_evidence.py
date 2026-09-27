@@ -44,7 +44,7 @@ def scene_source_evidence(
         if not body:
             continue
         body = _source_excerpt(reference, body, brief.scene_id)
-        header = f"### {reference}\n"
+        header = _source_header(reference)
         separator = 2 if blocks else 0
         if remaining <= len(header) + separator:
             break
@@ -67,6 +67,10 @@ def _source_excerpt(reference: str, body: str, scene_id: str) -> str:
         limit = 900  # Most of this plan is already present in SceneBrief.
     elif reference.startswith("drafts/scenes/"):
         limit = 1_800  # The previous scene's ending is the important handoff.
+    elif reference.startswith("workflow/scene_deltas/"):
+        limit = 1_800  # Preserve the reader questions, promises and handoff.
+    elif reference == "workflow/continuity/current.json":
+        limit = 1_500
     elif reference.endswith("user_directions.md"):
         limit = 1_500  # Later entries supersede earlier direction.
     elif reference.startswith("characters/"):
@@ -77,9 +81,71 @@ def _source_excerpt(reference: str, body: str, scene_id: str) -> str:
         return body
     if reference.startswith("drafts/scenes/"):
         return body[:300] + "\n[…中段已省略…]\n" + body[-(limit - 320):]
+    if reference == "workflow/continuity/current.json" or reference.startswith("workflow/scene_deltas/"):
+        return _structured_scene_excerpt(reference, body, limit)
     if reference.endswith("user_directions.md"):
         return body[-limit:]
     return body[:limit]
+
+
+def _structured_scene_excerpt(reference: str, body: str, limit: int) -> str:
+    try:
+        data = json.loads(body)
+    except ValueError:
+        return body[-limit:]
+    if not isinstance(data, dict):
+        return body[-limit:]
+    if reference == "workflow/continuity/current.json":
+        entries = data.get("entries")
+        compact = ({"schema": data.get("schema"), "recent_entries": entries[-8:]}
+                   if isinstance(entries, list) else {"schema": data.get("schema")})
+    else:
+        compact = {key: data.get(key) for key in (
+            "scene_id", "next_handoff", "reader_question_updates", "promise_updates",
+            "character_changes", "continuity_changes", "canon_candidates",
+        ) if data.get(key)}
+    return _bounded_json_excerpt(compact, limit)
+
+
+def _source_header(reference: str) -> str:
+    if reference.startswith("drafts/scenes/"):
+        status = "已提交正文，可作为已发生的叙述"
+    elif reference.startswith("workflow/scene_deltas/"):
+        status = "已提交场景交接；其中提议与 canon_candidates 仍是待确认候选"
+    elif reference == "workflow/continuity/current.json":
+        status = "连续性投射；按条目来源与状态判断，不等于 Canon 确认"
+    else:
+        status = "来源摘录"
+    return f"### {reference} · {status}\n"
+
+
+def _bounded_json_excerpt(payload: dict[str, object], limit: int) -> str:
+    compact = json.loads(json.dumps(payload, ensure_ascii=False))
+    encode = lambda: json.dumps(compact, ensure_ascii=False, separators=(",", ":"))
+    while len(encode()) > limit:
+        lists = [value for value in compact.values() if isinstance(value, list) and len(value) > 1]
+        if not lists:
+            break
+        max(lists, key=len).pop(0)
+    if len(encode()) > limit:
+        for key, value in list(compact.items()):
+            if isinstance(value, list):
+                compact[key] = [_short_json_value(item) for item in value]
+    while len(encode()) > limit:
+        removable = next((key for key in reversed(compact) if key not in {"scene_id", "schema"}), None)
+        if removable is None:
+            break
+        compact.pop(removable)
+    return encode()[:limit]
+
+
+def _short_json_value(value: object) -> object:
+    if isinstance(value, str):
+        return value[:160]
+    if isinstance(value, dict):
+        return {key: _short_json_value(item) for key, item in value.items()
+                if key in {"kind", "target_ref", "summary", "status", "operation", "source", "evidence"}}
+    return value
 
 
 def _owner_style_block(project_root: Path, remaining: int) -> str:

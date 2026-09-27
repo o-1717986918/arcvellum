@@ -94,15 +94,6 @@ def _v3_transition(
     return _spatial_transition(deps, previous, current, sequence, version=3)
 
 
-def _v4_transition(
-    deps: NarrativeRouterDependencies,
-    previous: dict[str, Any] | None,
-    current: dict[str, Any],
-    sequence: int,
-) -> tuple[str, dict[str, Any]]:
-    return _spatial_transition(deps, previous, current, sequence, version=4)
-
-
 def _spatial_transition(
     deps: NarrativeRouterDependencies,
     previous: dict[str, Any] | None,

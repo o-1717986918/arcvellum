@@ -143,12 +143,16 @@ class PiWorkerControlTests(unittest.TestCase):
                 "deepseek/deepseek-v4-flash",
                 role="environment-writer",
             )
+            for role in ("character-describer", "object-describer", "scene-describer"):
+                control.select_pi_model(config, "deepseek/deepseek-v4-flash", role=role)
 
         models = config["agent_runners"]["pi-worker"]["models"]
         self.assertEqual(models["worker"], "deepseek/deepseek-v4-flash")
         self.assertEqual(models["advisor"], "deepseek/deepseek-v4-flash")
         self.assertEqual(models["character-actor"], "deepseek/deepseek-v4-flash")
         self.assertEqual(models["environment-writer"], "deepseek/deepseek-v4-flash")
+        self.assertTrue(all(models[role] == "deepseek/deepseek-v4-flash" for role in
+                            ("character-describer", "object-describer", "scene-describer")))
 
 
 if __name__ == "__main__":

@@ -7,6 +7,8 @@ import json
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
+from literary_engineering_studio_engine.public.prompting import render_prompt_template
+
 from ..contracts import TaskPackage
 from .evidence_provider import DEFAULT_EVIDENCE_PROVIDER, EvidenceProvider
 from .execution_context import ExecutionContextEnvelope
@@ -19,12 +21,7 @@ from .prompt_program import (
 from .prompt_recipes import PromptRecipe, prompt_recipe
 
 
-_STOP_CONTRACT = (
-    "写完所有 Agent-owned outputs 并逐项检查格式与内容。",
-    "不要创建或修改 Studio 管理的 completion evidence。",
-    "不要用聊天文本、分析或计划替代正式产物。",
-    "没有可验证进展或证据冲突无法解决时停止并报告阻断。",
-)
+_STOP_CONTRACT = tuple(render_prompt_template("formal.prose.stop.protocol", ()).strip().splitlines())
 
 
 def compile_prompt_program(
@@ -145,10 +142,12 @@ def _objective(
 ) -> str:
     parts = []
     if user_direction.strip():
-        parts.append("用户方向：\n" + _audience_text(user_direction.strip(), audience))
+        parts.append(render_prompt_template("formal.objective.user-direction.protocol", (
+            _audience_text(user_direction.strip(), audience),
+        )).strip())
     parts.append(
         _audience_text(task_body.strip(), audience)
-        or "按当前任务合同完成声明的产物。"
+        or render_prompt_template("formal.objective.empty.protocol", ()).strip()
     )
     return "\n\n".join(parts)
 
@@ -196,19 +195,14 @@ def _constraints(
         target = int(word_count.get("target") or 0)
         minimum = int(word_count.get("minimum") or 0)
         maximum = int(word_count.get("maximum") or 0)
-        budget_rule = (
-            f"本任务只写当前场景，清洁正文目标为 {target} 个中文内容字符，"
-            f"可接受范围 {minimum}-{maximum}；动笔前按 composition 的事件节拍分配篇幅，"
-            f"提交前自行估算完整正文不得少于 {minimum} 个中文内容字符，不得因情节已经讲完而提前结束；"
-            "不足篇幅只能展开已有动作、阻力、核验和代价，不能灌水。作品总字数只决定全书分配，"
-            "不得在本场一次写完。"
-            if target and minimum and maximum
-            else "本任务只写当前场景；作品总字数只决定全书分配，不得在本场一次写完。"
-        )
+        budget_rule = (render_prompt_template("formal.prose.budget.protocol", (
+            target, minimum, maximum,
+        )).strip() if target and minimum and maximum else
+            render_prompt_template("formal.prose.budget-short.protocol", ()).strip())
         execution_protocol = (
-            "正文任务只完成正文及其直接 manifest；人物、世界、状态等资产由独立任务处理，不得在正文回合扩张职责。",
+            render_prompt_template("formal.prose.scope.protocol", ()).strip(),
             budget_rule,
-            "候选 manifest 只填写语义契约列出的模型负责字段；schema、路径、摘要、运行身份与会话 provenance 由 Studio 自动补齐。",
+            render_prompt_template("formal.prose.manifest.protocol", ()).strip(),
         )
     values = [
         *execution_protocol,

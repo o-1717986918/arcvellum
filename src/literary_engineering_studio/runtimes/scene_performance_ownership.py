@@ -6,6 +6,8 @@ import json
 import re
 from typing import Any, Callable
 
+from literary_engineering_studio_engine.public.prompting import render_prompt_template
+
 
 _QUOTED = re.compile(r"[“「]([^”」]+)[”」]")
 _LETTERS = re.compile(r"[^\u4e00-\u9fffA-Za-z0-9]+")
@@ -52,26 +54,9 @@ def audit_visible_actions(
 def _action_audit_prompt(prose: str, entries: list[dict[str, Any]]) -> str:
     sources = [{key: entry.get(key, "") for key in ("entry_id", "speaker", "first_person_action", "spoken")}
                for entry in entries]
-    return (
-        "# First-Level Visible Action Source Audit\n\n"
-        "只核对在场人物已做出的、会改变情节或关系的关键可见动作是否由同一人物的 first_person_action 支持。"
-        "同时核对承担情节转折的直接引语回合是否由同一人物的 spoken 支持。"
-        "主创可以改写已有台词的措辞、长短和语势；同一意图与互动位置仍算有来源。"
-        "演员只在私念中想过、只做过动作或后来才说出另一件事，都不能给本处新增发言回合提供 spoken 来源。"
-        "重点是决定性交付、藏取证物、揭露线索、伤害、离开冲突或以行动作出承诺。"
-        "同一动作换人称、词序或措辞仍算有来源：‘把手从信封上松开’支持‘他松开信封’，绝不可报违规。"
-        "‘没碰信’不支持‘拿起信并藏入衣袋’。"
-        "普通走位、拿放无情节后果的道具、眼神、手势、台词间停顿和视角感知属于主创的场面组织，"
-        "不作为违规；环境观察、静态姿态、主观猜测和明确没做的事也不报。不要审文风、篇幅或数字。"
-        "每条问题必须说出来源缺少的具体新动作或新发言回合；若最接近条目已在语义上覆盖它，删除该问题。"
-        "只引用正文的精确连续短句，speaker 必须逐字抄自实施动作的角色条目，不写别称；若有最接近的同角色条目，"
-        "填其 entry_id，否则填空串。没有越权就返回空列表。\n\n"
-        f"一级角色言行：{json.dumps(sources, ensure_ascii=False)}\n\n"
-        f"候选正文：{prose}\n\n"
-        "只返回 JSON：{\"status\":\"clean|violations_found\",\"violations\":["
-        "{\"kind\":\"action|dialogue\",\"prose_quote\":\"正文精确短句\",\"speaker\":\"人物名\","
-        "\"closest_entry_id\":\"条目 ID 或空串\",\"why_not_covered\":\"来源与额外动作的差别\"}]}。"
-    )
+    return render_prompt_template("scene.ownership.action-audit.protocol", (
+        json.dumps(sources, ensure_ascii=False), prose,
+    ))
 
 
 def _validated_action_findings(payload: Any, prose: str, entries: list[dict[str, Any]]) -> list[dict[str, str]]:
@@ -120,16 +105,6 @@ def _validate_action_finding(item: Any, prose: str, speakers: set[str], by_id: d
             or not isinstance(closest, str) or (closest and by_id.get(closest) != speaker)
             or not isinstance(reason, str) or not reason.strip()):
         raise ValueError("visible-action audit finding lacks exact same-actor evidence")
-
-
-def ownership_repair_instruction(kind: str, evidence: list[str]) -> str:
-    opening = (
-        "以下关键可见动作缺少一级角色 first_person_action 来源；若本场需要这些动作，优先通过 material_requests 请原角色续演，若不需要则删除；"
-        if kind == "action" else
-        "以下关键发言回合缺少同一角色 spoken 的意图与互动位置来源；若本场需要这些话，先通过 material_requests 请原角色续演，若不需要则删除；已有回合仍可改写措辞；"
-    )
-    return (opening + "保留已获授权的角色言行及有效心理和环境。"
-            "需补充角色行为时请求原角色续演：" + json.dumps(evidence[:8], ensure_ascii=False))
 
 
 def repair_actor_ownership(
@@ -183,12 +158,13 @@ def compact_performance_materials(materials: str) -> str:
         raise ValueError("first-level performance material block is malformed") from exc
     if not isinstance(packet, dict):
         raise ValueError("first-level performance material block is malformed")
-    compact = {key: packet[key] for key in ("environment_candidates", "environment") if key in packet}
+    compact = {key: packet[key] for key in ("environment_candidates", "environment", "description_candidates", "material_notices") if key in packet}
+    compact["director_turns"] = _compact_director_turns(packet)
     compact["actor_entries"] = [
         {key: entry[key] for key in ("entry_id", "beat_id", "speaker", "spoken", "first_person_action") if key in entry}
         for entry in _actor_entries(packet)
     ]
-    if not _actor_entries(compact) and not compact.get("environment_candidates") and not compact.get("environment"):
+    if not _actor_entries(compact) and not compact.get("environment_candidates") and not compact.get("environment") and not compact.get("description_candidates") and not compact.get("material_notices"):
         raise ValueError("first-level performance material block has no actor entries")
     return "一级言行与环境候选；省略已用过的初始化、任务和逐轮提示。\n" + json.dumps(
         compact, ensure_ascii=False, separators=(",", ":"))
@@ -205,10 +181,7 @@ def author_handoff_materials(materials: str) -> str:
         raise ValueError("first-level performance material block is malformed") from exc
     if not isinstance(packet, dict):
         raise ValueError("first-level performance material block is malformed")
-    turns = [
-        {key: turn[key] for key in ("turn", "beat_id", "scene_change", "entry_ids") if key in turn}
-        for turn in packet.get("director_turns", []) if isinstance(turn, dict)
-    ]
+    turns = _compact_director_turns(packet)
     entries = [
         {key: entry[key] for key in ("entry_id", "beat_id", "speaker", "spoken", "first_person_action", "private_impulse")
          if key in entry and entry[key]}
@@ -217,8 +190,20 @@ def author_handoff_materials(materials: str) -> str:
     compact = {"director_turns": turns, "actor_entries": entries}
     if "environment_candidates" in packet:
         compact["environment_candidates"] = packet["environment_candidates"]
+    if "description_candidates" in packet:
+        compact["description_candidates"] = packet["description_candidates"]
+    if "material_notices" in packet:
+        compact["material_notices"] = packet["material_notices"]
     return "按轮次排列的角色言行、情势变化与环境候选；正文由主创取舍组织。\n" + json.dumps(
         compact, ensure_ascii=False, separators=(",", ":"))
+
+
+def _compact_director_turns(packet: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        {key: (str(turn[key])[:260] if key in {"cue", "director_note"} else turn[key])
+         for key in ("turn", "beat_id", "scene_change", "cue", "director_note", "entry_ids") if key in turn}
+        for turn in packet.get("director_turns", []) if isinstance(turn, dict)
+    ]
 
 
 def _actor_entries(packet: Any) -> list[dict[str, Any]]:
@@ -249,4 +234,4 @@ def _normalize(text: Any) -> str:
     return _LETTERS.sub("", text) if isinstance(text, str) else ""
 
 
-__all__ = ["audit_visible_actions", "author_handoff_materials", "compact_performance_materials", "has_actor_entries", "ownership_repair_instruction", "repair_actor_ownership", "unlicensed_scene_dialogue"]
+__all__ = ["audit_visible_actions", "author_handoff_materials", "compact_performance_materials", "has_actor_entries", "repair_actor_ownership", "unlicensed_scene_dialogue"]

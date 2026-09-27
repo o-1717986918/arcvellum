@@ -195,95 +195,6 @@
   transform: scale(1.12);
 }
 
-/* Bottom navigation: chapter chronology is the foundation; tools sit above it. */
-.spatial-workspace-dock {
-  position: absolute;
-  z-index: 18;
-  bottom: 72px;
-  left: 50%;
-  display: flex;
-  max-width: calc(100vw - 280px);
-  align-items: center;
-  gap: 4px;
-  padding: 5px;
-  overflow-x: auto;
-  color: var(--orrery-label);
-  background: color-mix(in srgb, var(--spatial-glass-deep) 79%, transparent);
-  border: 1px solid var(--spatial-hairline);
-  border-radius: 6px;
-  box-shadow: 0 18px 46px rgba(0, 0, 0, .34), inset 0 1px 0 color-mix(in srgb, var(--orrery-label) 8%, transparent);
-  backdrop-filter: blur(24px) saturate(116%);
-  transform: translateX(-50%);
-}
-
-.spatial-workspace-dock .dock-group {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
-
-.spatial-workspace-dock button {
-  position: relative;
-  display: inline-flex;
-  min-width: 35px;
-  height: 31px;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  padding: 0 7px;
-  color: color-mix(in srgb, var(--orrery-label) 62%, transparent);
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 3px;
-  font-family: var(--font-body);
-  font-size: 9px;
-  letter-spacing: 0;
-  white-space: nowrap;
-}
-
-.spatial-workspace-dock button:hover,
-.spatial-workspace-dock button.active {
-  color: var(--orrery-label);
-  background: color-mix(in srgb, var(--orrery-core) 13%, transparent);
-  border-color: color-mix(in srgb, var(--orrery-core) 32%, transparent);
-}
-
-.spatial-workspace-dock button.urgent {
-  color: color-mix(in srgb, var(--orrery-warning) 72%, white);
-  border-color: color-mix(in srgb, var(--orrery-warning) 38%, transparent);
-}
-
-.spatial-workspace-dock button.delivery-ready {
-  color: #fff8e9;
-  background: color-mix(in srgb, var(--orrery-canon) 18%, transparent);
-  border-color: color-mix(in srgb, var(--orrery-canon) 68%, transparent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--orrery-canon) 7%, transparent), 0 0 18px color-mix(in srgb, var(--orrery-canon) 22%, transparent);
-  animation: delivery-dock-ready 2.8s ease-in-out infinite;
-}
-
-.spatial-workspace-dock button[data-count]::after {
-  position: absolute;
-  top: -5px;
-  right: -3px;
-  min-width: 14px;
-  height: 14px;
-  padding: 0 3px;
-  color: #fff;
-  background: var(--orrery-warning);
-  border: 1px solid color-mix(in srgb, var(--orrery-label) 66%, transparent);
-  border-radius: 50%;
-  font-size: 8px;
-  line-height: 12px;
-  content: attr(data-count);
-}
-
-.spatial-workspace-dock .dock-seam {
-  width: 1px;
-  height: 18px;
-  margin: 0 2px;
-  background: var(--spatial-hairline);
-}
-
 .chapter-rail {
   right: 164px;
   bottom: 10px;
@@ -589,14 +500,8 @@
 
 @keyframes workspace-calibration { to { transform: rotate(360deg); } }
 
-@keyframes delivery-dock-ready {
-  50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--orrery-canon) 5%, transparent), 0 0 26px color-mix(in srgb, var(--orrery-canon) 32%, transparent); }
-}
-
 @media (max-width: 1120px) {
   .overview-view.spatial-active .orrery-view-tools { right: 270px; }
-  .spatial-workspace-dock button span { display: none; }
-  .spatial-workspace-dock { max-width: calc(100vw - 200px); }
   .overview-view.spatial-active .orrery-v3-heading dl { display: none; }
 }
 
@@ -607,8 +512,6 @@
   .overview-view.spatial-active .orrery-v3-heading h1 { max-width: 45vw; font-size: 18px; }
   .overview-view.spatial-active .orrery-v3-project-band { top: 9px; right: 10px; }
   .overview-view.spatial-active .orrery-v3-controls { padding: 0 12px 5px; }
-  .spatial-workspace-dock { right: 10px; bottom: 62px; left: 10px; max-width: none; transform: none; }
-  .spatial-workspace-dock .workspace-tools { display: none; }
   .chapter-rail { right: 10px; bottom: 8px; left: 10px; }
   .orrery-v3-delivery-beacon { right: 10px; bottom: 105px; }
   .orrery-v3-caption { display: none; }

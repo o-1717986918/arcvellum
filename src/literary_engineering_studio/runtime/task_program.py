@@ -62,9 +62,9 @@ def build_task_context(
     source_paths: tuple[str, ...] | None = None,
     execution_context: ExecutionContextEnvelope | None = None,
     execution_profile: dict[str, Any] | None = None,
-    prompt_access: Mapping[str, object] = _EMPTY_PROMPT_ACCESS,
+    prompt_access: Mapping[str, object] = _EMPTY_PROMPT_ACCESS, prompt_asset_override: Mapping[str, object] | None = None,
 ) -> dict[str, Any]:
-    prompt_asset = task.payload.get("prompt_asset") if isinstance(task.payload.get("prompt_asset"), dict) else {}
+    prompt_asset = _effective_prompt_asset(task.payload.get("prompt_asset"), prompt_asset_override)
     agent_sources = task.payload.get("agent_source_paths")
     default_sources = _strings(agent_sources) if isinstance(agent_sources, list) else list(task.source_paths)
     output_contracts = [item.as_dict() for item in task.execution_contract.outputs]
@@ -137,6 +137,13 @@ def build_task_context(
     }
 
 
+def _effective_prompt_asset(
+    payload: object, override: Mapping[str, object] | None,
+) -> dict[str, object]:
+    asset = payload if isinstance(payload, dict) else {}
+    return {**asset, **override} if override is not None else asset
+
+
 def _prepare_operation_projection(task: TaskPackage) -> dict[str, object]:
     operation = task.prepare_operation
     return operation.as_dict() if operation is not None else {}
@@ -151,6 +158,7 @@ def write_task_context(
     execution_context: ExecutionContextEnvelope | None = None,
     execution_profile: dict[str, Any] | None = None,
     prompt_access: Mapping[str, object] = _EMPTY_PROMPT_ACCESS,
+    prompt_asset_override: Mapping[str, object] | None = None,
 ) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
@@ -162,6 +170,7 @@ def write_task_context(
                 execution_context=execution_context,
                 execution_profile=execution_profile,
                 prompt_access=prompt_access,
+                prompt_asset_override=prompt_asset_override,
             ),
             ensure_ascii=False,
             indent=2,
@@ -217,6 +226,7 @@ def compile_worker_program(
     renderer: str = "file-agent",
     workspace: Path | None = None,
     prompt_lint_config: Mapping[str, Any] | None = None,
+    prompt_asset_override: Mapping[str, object] | None = None,
 ) -> CompiledWorkerProgram:
     context = build_task_context(
         task,
@@ -224,6 +234,7 @@ def compile_worker_program(
         source_paths=source_paths,
         execution_context=execution_context,
         execution_profile=execution_profile,
+        prompt_asset_override=prompt_asset_override,
     )
     if prompt_version == "v3":
         if execution_context is None or workspace is None:

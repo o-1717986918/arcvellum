@@ -40,6 +40,8 @@ ACTION_TOOLS = (
     "project_actor_persona_update",
     "project_archive_change",
     "project_owner_style_write",
+    "project_assets_reconcile",
+    "project_planning_prepare",
 )
 TOOL_RISKS = {
     **{name: ToolRisk.READ for name in READ_TOOLS},
@@ -49,6 +51,8 @@ TOOL_RISKS = {
     "project_chapter_extend": ToolRisk.FORMAL_WRITE,
     "project_future_replan": ToolRisk.FORMAL_WRITE,
     "project_archive_change": ToolRisk.FORMAL_WRITE,
+    "project_assets_reconcile": ToolRisk.FORMAL_WRITE,
+    "project_planning_prepare": ToolRisk.FORMAL_WRITE,
     # Protocol compatibility only. New Agent turns use project_goal_manage.
     "creation_control": ToolRisk.REVERSIBLE_WRITE,
 }
@@ -90,6 +94,8 @@ def available_action_tools(actions: ProjectAgentActionDependencies | None) -> tu
             ("project_actor_persona_update", actions.update_actor_persona),
             ("project_archive_change", actions.archive_change),
             ("project_owner_style_write", actions.owner_style_write),
+            ("project_assets_reconcile", actions.reconcile_assets),
+            ("project_planning_prepare", actions.prepare_plan),
         )
         if handler is not None
     )
@@ -157,6 +163,8 @@ class ProjectAgentToolDispatcher:
             "project_actor_persona_update": self.actions.update_actor_persona,
             "project_archive_change": self.actions.archive_change,
             "project_owner_style_write": self.actions.owner_style_write,
+            "project_assets_reconcile": self.actions.reconcile_assets,
+            "project_planning_prepare": self.actions.prepare_plan,
         }
         handler = action_handlers.get(call.name)
         if handler is None:

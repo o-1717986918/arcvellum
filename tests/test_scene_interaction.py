@@ -9,12 +9,12 @@ from unittest.mock import patch
 
 from literary_engineering_studio.runtime.role_conversation import RoleConversationResult
 from literary_engineering_studio.runtimes.pi_scene_transaction import PiSceneTransactionRuntime
-from literary_engineering_studio.runtimes.scene_interaction import perform_scene_interaction, new_scene_session, continue_scene_actor, _character_context, _generate_direction, _actor_turn
-from literary_engineering_studio.runtimes.scene_performance import _cached_payload, _try_interaction, scene_performance_materials
+from literary_engineering_studio.runtimes.scene_interaction import new_scene_session, continue_scene_actor, _character_context, _actor_turn
+from literary_engineering_studio.runtimes.scene_performance import _cached_payload, fulfill_scene_material_requests
 from literary_engineering_studio.runtimes.scene_performance_ownership import author_handoff_materials, compact_performance_materials
 from literary_engineering_studio_engine.public.literary import (
     parse_interaction_direction, parse_scene_material_requests, render_actor_interaction_prompt,
-    render_interaction_direction_prompt, render_interaction_materials,
+    render_interaction_materials,
 )
 from literary_engineering_studio_engine.literary.scene.transaction import VerificationReport
 from literary_engineering_studio_engine.literary.scene.roleplay.relay_context import validated_public_log
@@ -43,34 +43,100 @@ def _fixture(participants: list[str]):
 
 
 class SceneInteractionTests(unittest.TestCase):
-    def test_long_first_reply_still_reaches_other_characters_with_director_cues(self):
-        speakers = ["character/a", "character/b", "character/c"]
-        brief, plan = _fixture(speakers)
-        remaining = iter([speakers[1], speakers[2], ""])
-        direction_prompts = []
+    def test_actor_request_respects_scene_call_limit_and_reports_unavailable_material(self):
+        brief, plan = _fixture(["character/solo"])
+        calls = []
+        config = {"application": {"scene_performance_agents": {"enabled": True, "max_actor_calls": 0}}}
+        payload = {"material_requests": [{"kind": "actor", "target": "character/solo",
+                    "purpose": "观察他是否转移话题", "scene_moment": "看见旧信时", "cue": "旧信已打开"}]}
+        with tempfile.TemporaryDirectory() as directory:
+            with patch("literary_engineering_studio.runtimes.scene_performance._generate_performance_plan", return_value=plan):
+                for _ in range(2):
+                    block = fulfill_scene_material_requests(
+                        brief=brief, expression={}, sources="", style_reference="", payload=payload,
+                        cache_root=Path(directory), config=config, invoke=lambda prompt, role: "",
+                        invoke_actor_turn=lambda *args: calls.append(args) or ("", ""),
+                        request_batch_id="limited",
+                    )
+        self.assertEqual(calls, [])
+        packet = json.loads(block.split("\n", 1)[1])
+        self.assertEqual(len(packet["material_notices"]), 1)
+        self.assertIn("达到设置上限", packet["material_notices"][0]["reason"])
+        self.assertIn("达到设置上限", author_handoff_materials(block))
+        self.assertIn("达到设置上限", compact_performance_materials(block))
 
-        def invoke(prompt, _role):
-            direction_prompts.append(prompt)
-            speaker = next(remaining)
-            return json.dumps({"finish": not bool(speaker), "next_speaker": speaker,
-                               "beat_id": "b1" if speaker else "", "scene_change": "",
-                               "cue": f"回应 {speakers[0]} 刚才的话", "director_note": ""})
+    def test_describer_first_does_not_plan_actors_but_later_actor_is_initialized(self):
+        brief, plan = _fixture(["character/solo"])
+        actor_calls = []
 
-        def actor(_initialization, _initialization_answer, _history, prompt):
-            speaker = prompt.rsplit('"speaker":"', 1)[1].split('"', 1)[0]
-            spoken = "我" * 512 if speaker == speakers[0] else f"我是{speaker}。"
-            return json.dumps({"scene_id": brief["scene_id"], "speaker": speaker, "entries": [
-                {"beat_id": "b1", "spoken": spoken, "first_person_action": "", "private_impulse": ""},
-            ]}, ensure_ascii=False), ""
+        def role_turn(role, initialization, history, prompt):
+            return json.dumps({"candidates": [{"text": "信封边缘磨白了。", "focus": "磨损"}]}, ensure_ascii=False), ""
+
+        def actor_turn(initialization, initialization_answer, history, prompt):
+            actor_calls.append(initialization)
+            return json.dumps({"scene_id": brief["scene_id"], "speaker": "character/solo", "entries": [
+                {"beat_id": "b1", "spoken": "信留在这里。", "first_person_action": "我把信压在桌上。", "private_impulse": ""},
+            ]}, ensure_ascii=False), "initialized"
+
+        config = {"application": {"scene_performance_agents": {"enabled": True}}}
+        expression = {"actor_personas": {"character/solo":
+            "【PERSONA_LOAD】\nSELF_CLAIM_SOLO\n\n【PERSONALITY_CORE】\nTRAIT_WARY\n\n"
+            "【PERSONALITY_PUBLIC】\nTRAIT_WRY\n\n[LITERATURE_STYLE]\nKAFKA_LIKE"}}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with patch("literary_engineering_studio.runtimes.scene_performance._generate_performance_plan", return_value=plan) as planner:
+                first = fulfill_scene_material_requests(
+                    brief=brief, expression=expression, sources="", style_reference="",
+                    payload={"material_requests": [{"kind": "object-description", "target": "信封",
+                        "purpose": "留下使用痕迹", "scene_moment": "按住信时", "cue": "边缘磨白"}]},
+                    cache_root=root, config=config, invoke=lambda prompt, role: "",
+                    invoke_actor_turn=actor_turn, invoke_role_turn=role_turn, request_batch_id="describer",
+                )
+                planner.assert_not_called()
+                second = fulfill_scene_material_requests(
+                    brief=brief, expression=expression, sources="", style_reference="",
+                    payload={"material_requests": [{"kind": "actor", "target": "character/solo",
+                        "purpose": "让他自行选择是否留下信", "scene_moment": "信封被看见后", "cue": "对方望着信封"}]},
+                    cache_root=root, config=config, invoke=lambda prompt, role: "",
+                    invoke_actor_turn=actor_turn, invoke_role_turn=role_turn, request_batch_id="actor",
+                )
+            self.assertEqual(planner.call_count, 1)
+        self.assertIn("信封边缘磨白了", first)
+        self.assertIn("信封边缘磨白了", second)
+        self.assertIn("信留在这里", second)
+        self.assertEqual(len(actor_calls), 1)
+        self.assertIn("【PERSONA_LOAD】", actor_calls[0])
+        self.assertIn("KAFKA_LIKE", actor_calls[0])
+        self.assertNotIn("TRAIT_ALERT", actor_calls[0])
+
+    def test_environment_requests_continue_one_scene_history(self):
+        brief, plan = _fixture(["character/solo"])
+        histories = []
+
+        def role_turn(role, initialization, history, prompt):
+            histories.append(len(history))
+            self.assertIn("选择有用的桌沿细节", prompt)
+            answer = json.dumps({"scene_id": brief["scene_id"], "passages": [
+                {"beat_id": "b1", "description": "桌沿的光缓慢移开。"},
+            ]}, ensure_ascii=False)
+            return answer, ""
 
         with tempfile.TemporaryDirectory() as directory:
-            block = perform_scene_interaction(brief, {}, plan, "", None, Path(directory), "long-first",
-                                              invoke, actor, _cached_payload, None)
-        packet = json.loads(block.split("\n", 1)[1])
-        self.assertEqual([entry["speaker"] for entry in packet["actor_entries"]], speakers)
-        self.assertEqual(len(direction_prompts), 3)
-        self.assertIn("我" * 512, direction_prompts[0])
-        self.assertIn(speakers[1], direction_prompts[1])
+            with patch("literary_engineering_studio.runtimes.scene_performance._generate_performance_plan", return_value=plan):
+                for batch in ("first", "second"):
+                    result = fulfill_scene_material_requests(
+                        brief=brief, expression={}, sources="", style_reference="",
+                        payload={"material_requests": [{"kind": "environment", "cue": "观察桌沿的光"}]},
+                        cache_root=Path(directory), config={"application": {"scene_performance_agents": {"enabled": True}}},
+                        invoke=lambda prompt, role: "", invoke_actor_turn=None,
+                        invoke_role_turn=role_turn, request_batch_id=batch,
+                        prompt_layers={"scene.environment.turn": "选择有用的桌沿细节"},
+                    )
+            packet = json.loads(result.split("\n", 1)[1])
+        self.assertEqual(histories, [0, 1])
+        self.assertEqual([passage["candidate_id"] for passage in packet["environment_candidates"]["passages"]],
+                         ["environment:1", "environment:2"])
+
 
     def test_long_character_reply_remains_available_to_the_next_actor(self):
         brief, _plan = _fixture(["character/solo"])
@@ -99,17 +165,6 @@ class SceneInteractionTests(unittest.TestCase):
         self.assertIn("JSON 结构或转义", prompts[1])
         self.assertEqual(result["response"]["entries"][0]["spoken"], "我说真的。")
 
-    def test_direction_retries_once_after_malformed_model_answer(self):
-        brief, plan = _fixture(["纪蔚"])
-        calls = []
-
-        def invoke(prompt, role):
-            calls.append((prompt, role))
-            return "not json" if len(calls) == 1 else json.dumps(plan["opening_direction"], ensure_ascii=False)
-
-        result = _generate_direction("# Scene Interaction Direction", brief, plan, invoke)
-        self.assertEqual(result["next_speaker"], "纪蔚")
-        self.assertEqual(len(calls), 2)
 
     def test_actor_receives_own_background_after_pure_initialization(self):
         brief, plan = _fixture(["纪蔚"])
@@ -133,15 +188,9 @@ class SceneInteractionTests(unittest.TestCase):
         self.assertNotIn("至多四条 JSON 候选", prompt)
         self.assertNotIn("她欠朋友一个夜班", new_scene_session(brief, {}, plan, None)["initializations"]["纪蔚"])
 
-    def test_direction_and_actor_prompts_keep_addressee_and_evidence_visible(self):
+    def test_actor_prompt_keeps_addressee_and_evidence_visible(self):
         brief, plan = _fixture(["江岫", "阿澍", "温泠"])
         public = [{"speaker": "江岫", "spoken": "他们两位像新婚的。", "first_person_action": ""}]
-        director = render_interaction_direction_prompt(brief, plan, public, 1, "")
-        self.assertIn("主要在对谁说话", director)
-        self.assertIn("先辨认", director)
-        self.assertIn("scene_change 承载环境、物件及已演言行引起的外部后果", director)
-        self.assertIn("先把轮次交给此人", director)
-        self.assertIn("他们两位像新婚的", director)
         direction = {"next_speaker": "阿澍", "beat_id": "b1", "scene_change": "",
                      "cue": "听见江岫打趣，向温泠求证。"}
         actor = render_actor_interaction_prompt(brief, plan, direction, public, "")
@@ -149,31 +198,6 @@ class SceneInteractionTests(unittest.TestCase):
         self.assertIn("他们两位像新婚的", actor)
         self.assertIn("向温泠求证", actor)
 
-    def test_actor_life_context_enters_first_turn_and_persists_in_history(self):
-        brief, plan = _fixture(["纪蔚"])
-        calls = []
-
-        def direct(_prompt, _role):
-            return json.dumps({"finish": len(calls) >= 2, "next_speaker": "纪蔚", "beat_id": "b1",
-                               "scene_change": "", "cue": "她决定如何回应", "director_note": ""}, ensure_ascii=False)
-
-        def act(_initialization, _answer, history, prompt):
-            calls.append((history, prompt))
-            return json.dumps({"scene_id": brief["scene_id"], "speaker": "纪蔚", "entries": [{
-                "beat_id": "b1", "spoken": "这封信我认得。", "first_person_action": "", "private_impulse": "",
-            }]}, ensure_ascii=False), ""
-
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            (root / "characters").mkdir()
-            (root / "characters" / "纪蔚.yaml").write_text(
-                "name: 纪蔚\nbackground_story:\n  hidden_wound: 她欠朋友一个夜班。\n", encoding="utf-8")
-            (root / "cache").mkdir()
-            perform_scene_interaction(brief, {}, plan, "", None, root / "cache", "life-context",
-                                      direct, act, _cached_payload, None, root)
-        self.assertIn("她欠朋友一个夜班", calls[0][1])
-        self.assertNotIn("她欠朋友一个夜班", calls[1][1])
-        self.assertIn("她欠朋友一个夜班", calls[1][0][0][0])
 
     def test_author_handoff_treats_rehearsal_as_selectable_material(self):
         brief, plan = _fixture(["character/solo"])
@@ -181,11 +205,11 @@ class SceneInteractionTests(unittest.TestCase):
             "entry_id": "t1:1", "speaker": "character/solo", "beat_id": "b1",
             "spoken": "信是我的。", "first_person_action": "我压住信封。", "private_impulse": "我害怕。",
         }], None, viewpoint=brief["viewpoint"])
-        self.assertIn("挑出真正改变关系的回合", block)
+        self.assertIn("挑出真正服务本场文学意图的回合", block)
         self.assertIn("避免逐条把 spoken 与 first_person_action 排成引号加说话动作的清单", block)
         self.assertIn('"entry_id":"t1:1"', block)
 
-    def test_author_handoff_keeps_new_events_once_but_omits_repeated_director_notes(self):
+    def test_author_handoff_keeps_new_events_once_and_omits_repetitive_notes(self):
         _, plan = _fixture(["character/solo"])
         turns = [{"turn": index, "next_speaker": "character/solo", "beat_id": "b1",
                   "director_note": "重复的导演解释" * 60, "scene_change": "重复场景说明" * 60,
@@ -197,7 +221,7 @@ class SceneInteractionTests(unittest.TestCase):
         self.assertIn('"director_turns"', block)
         self.assertNotIn("重复的导演解释", block)
         self.assertEqual(block.count("重复场景说明" * 60), 1)
-        self.assertIn("该轮新进入的外部情势候选", block)
+        self.assertIn("scene_change 是外部情势候选", block)
 
     def test_author_handoff_retains_distinct_external_changes_in_order(self):
         _, plan = _fixture(["character/a", "character/b"])
@@ -210,34 +234,6 @@ class SceneInteractionTests(unittest.TestCase):
         self.assertEqual([turn["scene_change"] for turn in packet["director_turns"]],
                          ["窗外传来敲门声", "门被风吹开"])
 
-    def test_long_rehearsal_uses_recent_public_stage_without_blocking(self):
-        brief, plan = _fixture(["character/solo"])
-        public = [{"speaker": "character/solo", "spoken": f"第{index}轮", "first_person_action": "我放下信。"}
-                  for index in range(26)]
-        direction = plan["opening_direction"]
-        director = render_interaction_direction_prompt(brief, plan, public, 26, "")
-        actor = render_actor_interaction_prompt(brief, plan, direction, public, "")
-        self.assertIn("让发起者先表演，下一位才能接住其具体内容", director)
-        for prompt in (director, actor):
-            self.assertIn("第25轮", prompt)
-            self.assertNotIn('"spoken": "第0轮"', prompt)
-
-    def test_one_actor_turn_can_return_three_entries(self):
-        brief, plan = _fixture(["character/solo"])
-
-        def finish(_prompt, _role):
-            return json.dumps({"finish": True, "next_speaker": "", "beat_id": "", "scene_change": "",
-                               "cue": "", "director_note": ""}, ensure_ascii=False)
-
-        def actor(_initialization, _initialization_answer, _history, _prompt):
-            return json.dumps({"scene_id": brief["scene_id"], "speaker": "character/solo", "entries": [
-                {"beat_id": "b1", "spoken": f"第{index}句话。", "first_person_action": "", "private_impulse": ""}
-                for index in range(3)]}, ensure_ascii=False), ""
-
-        with tempfile.TemporaryDirectory() as directory:
-            block = perform_scene_interaction(brief, {}, plan, "", None, Path(directory), "three-entries",
-                                              finish, actor, _cached_payload, None)
-        self.assertEqual(len(json.loads(block.split("\n", 1)[1])["actor_entries"]), 3)
 
     def test_review_material_preserves_actor_evidence_without_repeating_plan(self):
         packet = {
@@ -253,7 +249,8 @@ class SceneInteractionTests(unittest.TestCase):
         self.assertLess(len(compact), len(full) // 2)
         self.assertIn("信是我的。", compact)
         self.assertIn("桌沿有冷光。", compact)
-        self.assertNotIn("信被打开", compact)
+        self.assertIn("信被打开", compact)
+        self.assertIn('"cue":"' + "B" * 260, compact)
         self.assertNotIn("我害怕", compact)
         self.assertNotIn("actor_prompts", compact)
         self.assertNotIn("B" * 1000, compact)
@@ -271,21 +268,28 @@ class SceneInteractionTests(unittest.TestCase):
         class Gateway(_Gateway):
             def __init__(self):
                 super().__init__()
-                self.directions = iter(["character/protagonist", ""])
                 self.actor_turns = []
+                self.create_count = 0
+                self.environment_turns = []
 
             def run(self, workspace, prompt, *, role, timeout, event_sink=None, cancel_event=None):
+                if prompt.startswith("# Scene Create"):
+                    self.create_count += 1
+                    if self.create_count == 1:
+                        self.calls.append((role, prompt))
+                        request = {"material_requests": [
+                            {"kind": "actor", "speaker": "character/sister", "cue": "信已经打开"},
+                            {"kind": "actor", "speaker": "character/protagonist", "cue": "回应妹妹"},
+                            {"kind": "environment", "cue": "门边的光"},
+                        ]}
+                        return RoleConversationResult("pi-worker", "request", "test/model", json.dumps(request, ensure_ascii=False))
                 if prompt.startswith("# Scene Performance Direction"):
                     self.calls.append((role, prompt))
                     _, plan = _fixture(["character/protagonist", "character/sister"])
                     plan["opening_direction"]["next_speaker"] = "character/sister"
                     answer = json.dumps(plan, ensure_ascii=False)
                 elif prompt.startswith("# Scene Interaction Direction"):
-                    self.calls.append((role, prompt))
-                    speaker = next(self.directions)
-                    answer = json.dumps({"finish": not bool(speaker), "next_speaker": speaker,
-                                         "beat_id": "b1" if speaker else "", "scene_change": "",
-                                         "cue": "信已经打开", "director_note": "关系需要转向"}, ensure_ascii=False)
+                    raise AssertionError("the retired automatic interaction path was invoked")
                 elif role == "environment-writer":
                     self.calls.append((role, prompt))
                     answer = json.dumps({"scene_id": "scene_0001", "passages": [
@@ -295,6 +299,13 @@ class SceneInteractionTests(unittest.TestCase):
                     return super().run(workspace, prompt, role=role, timeout=timeout,
                                        event_sink=event_sink, cancel_event=cancel_event)
                 return RoleConversationResult("pi-worker", "run-interaction", "test/model", answer)
+
+            def run_role_turn(self, workspace, *, role, initialization, history, prompt, timeout, event_sink=None):
+                self.environment_turns.append((role, initialization, history, prompt))
+                answer = {"scene_id": "scene_0001", "passages": [
+                    {"beat_id": "b1", "description": "门边的光沿着信封的折痕移动。"},
+                ]}
+                return RoleConversationResult("pi-worker", "environment", "test/model", json.dumps(answer, ensure_ascii=False))
 
             def run_actor_turn(self, workspace, *, initialization, initialization_answer,
                                history, prompt, timeout, event_sink=None):
@@ -319,18 +330,17 @@ class SceneInteractionTests(unittest.TestCase):
                                if role == "worker" and "## Character And Environment Candidate Materials" in prompt]
             self.assertEqual(len(gateway.actor_turns), 2)
             self.assertEqual(len(creator_prompts), 1)
-            environment_prompts = [json.loads(prompt) for role, prompt in gateway.calls if role == "environment-writer"]
-            self.assertEqual(environment_prompts[0]["schema"], "arcvellum/environment-conversation/v1")
-            self.assertTrue(environment_prompts[0]["initialization"].startswith("【SCENE_LOAD】"))
-            self.assertTrue(environment_prompts[0]["prompt"].startswith("# Independent Environment Writing"))
+            self.assertEqual(len(gateway.environment_turns), 1)
+            self.assertTrue(gateway.environment_turns[0][1].startswith("【SCENE_LOAD】"))
+            self.assertTrue(gateway.environment_turns[0][3].startswith("# Independent Environment Writing"))
             self.assertIn("你把信拿走了？", creator_prompts[0])
             self.assertIn("是我拿的，先听我说完。", creator_prompts[0])
             self.assertIn('"director_turns"', creator_prompts[0])
             self.assertIn('"environment_candidates"', creator_prompts[0])
             self.assertNotIn('"actor_prompts"', creator_prompts[0])
             self.assertNotIn('"environment_initialization"', creator_prompts[0])
-            self.assertIn("设定展开", creator_prompts[0])
-            self.assertIn("对白可以绕路，叙述也可转述", creator_prompts[0])
+            self.assertIn("希望读者怎样经历这一场", creator_prompts[0])
+            self.assertIn("让人物、视角心理、环境与对白随本场意图交织", creator_prompts[0])
             self.assertTrue(all("[LANGUAGE_STYLE]\nANTI_PLAIN\nPOLISHED\nANTI_SHORT_SENTENCES" in call[1]
                                 for call in gateway.actor_turns))
             self.assertTrue(all("[LITERATURE_STYLE]" in call[1] and "【角色沉浸要求】" in call[1]
@@ -340,123 +350,6 @@ class SceneInteractionTests(unittest.TestCase):
             self.assertTrue(result.prose)
             self.assertGreater(runtime.metrics.provider_calls, 4)
 
-    def test_single_actor_interacts_with_scene_without_fictional_partner(self):
-        brief, plan = _fixture(["character/solo"])
-        plan["beats"].append({"beat_id": "b2", "event": "下一轮才会出现的外部变化"})
-        turns = iter(["character/solo", ""])
-        histories = []
-        seen_directions = []
-        emitted = []
-
-        def invoke(prompt, role):
-            self.assertEqual(role, "worker")
-            seen_directions.append(prompt)
-            speaker = next(turns)
-            return json.dumps({
-                "finish": not bool(speaker), "next_speaker": speaker, "beat_id": "b1" if speaker else "",
-                "scene_change": "信封里的纸滑出来" if speaker else "", "cue": "现在怎么办？",
-                "director_note": "主创判断这封信对后续世界状态的影响。",
-            }, ensure_ascii=False)
-
-        def actor(initialization, initialization_answer, history, prompt):
-            histories.append(history)
-            self.assertIn("SELF_CLAIM_ACTOR", initialization)
-            self.assertNotIn("character/other", prompt)
-            self.assertIn("周围可感的空间素材", prompt)
-            answer = json.dumps({"scene_id": brief["scene_id"], "speaker": "character/solo", "entries": [
-                {"beat_id": "b1", "spoken": "这信怎么会在这里？", "first_person_action": "我把纸压在桌上。",
-                 "private_impulse": "我不敢翻到背面。"},
-                {"beat_id": "b2", "spoken": "未来的变化已经发生。", "first_person_action": "",
-                 "private_impulse": "我先把未来写了。"},
-            ]}, ensure_ascii=False)
-            return answer, ""  # 初始化允许没有可见回复。
-
-        with tempfile.TemporaryDirectory() as directory:
-            session_path = Path(directory) / "performance-interaction-session-digest.json"
-
-            def emit(event, data):
-                self.assertTrue(session_path.is_file())
-                self.assertEqual(json.loads(session_path.read_text(encoding="utf-8"))["directions"][-1]["turn"], data["turn"])
-                emitted.append((event, data))
-
-            block = perform_scene_interaction(
-                brief, {}, plan, "", {"passages": [{"beat_id": "b1", "description": "桌沿有冷光。"}]},
-                Path(directory), "digest", invoke, actor, _cached_payload, emit,
-            )
-        packet = json.loads(block.split("\n", 1)[1])
-        self.assertEqual(len(packet["actor_entries"]), 2)
-        self.assertTrue(all(item["beat_id"] == "b1" for item in packet["actor_entries"]))
-        self.assertNotIn("未来的变化已经发生", json.dumps(packet["actor_entries"], ensure_ascii=False))
-        self.assertEqual([row["next_speaker"] for row in packet["director_turns"]], ["character/solo"] * 2)
-        self.assertEqual([len(item) for item in histories], [0, 1])
-        self.assertEqual(len(seen_directions), 2)  # 次轮与结束；首轮已并入场景编排。
-        self.assertIn("这信怎么会在这里", seen_directions[-1])
-        self.assertNotIn("我不敢翻到背面", seen_directions[-1])
-        self.assertNotIn("actor_prompts", seen_directions[-1])
-        self.assertNotIn("environment_initialization", seen_directions[-1])
-        self.assertEqual(len(emitted), 2)
-        self.assertIn("这信怎么会在这里", emitted[0][1]["turn_entries"][0]["spoken"])
-        self.assertNotIn("private_impulse", json.dumps(emitted, ensure_ascii=False))
-
-    def test_environment_material_survives_actor_silence(self):
-        brief, plan = _fixture(["character/solo"])
-        environment = {"passages": [{"beat_id": "b1", "description": "桌沿有冷光。"}]}
-
-        def invoke(prompt, role):
-            return json.dumps({"finish": True, "next_speaker": "", "beat_id": ""})
-
-        def actor(initialization, initialization_answer, history, prompt):
-            return json.dumps({"scene_id": brief["scene_id"], "speaker": "character/solo", "entries": []}), ""
-
-        with tempfile.TemporaryDirectory() as directory:
-            block = perform_scene_interaction(
-                brief, {}, plan, "", environment, Path(directory), "digest", invoke, actor, _cached_payload, None,
-            )
-            fallback = _try_interaction(
-                brief, {}, plan, [], "", environment, Path(directory), "digest", invoke, None, None,
-            )
-            failed_actor = _try_interaction(
-                brief, {}, plan, ["character/solo"], "", environment, Path(directory), "different-digest", invoke,
-                lambda *args: (_ for _ in ()).throw(RuntimeError("actor failed")), None,
-            )
-        self.assertIn("桌沿有冷光", block)
-        self.assertIn("桌沿有冷光", fallback)
-        self.assertIn("桌沿有冷光", failed_actor)
-
-    def test_failed_later_turn_preserves_completed_actor_material_and_resumes(self):
-        brief, plan = _fixture(["character/solo"])
-        actor_calls = []
-        direction_calls = []
-
-        def invoke(prompt, role):
-            direction_calls.append(prompt)
-            return json.dumps({"finish": len(direction_calls) > 1,
-                               "next_speaker": "character/solo" if len(direction_calls) == 1 else "",
-                               "beat_id": "b1" if len(direction_calls) == 1 else "",
-                               "scene_change": "门外有人来了", "cue": "我认得脚步声"}, ensure_ascii=False)
-
-        def actor(initialization, initialization_answer, history, prompt):
-            actor_calls.append(prompt)
-            if len(actor_calls) == 2:
-                raise RuntimeError("conversation returned no answer")
-            return json.dumps({"scene_id": brief["scene_id"], "speaker": "character/solo", "entries": [
-                {"beat_id": "b1", "spoken": "先让我听完。" if not history else "我听见他来了。",
-                 "first_person_action": "", "private_impulse": ""},
-            ]}, ensure_ascii=False), ""
-
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            salvaged = _try_interaction(
-                brief, {}, plan, ["character/solo"], "", None, root, "digest",
-                invoke, actor, None,
-            )
-            self.assertIn("先让我听完。", salvaged)
-            self.assertEqual(len(json.loads(salvaged.split("\n", 1)[1])["actor_entries"]), 1)
-            resumed = perform_scene_interaction(
-                brief, {}, plan, "", None, root, "digest", invoke, actor, _cached_payload, None,
-            )
-        self.assertEqual(len(json.loads(resumed.split("\n", 1)[1])["actor_entries"]), 2)
-        self.assertEqual(len(actor_calls), 3)  # The completed first turn was not regenerated.
 
     def test_creator_requests_actor_continuation_and_environment_then_writes(self):
         class Gateway(_Gateway):
@@ -465,7 +358,6 @@ class SceneInteractionTests(unittest.TestCase):
                 self.create_prompts = []
                 self.actor_histories = []
                 self.environment_prompts = []
-                self.direction_calls = 0
 
             def run(self, workspace, prompt, *, role, timeout, event_sink=None, cancel_event=None):
                 self.calls.append((role, prompt))
@@ -480,9 +372,7 @@ class SceneInteractionTests(unittest.TestCase):
                     return RoleConversationResult("pi-worker", "environment", "test/model", json.dumps(
                         {"scene_id": "scene_0001", "passages": passages}, ensure_ascii=False))
                 if prompt.startswith("# Scene Interaction Direction"):
-                    self.direction_calls += 1
-                    return RoleConversationResult("pi-worker", "direction", "test/model", json.dumps(
-                        {"finish": True, "next_speaker": "", "beat_id": "", "scene_change": "", "cue": "", "director_note": ""}))
+                    raise AssertionError("the retired automatic interaction path was invoked")
                 if prompt.startswith("# Scene Create"):
                     self.create_prompts.append(prompt)
                     if len(self.create_prompts) == 1:
@@ -509,6 +399,13 @@ class SceneInteractionTests(unittest.TestCase):
                 return RoleConversationResult("pi-worker", "actor", "test/model", json.dumps(answer, ensure_ascii=False),
                                               "初始化完成")
 
+            def run_role_turn(self, workspace, *, role, initialization, history, prompt, timeout, event_sink=None):
+                self.environment_prompts.append({"initialization": initialization, "prompt": prompt, "history": history})
+                answer = {"scene_id": "scene_0001", "passages": [
+                    {"beat_id": "b1", "description": "窗上的雨光慢慢漫到信封背面。"},
+                ]}
+                return RoleConversationResult("pi-worker", "environment", "test/model", json.dumps(answer, ensure_ascii=False))
+
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             gateway = Gateway()
@@ -519,12 +416,11 @@ class SceneInteractionTests(unittest.TestCase):
             )
             result = runtime.create_scene("tx-material-requests", brief)
             self.assertIn("雨光漫到信封", result.prose)
-            self.assertEqual(gateway.actor_histories, [0, 1])
-            self.assertEqual(gateway.direction_calls, 1)
+            self.assertEqual(gateway.actor_histories, [0])
             self.assertEqual(len(gateway.create_prompts), 2)
-            self.assertIn("你还等着，我怎么能装作没看见？", gateway.create_prompts[1])
+            self.assertIn("信给我。", gateway.create_prompts[1])
             self.assertIn("窗上的雨光慢慢漫到信封背面", gateway.create_prompts[1])
-            self.assertEqual(len(gateway.environment_prompts), 2)
+            self.assertEqual(len(gateway.environment_prompts), 1)
             self.assertTrue(all(item["initialization"].startswith("【SCENE_LOAD】")
                                 for item in gateway.environment_prompts))
             self.assertEqual(runtime.metrics.provider_calls,
@@ -589,10 +485,6 @@ class SceneInteractionTests(unittest.TestCase):
                 return super().run(workspace, prompt, role=role, timeout=timeout,
                                    event_sink=event_sink, cancel_event=cancel_event)
 
-        original = "一级角色候选\n" + json.dumps({"actor_entries": [
-            {"entry_id": "t1:1", "speaker": "character/protagonist", "spoken": "信是我拿的。",
-             "first_person_action": "", "private_impulse": ""},
-        ]}, ensure_ascii=False)
         supplemented = "一级角色候选\n" + json.dumps({"actor_entries": [
             {"entry_id": "t1:1", "speaker": "character/protagonist", "spoken": "信是我拿的。",
              "first_person_action": "", "private_impulse": ""},
@@ -607,9 +499,7 @@ class SceneInteractionTests(unittest.TestCase):
                 {"application": {"scene_performance_agents": {"enabled": True}}},
                 project_root=root, data_root=root / ".studio", gateway=gateway,
             )
-            with patch("literary_engineering_studio.runtimes.pi_scene_transaction.scene_performance_materials",
-                       return_value=original):
-                candidate = runtime.create_scene("tx-revision-request", brief)
+            candidate = runtime.create_scene("tx-revision-request", brief)
             with patch("literary_engineering_studio.runtimes.pi_scene_transaction.fulfill_scene_material_requests",
                        return_value=supplemented) as fulfill:
                 revised = runtime.revise_scene("tx-revision-request", brief, candidate,
@@ -630,112 +520,17 @@ class SceneInteractionTests(unittest.TestCase):
                 project_root=root, data_root=root / ".studio", gateway=_Gateway(),
             )
             request = json.dumps({"material_requests": [{"kind": "environment", "cue": "看看雨后"}]}, ensure_ascii=False)
-            with patch("literary_engineering_studio.runtimes.pi_scene_transaction.scene_performance_materials",
-                       return_value="") as prepare, patch(
-                           "literary_engineering_studio.runtimes.pi_scene_transaction.fulfill_scene_material_requests",
-                           return_value=supplemented,
-                       ) as fulfill, patch.object(runtime, "_run", side_effect=[request, RuntimeError("temporary provider stop")]):
+            with patch("literary_engineering_studio.runtimes.pi_scene_transaction.fulfill_scene_material_requests",
+                       return_value=supplemented) as fulfill, patch.object(
+                           runtime, "_run", side_effect=[request, RuntimeError("temporary provider stop")]):
                 with self.assertRaisesRegex(RuntimeError, "temporary provider stop"):
                     runtime.create_scene("tx-resume", brief)
-            self.assertEqual(prepare.call_count, 1)
             self.assertEqual(fulfill.call_count, 1)
             final = json.dumps({"prose": "雨停了。", "decision_summary": "雨后停留。", "scene_delta": {}}, ensure_ascii=False)
-            with patch("literary_engineering_studio.runtimes.pi_scene_transaction.scene_performance_materials",
-                       side_effect=AssertionError("preparation replayed")), patch.object(runtime, "_run", return_value=final):
+            with patch.object(runtime, "_run", return_value=final):
                 result = runtime.create_scene("tx-resume", brief)
             self.assertEqual(result.prose, "雨停了。")
 
-    def test_three_actor_order_is_directed_by_scene_not_cyclic_rotation(self):
-        speakers = ["character/a", "character/b", "character/c"]
-        brief, plan = _fixture(speakers)
-        plan["opening_direction"]["next_speaker"] = speakers[1]
-        order = iter([speakers[0], speakers[2], speakers[1], ""])
-        calls = []
-
-        def invoke(_prompt, _role):
-            speaker = next(order)
-            return json.dumps({"finish": not bool(speaker), "next_speaker": speaker,
-                               "beat_id": "b1" if speaker else "", "scene_change": "", "cue": "回应刚才的话",
-                               "director_note": ""})
-
-        def actor(_initialization, _initialization_answer, history, prompt):
-            speaker = prompt.rsplit('"speaker":"', 1)[1].split('"', 1)[0]
-            calls.append((speaker, len(history), prompt))
-            return json.dumps({"scene_id": brief["scene_id"], "speaker": speaker, "entries": [
-                {"beat_id": "b1", "spoken": f"我是{speaker}。", "first_person_action": "", "private_impulse": "我有疑心。"},
-            ]}, ensure_ascii=False), "初始化完成"
-
-        with tempfile.TemporaryDirectory() as directory:
-            block = perform_scene_interaction(
-                brief, {}, plan, "", None, Path(directory), "digest", invoke, actor, _cached_payload, None,
-            )
-        packet = json.loads(block.split("\n", 1)[1])
-        self.assertEqual([(speaker, count) for speaker, count, _ in calls],
-                         [(speakers[1], 0), (speakers[0], 0), (speakers[2], 0), (speakers[1], 1)])
-        self.assertEqual([item["speaker"] for item in packet["actor_entries"]],
-                         [speakers[1], speakers[0], speakers[2], speakers[1]])
-        self.assertEqual(packet["actor_entries"][0]["private_impulse"], "")
-
-    def test_scene_performance_uses_saved_persona_as_actor_initialization(self):
-        brief, plan = _fixture(["character/solo"])
-        plan["actor_prompts"]["character/solo"] += "\n\n[LANGUAGE_STYLE]\nVOICE_PLAYFUL_WITH_BARBS"
-        directions = iter([""])
-        initializations = []
-        saved = "【PERSONA_LOAD】\nSELF_CLAIM_SOLO\n\n【PERSONALITY_CORE】\nTRAIT_WARY\n\n【PERSONALITY_PUBLIC】\nTRAIT_WRY\n\n[LANGUAGE_STYLE]\nPOLISHED\n\n[LITERATURE_STYLE]\nKAFKA_LIKE"
-
-        def invoke(prompt, role):
-            if prompt.startswith("# Scene Performance Direction"):
-                return json.dumps(plan, ensure_ascii=False)
-            if role == "environment-writer":
-                return json.dumps({"scene_id": brief["scene_id"], "passages": []})
-            speaker = next(directions)
-            return json.dumps({"finish": not bool(speaker), "next_speaker": speaker,
-                               "beat_id": "b1" if speaker else "", "scene_change": "", "cue": "",
-                               "director_note": ""})
-
-        def actor(initialization, _initialization_answer, _history, _prompt):
-            initializations.append(initialization)
-            return json.dumps({"scene_id": brief["scene_id"], "speaker": "character/solo", "entries": [
-                {"beat_id": "b1", "spoken": "信是给我的。", "first_person_action": "", "private_impulse": ""},
-            ]}, ensure_ascii=False), ""
-
-        with tempfile.TemporaryDirectory() as directory:
-            block = scene_performance_materials(
-                brief=brief, expression={"actor_personas": {"character/solo": saved}}, sources="", style_reference="", cache_root=Path(directory),
-                config={"application": {"scene_performance_agents": {"enabled": True, "mode": "whole-scene"}}},
-                invoke=invoke,
-                invoke_actor_turn=actor,
-            )
-        self.assertIn("actor_entries", block)
-        self.assertIn("信是给我的", block)
-        self.assertEqual(len(initializations), 1)
-        self.assertNotIn("VOICE_PLAYFUL_WITH_BARBS", initializations[0])
-        self.assertIn("KAFKA_LIKE", initializations[0])
-
-    def test_failed_actor_turn_does_not_resume_whole_scene_task_mode(self):
-        brief, plan = _fixture(["character/solo"])
-        calls = []
-
-        def invoke(prompt, role):
-            calls.append((role, prompt))
-            if prompt.startswith("# Scene Performance Direction"):
-                return json.dumps(plan, ensure_ascii=False)
-            if role == "environment-writer":
-                return json.dumps({"scene_id": brief["scene_id"], "passages": []})
-            return json.dumps({"finish": False, "next_speaker": "character/solo", "beat_id": "b1",
-                               "scene_change": "", "cue": "", "director_note": ""})
-
-        def actor(*_args):
-            raise RuntimeError("角色对戏暂不可用")
-
-        with tempfile.TemporaryDirectory() as directory:
-            block = scene_performance_materials(
-                brief=brief, expression={}, sources="", style_reference="", cache_root=Path(directory),
-                config={"application": {"scene_performance_agents": {"enabled": True, "mode": "whole-scene"}}},
-                invoke=invoke, invoke_actor_turn=actor,
-            )
-        self.assertEqual(block, "")
-        self.assertFalse(any(role == "character-actor" for role, _ in calls))
 
     def test_direction_rejects_unknown_participant_without_adding_literary_gate(self):
         brief, plan = _fixture(["character/solo"])

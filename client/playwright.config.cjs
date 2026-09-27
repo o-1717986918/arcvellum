@@ -16,6 +16,8 @@ const browserCandidates = [
   "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
 ].filter(Boolean);
 const browserExecutable = browserCandidates.find((candidate) => fs.existsSync(candidate));
+const apiPort = Number(process.env.ARCVELLUM_VISUAL_API_PORT || 8791);
+const clientPort = Number(process.env.ARCVELLUM_VISUAL_CLIENT_PORT || 5173);
 
 module.exports = defineConfig({
   testDir: path.join(repositoryRoot, "client", "e2e"),
@@ -26,7 +28,7 @@ module.exports = defineConfig({
   expect: { timeout: 15_000 },
   reporter: [["line"], ["html", { outputFolder: path.join(visualRoot, "report"), open: "never" }]],
   use: {
-    baseURL: "http://127.0.0.1:5173/ui/",
+    baseURL: `http://127.0.0.1:${clientPort}/ui/`,
     viewport: { width: 1440, height: 900 },
     colorScheme: "dark",
     actionTimeout: 15_000,
@@ -38,9 +40,9 @@ module.exports = defineConfig({
   },
   webServer: [
     {
-      command: "python -m literary_engineering_studio serve --port 8791",
+      command: `python -m literary_engineering_studio serve --port ${apiPort}`,
       cwd: repositoryRoot,
-      url: "http://127.0.0.1:8791/application/bootstrap",
+      url: `http://127.0.0.1:${apiPort}/application/bootstrap`,
       reuseExistingServer: true,
       timeout: 120_000,
       env: {
@@ -49,14 +51,17 @@ module.exports = defineConfig({
         // A developer may have another ArcVellum checkout installed in editable
         // mode. Visual acceptance must always exercise this exact worktree.
         PYTHONPATH: repositoryPythonPath,
+        ARCVELLUM_API_ORIGIN: `http://127.0.0.1:${apiPort}`,
+        ARCVELLUM_CLIENT_PORT: String(clientPort),
       },
     },
     {
       command: "npm run client:dev",
       cwd: repositoryRoot,
-      url: "http://127.0.0.1:5173/ui/",
+      url: `http://127.0.0.1:${clientPort}/ui/`,
       reuseExistingServer: true,
       timeout: 120_000,
+      env: { ...process.env, ARCVELLUM_API_ORIGIN: `http://127.0.0.1:${apiPort}`, ARCVELLUM_CLIENT_PORT: String(clientPort) },
     },
   ],
 });

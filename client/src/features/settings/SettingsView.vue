@@ -3,6 +3,8 @@ import { computed, onMounted, reactive, ref } from "vue";
 import { Bot, Check, CloudCog, Download, FileJson, FolderCog, Gauge, Info, KeyRound, Layers3, LoaderCircle, Palette, RefreshCw, RotateCcw, Settings, Unplug, WandSparkles } from "lucide-vue-next";
 import { projectsClient } from "@/features/projects/services/projectsClient";
 import { settingsClient, type ScenePerformancePreferences, type ThinkingLevel, type ThinkingRole } from "@/features/settings/services/settingsClient";
+import PromptWorkbench from "@/features/settings/PromptWorkbench.vue";
+import { defaultConnectionPresets } from "@/features/settings/settingsDefaults";
 import { DesktopBridge } from "@/services/desktopBridge";
 import { formatCount } from "@/services/presentation";
 import { checkForUpdate, installUpdate, restartApplication, type UpdateCheckResult } from "@/services/updater";
@@ -11,10 +13,10 @@ import { useAppStore } from "@/stores/app";
 
 const store = useAppStore();
 const credential = reactive({ provider_id: "deepseek", credential: "" });
-type ModelRole = "worker" | "advisor" | "steward" | "character-actor" | "environment-writer";
-const selectedModels = reactive<Record<ModelRole, string>>({ worker: "", advisor: "", steward: "", "character-actor": "", "environment-writer": "" });
-const roleSaving = reactive<Record<ModelRole, boolean>>({ worker: false, advisor: false, steward: false, "character-actor": false, "environment-writer": false });
-const roleSaved = reactive<Record<ModelRole, boolean>>({ worker: false, advisor: false, steward: false, "character-actor": false, "environment-writer": false });
+type ModelRole = "worker" | "advisor" | "steward" | "character-actor" | "environment-writer" | "character-describer" | "object-describer" | "scene-describer";
+const selectedModels = reactive<Record<ModelRole, string>>({ worker: "", advisor: "", steward: "", "character-actor": "", "environment-writer": "", "character-describer": "", "object-describer": "", "scene-describer": "" });
+const roleSaving = reactive<Record<ModelRole, boolean>>({ worker: false, advisor: false, steward: false, "character-actor": false, "environment-writer": false, "character-describer": false, "object-describer": false, "scene-describer": false });
+const roleSaved = reactive<Record<ModelRole, boolean>>({ worker: false, advisor: false, steward: false, "character-actor": false, "environment-writer": false, "character-describer": false, "object-describer": false, "scene-describer": false });
 const performance = reactive<ScenePerformancePreferences>({ enabled: false, max_actor_calls: 12 });
 const performanceConfirmed = reactive<ScenePerformancePreferences>({ enabled: false, max_actor_calls: 12 });
 const performanceSaving = ref(false);
@@ -34,7 +36,7 @@ const thinkingLevels: { value: ThinkingLevel; label: string }[] = [
 ];
 const busy = ref(false);
 const feedback = ref("");
-const section = ref<"connections" | "appearance" | "about">("connections");
+const section = ref<"connections" | "appearance" | "prompts" | "about">("connections");
 const appInfo = ref<Record<string, any> | null>(null);
 const updateResult = ref<UpdateCheckResult | null>(null);
 const updateProgress = ref({ downloaded: 0, total: 0 });
@@ -48,18 +50,7 @@ const experience = reactive({
 const providers = computed(() => store.modelCatalog?.providers || []);
 const connectedProviders = computed(() => providers.value.filter((provider) => provider.connected));
 const models = computed(() => connectedProviders.value.flatMap((provider) => provider.models || []));
-const connectionPresets = computed(() => store.modelCatalog?.connection_presets || [
-  { id: "deepseek", label: "DeepSeek", group: "常用国内服务" },
-  { id: "zhipuai", label: "智谱 AI（GLM）", group: "常用国内服务" },
-  { id: "alibaba-cn", label: "阿里云百炼（中国区）", group: "常用国内服务" },
-  { id: "moonshotai-cn", label: "月之暗面 Kimi（中国区）", group: "常用国内服务" },
-  { id: "minimax-cn", label: "MiniMax（中国区）", group: "常用国内服务" },
-  { id: "siliconflow-cn", label: "硅基流动（中国区）", group: "常用国内服务" },
-  { id: "openai", label: "OpenAI", group: "国际服务" },
-  { id: "anthropic", label: "Anthropic Claude", group: "国际服务" },
-  { id: "google", label: "Google Gemini", group: "国际服务" },
-  { id: "openrouter", label: "OpenRouter", group: "国际服务" },
-]);
+const connectionPresets = computed(() => store.modelCatalog?.connection_presets || defaultConnectionPresets);
 const presetGroups = computed(() => {
   const groups = new Map<string, typeof connectionPresets.value>();
   for (const preset of connectionPresets.value) {
@@ -178,7 +169,7 @@ async function connectProvider(): Promise<void> {
 async function saveModel(role: ModelRole): Promise<void> {
   const expectedModel = selectedModels[role];
   if (!expectedModel || roleSaving[role]) return;
-  const labels = { worker: "正文与审查", advisor: "项目 Agent", steward: "项目监督", "character-actor": "角色表演", "environment-writer": "环境描写" };
+  const labels = { worker: "正文与审查", advisor: "项目 Agent", steward: "项目监督", "character-actor": "角色表演", "environment-writer": "环境描写", "character-describer": "人物描写", "object-describer": "事物描写", "scene-describer": "场面描写" };
   roleSaving[role] = true;
   roleSaved[role] = false;
   feedback.value = "";
@@ -312,6 +303,7 @@ function pathValue(key: string): string {
 
     <div class="settings-tabs" role="tablist">
       <button :class="{ active: section === 'connections' }" @click="section = 'connections'"><CloudCog :size="16" />连接与模型</button>
+      <button :class="{ active: section === 'prompts' }" @click="section = 'prompts'"><FileJson :size="16" />提示词工作台</button>
       <button :class="{ active: section === 'appearance' }" @click="section = 'appearance'"><Palette :size="16" />场域与动效</button>
       <button :class="{ active: section === 'about' }" @click="section = 'about'"><Info :size="16" />关于 ArcVellum</button>
     </div>
@@ -342,6 +334,9 @@ function pathValue(key: string): string {
             { id: 'steward', title: '项目监督', text: '用于异常判断和自动化过程中的项目级选择。' },
             { id: 'character-actor', title: '角色表演', text: '按场景任务单扮演人物，提供候选对白和动作。' },
             { id: 'environment-writer', title: '环境描写', text: '按视角与文风创作可选的场景描写。' },
+            { id: 'character-describer', title: '人物描写', text: '观察人物可见细节，提供可选素材。' },
+            { id: 'object-describer', title: '事物描写', text: '观察物的质地与使用痕迹。' },
+            { id: 'scene-describer', title: '场面描写', text: '为已发生言行安排空间构图。' },
           ] as const)" :key="role.id">
             <div><strong>{{ role.title }}</strong><p>{{ role.text }}</p></div>
             <select v-model="selectedModels[role.id]" :disabled="roleSaving[role.id]" @change="saveModel(role.id)"><option value="">先连接一个模型服务</option><option v-for="model in models" :key="model.qualified_id" :value="model.qualified_id">{{ model.name }} · {{ model.qualified_id }}</option></select>
@@ -386,7 +381,7 @@ function pathValue(key: string): string {
         <label><span><strong>候选素材机制</strong><small>关闭后仍由单一主创完成场景。</small></span>
           <select v-model="performance.enabled" aria-label="场景表演 Agent" :disabled="!performanceLoaded || performanceSaving" @change="savePerformance"><option :value="true">开启</option><option :value="false">关闭</option></select>
         </label>
-        <label><span><strong>每场角色表演上限</strong><small>环境写手另有一次调用；上限越高，耗时与费用越多。</small></span>
+        <label><span><strong>每场角色表演上限</strong><small>只限制角色候选；环境与描写器由主创按需调用。</small></span>
           <select v-model.number="performance.max_actor_calls" aria-label="每场角色表演上限" :disabled="!performanceLoaded || performanceSaving || !performance.enabled" @change="savePerformance"><option v-for="count in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]" :key="count" :value="count">{{ count }}</option></select>
         </label>
       </div>
@@ -401,6 +396,10 @@ function pathValue(key: string): string {
         </div>
       </div>
     </section>
+    </template>
+
+    <template v-else-if="section === 'prompts'">
+      <PromptWorkbench :project-root="store.currentProjectPath" />
     </template>
 
     <template v-else-if="section === 'appearance'">

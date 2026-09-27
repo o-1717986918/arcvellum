@@ -1,0 +1,1 @@
+下列未内联文件已被 Execution Context 明确归类为 Exact On Demand 恢复证据。当前首轮合同已经完整，禁止主动读取 `.agent_tasks.md`；正常执行只使用 Prepared Context、Semantic Evidence 和机器可读输出合同。若确定性预检失败，Studio 会在同一会话注入具体字段、错误位置和最小修复上下文，不得自行补读完整 sidecar。

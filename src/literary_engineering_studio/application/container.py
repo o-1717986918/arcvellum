@@ -11,6 +11,7 @@ from ..automation.controller import AutopilotService
 from .bootstrap import ApplicationBootstrapService
 from .lifecycle import ApplicationLifecycleManager
 from .ports import ApplicationPorts
+from .prompt_workbench import PromptWorkbenchService
 from .style.mount_service import StyleMountApplicationService
 from ..observability.agent_session_tracking import AgentSessionEventProjector
 from ..persistence.scene_transactions import SceneTransactionRepository
@@ -24,6 +25,7 @@ class ApplicationServices:
     autopilot: AutopilotService
     style_mounts: StyleMountApplicationService
     session_events: AgentSessionEventProjector
+    prompts: PromptWorkbenchService | None = None
 
 
 @dataclass(frozen=True)
@@ -49,6 +51,7 @@ def build_application_container(
     bootstrap = ApplicationBootstrapService(config, lifecycle)
     application = config.get("application") if isinstance(config.get("application"), dict) else {}
     data_root = Path(str(application.get("data_root") or "."))
+    prompts = PromptWorkbenchService(ports.persistence.prompt_layers) if ports.persistence.prompt_layers is not None else None
     session_events = AgentSessionEventProjector(
         ports.persistence.sessions,
         ports.persistence.context_ledgers,
@@ -63,6 +66,8 @@ def build_application_container(
         runtime_pool=ports.runtime_pool,
         data_root=data_root,
         session_event_tracker=session_events,
+        prompt_resolver=(lambda layer_id, root: prompts.resolve(layer_id, root).text)
+        if prompts is not None else None,
     )
     autopilot = AutopilotService(
         config,
@@ -76,6 +81,8 @@ def build_application_container(
         prepared_context_cache=ports.prepared_context_cache,
         live_events=ports.live_events,
         scene_transactions=SceneTransactionRepository(ports.persistence.unit_of_work),
+        prompt_resolver=(lambda layer_id, root: prompts.resolve(layer_id, root).text)
+        if prompts is not None else None,
     )
     return ApplicationContainer(
         config=config,
@@ -87,6 +94,7 @@ def build_application_container(
             autopilot=autopilot,
             style_mounts=style_mounts,
             session_events=session_events,
+            prompts=prompts,
         ),
     )
 

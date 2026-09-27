@@ -80,7 +80,10 @@ class RoleConversationGatewayTests(unittest.TestCase):
 
         self.assertEqual(result.answer, "流式回答")
         self.assertEqual(result.run_id, "arcvellum-conversation-fixture")
-        self.assertEqual(runtime.prompt, "只读回答这个问题")
+        envelope = json.loads(runtime.prompt)
+        self.assertEqual(envelope["schema"], "arcvellum/default-conversation/v1")
+        self.assertEqual(envelope["prompt"], "只读回答这个问题")
+        self.assertIn("no project write access", envelope["system_prompt"])
         self.assertEqual(runtime.options["worker_mode"], "conversation")
         self.assertEqual(runtime.options["max_turns"], 1)
         self.assertEqual(runtime.options["max_tool_calls"], 1)

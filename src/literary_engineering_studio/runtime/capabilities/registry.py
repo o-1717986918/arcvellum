@@ -3,19 +3,12 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
 from typing import Any
 
 from .contracts import CapabilityId, HandlerOutput
 
 
 CapabilityHandler = Callable[[Any, dict[str, Any]], HandlerOutput]
-
-
-@dataclass(frozen=True)
-class RegisteredCapability:
-    capability_id: str
-    handler: CapabilityHandler
 
 
 class CapabilityRegistry:

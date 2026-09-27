@@ -1,4 +1,4 @@
-"""Schema validation and repair helpers for persisted agent runs."""
+"""Schema validation helpers for persisted agent runs."""
 
 from __future__ import annotations
 
@@ -8,7 +8,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from literary_engineering_studio_engine.prompting.agents.provider import run_agent_task
 from literary_engineering_studio_engine.foundation.resources import engine_path
 
 
@@ -24,16 +23,6 @@ class AgentSchemaValidationResult:
     validation_path: Path
     error_count: int
     warning_count: int
-
-
-@dataclass(frozen=True)
-class AgentRepairResult:
-    project_root: Path
-    source_run_dir: Path
-    repair_run_dir: Path
-    schema_name: str
-    validation_path: Path
-    status: str
 
 
 def validate_agent_run(project_root: Path, *, run_id: str = "", run_dir: Path | None = None, schema_name: str) -> AgentSchemaValidationResult:
@@ -67,75 +56,6 @@ def validate_agent_run(project_root: Path, *, run_id: str = "", run_dir: Path | 
         validation_path=validation_path,
         error_count=len(errors),
         warning_count=len(warnings),
-    )
-
-
-def repair_agent_run(
-    project_root: Path,
-    *,
-    run_id: str = "",
-    run_dir: Path | None = None,
-    schema_name: str,
-    provider: str = "auto",
-) -> AgentRepairResult:
-    root = project_root.resolve()
-    source_run_dir = _resolve_run_dir(root, run_id=run_id, run_dir=run_dir)
-    parsed_path = source_run_dir / "parsed_output.json"
-    raw_path = source_run_dir / "raw_output.md"
-    validation_path = source_run_dir / "schema_validation.json"
-    if not parsed_path.exists():
-        raise FileNotFoundError(f"parsed agent output not found: {parsed_path}")
-    if not validation_path.exists():
-        validate_agent_run(root, run_dir=source_run_dir, schema_name=schema_name)
-    parsed_text = parsed_path.read_text(encoding="utf-8")
-    raw_text = raw_path.read_text(encoding="utf-8") if raw_path.exists() else ""
-    validation_text = validation_path.read_text(encoding="utf-8")
-
-    repair_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    repair_dir = source_run_dir / "repair_attempts" / repair_id
-    spec = load_schema_spec(schema_name)
-    system_prompt = "You repair agent JSON so it conforms exactly to the requested schema. Output JSON only."
-    user_prompt = f"""Repair the agent output for schema `{schema_name}`.
-
-Schema spec:
-```json
-{json.dumps(spec, ensure_ascii=False, indent=2)}
-```
-
-Schema validation:
-```json
-{validation_text}
-```
-
-Parsed output:
-```json
-{parsed_text}
-```
-
-Raw output:
-```text
-{raw_text[:6000]}
-```
-"""
-    run_result = run_agent_task(
-        root,
-        agent_id=f"{schema_name.replace('.', '-')}-repairer",
-        task="repair-json",
-        system_prompt=system_prompt,
-        user_prompt=user_prompt,
-        provider=provider,
-        output_dir=repair_dir,
-        metadata={"source_run_dir": _rel_str(source_run_dir, root), "schema_name": schema_name},
-        dry_run_output=minimal_payload(schema_name),
-    )
-    validation = validate_agent_run(root, run_dir=run_result.run_dir, schema_name=schema_name)
-    return AgentRepairResult(
-        project_root=root,
-        source_run_dir=source_run_dir,
-        repair_run_dir=run_result.run_dir,
-        schema_name=schema_name,
-        validation_path=validation.validation_path,
-        status=validation.status,
     )
 
 

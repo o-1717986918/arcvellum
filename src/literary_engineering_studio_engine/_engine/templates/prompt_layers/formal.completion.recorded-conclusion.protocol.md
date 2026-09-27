@@ -1,0 +1,1 @@
+- 审查 Markdown 必须包含独占机器行：`- 结论： pass`、`- 结论： revise_required` 或 `- 结论： reject`。标题、代码字段或普通段落不能替代。

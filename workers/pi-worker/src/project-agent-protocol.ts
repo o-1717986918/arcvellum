@@ -3,6 +3,9 @@ import { randomUUID } from "node:crypto";
 export const PROJECT_AGENT_BRIDGE_SCHEMA = "arcvellum/project-agent-bridge/v1";
 export const MAX_BRIDGE_FRAME_BYTES = 256 * 1024;
 export const MAX_TOOL_RESULT_BYTES = 64 * 1024;
+export const LONG_PROJECT_TOOL_TIMEOUT_MS = 65 * 60_000;
+
+const LONG_PROJECT_TOOLS = new Set(["project_future_replan", "project_chapter_extend", "project_assets_reconcile", "project_planning_prepare"]);
 
 export type BridgeMessageType =
 	| "turn.start"
@@ -94,17 +97,20 @@ export class ProjectToolBridge {
 	private readonly turnId: string;
 	private readonly write: BridgeWriter;
 	private readonly timeoutMs: number;
+	private readonly longTimeoutMs: number;
 
 	constructor(
 		turnId: string,
 		write: BridgeWriter,
 		timeoutMs = 30_000,
+		longTimeoutMs = LONG_PROJECT_TOOL_TIMEOUT_MS,
 	) {
 		if (!turnId.trim()) throw new Error("Project Tool Bridge requires a turn id");
-		if (timeoutMs < 1) throw new Error("Project Tool Bridge timeout must be positive");
+		if (timeoutMs < 1 || longTimeoutMs < 1) throw new Error("Project Tool Bridge timeout must be positive");
 		this.turnId = turnId;
 		this.write = write;
 		this.timeoutMs = timeoutMs;
+		this.longTimeoutMs = longTimeoutMs;
 	}
 
 	get pendingCount(): number {
@@ -118,7 +124,7 @@ export class ProjectToolBridge {
 		return new Promise((resolve, reject) => {
 			const timer = setTimeout(() => {
 				this.rejectPending(requestId, new Error(`Project Agent tool timed out: ${name}`));
-			}, this.timeoutMs);
+			}, LONG_PROJECT_TOOLS.has(name) ? this.longTimeoutMs : this.timeoutMs);
 			const pending: PendingToolCall = { name, resolve, reject, timer, signal };
 			if (signal) {
 				pending.onAbort = () => this.rejectPending(

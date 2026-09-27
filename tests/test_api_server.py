@@ -65,6 +65,11 @@ class ApiServerTests(unittest.TestCase):
         connections = self.client.get("/model-connections").json()
         self.assertEqual(connections["managed_by"], "agent-runner")
 
+    def test_runtime_adapters_remain_available_to_project_clients(self):
+        response = self.client.get("/runtime/adapters")
+        self.assertEqual(response.status_code, 200)
+        self.assertIsInstance(response.json(), dict)
+
     def test_thinking_preferences_can_be_read_and_changed_without_model_catalog(self):
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "config.json"

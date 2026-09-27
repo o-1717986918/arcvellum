@@ -6,6 +6,7 @@ from .continuity_projection import (
     CONTINUITY_PROJECTION_SCHEMA,
     project_committed_scene_delta,
 )
+from .creative_intent import CreativeIntentV1
 from .contracts import (
     ChangeProposal,
     CreativeResult,
@@ -31,6 +32,7 @@ __all__ = [
     "ChangeProposal",
     "CONTINUITY_PROJECTION_SCHEMA",
     "CreativeResult",
+    "CreativeIntentV1",
     "IssueSeverity",
     "LengthTarget",
     "ReviewDecision",

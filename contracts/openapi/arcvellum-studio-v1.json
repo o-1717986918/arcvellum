@@ -785,7 +785,7 @@
             "type": "string"
           },
           "timeout": {
-            "default": 180,
+            "default": 4200,
             "title": "Timeout",
             "type": "integer"
           }
@@ -901,6 +901,111 @@
           "projects_root"
         ],
         "title": "ProjectsRootRequest",
+        "type": "object"
+      },
+      "PromptActivationRequest": {
+        "properties": {
+          "expected_digest": {
+            "default": "",
+            "title": "Expected Digest",
+            "type": "string"
+          },
+          "project_root": {
+            "default": "",
+            "title": "Project Root",
+            "type": "string"
+          },
+          "scope": {
+            "title": "Scope",
+            "type": "string"
+          },
+          "version": {
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "scope",
+          "version"
+        ],
+        "title": "PromptActivationRequest",
+        "type": "object"
+      },
+      "PromptEditRequest": {
+        "properties": {
+          "expected_digest": {
+            "default": "",
+            "title": "Expected Digest",
+            "type": "string"
+          },
+          "project_root": {
+            "default": "",
+            "title": "Project Root",
+            "type": "string"
+          },
+          "scope": {
+            "title": "Scope",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 12000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "scope",
+          "text"
+        ],
+        "title": "PromptEditRequest",
+        "type": "object"
+      },
+      "PromptPreviewRequest": {
+        "properties": {
+          "layer_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 24,
+            "minItems": 1,
+            "title": "Layer Ids",
+            "type": "array"
+          },
+          "project_root": {
+            "default": "",
+            "title": "Project Root",
+            "type": "string"
+          }
+        },
+        "required": [
+          "layer_ids"
+        ],
+        "title": "PromptPreviewRequest",
+        "type": "object"
+      },
+      "PromptResetRequest": {
+        "properties": {
+          "expected_digest": {
+            "default": "",
+            "title": "Expected Digest",
+            "type": "string"
+          },
+          "project_root": {
+            "default": "",
+            "title": "Project Root",
+            "type": "string"
+          },
+          "scope": {
+            "title": "Scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "scope"
+        ],
+        "title": "PromptResetRequest",
         "type": "object"
       },
       "ReaderBookmarkRequest": {
@@ -1429,7 +1534,7 @@
   },
   "info": {
     "title": "ArcVellum",
-    "version": "0.99.10"
+    "version": "0.99.12"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -6414,6 +6519,277 @@
           }
         },
         "summary": "Projects Validate Location"
+      }
+    },
+    "/prompts/catalog": {
+      "get": {
+        "operationId": "catalog_prompts_catalog_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Project Root",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Catalog"
+      }
+    },
+    "/prompts/layers/{layer_id}": {
+      "put": {
+        "operationId": "save_prompts_layers__layer_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "layer_id",
+            "required": true,
+            "schema": {
+              "title": "Layer Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PromptEditRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save"
+      }
+    },
+    "/prompts/layers/{layer_id}/activate": {
+      "post": {
+        "operationId": "activate_prompts_layers__layer_id__activate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "layer_id",
+            "required": true,
+            "schema": {
+              "title": "Layer Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PromptActivationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Activate"
+      }
+    },
+    "/prompts/layers/{layer_id}/history": {
+      "get": {
+        "operationId": "history_prompts_layers__layer_id__history_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "layer_id",
+            "required": true,
+            "schema": {
+              "title": "Layer Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "scope",
+            "required": true,
+            "schema": {
+              "title": "Scope",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Project Root",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "History"
+      }
+    },
+    "/prompts/layers/{layer_id}/reset": {
+      "post": {
+        "operationId": "reset_prompts_layers__layer_id__reset_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "layer_id",
+            "required": true,
+            "schema": {
+              "title": "Layer Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PromptResetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reset"
+      }
+    },
+    "/prompts/preview": {
+      "post": {
+        "operationId": "preview_prompts_preview_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PromptPreviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview"
       }
     },
     "/reader/bookmark": {

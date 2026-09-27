@@ -4,6 +4,8 @@ import threading
 import unittest
 
 from literary_engineering_studio.persistence.job_store import JobStore
+from literary_engineering_studio.application.prompt_workbench import PromptWorkbenchService
+from literary_engineering_studio.persistence.prompt_layers import FilePromptLayerRepository
 from literary_engineering_studio.project_agent import (
     ProjectAgentActionDependencies,
     ProjectAgentDependencies,
@@ -113,7 +115,11 @@ class ProjectAgentServiceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "project"
             root.mkdir()
+            (root / "project.yaml").write_text("title: Test\n", encoding="utf-8")
             store = JobStore(Path(temporary) / "studio.sqlite3")
+            workbench = PromptWorkbenchService(FilePromptLayerRepository(Path(temporary) / "app"))
+            workbench.save("project_agent.creative_direction", "本次应尊重人物的日常停留。",
+                           scope="project", project_root=root)
             runtime = _Runtime(ProjectAgentTurnResult("completed", "当前阶段是 {stage}。", "unused", 0, 1))
             service = ProjectAgentService(
                 {},
@@ -122,6 +128,7 @@ class ProjectAgentServiceTests(unittest.TestCase):
                 dependencies=_dependencies(),
                 runtime_factory=lambda _config, _root: runtime,
                 persona_loader=lambda _root: {"name": "冷面读者", "prompt": "只对真实阅读感受负责。"},
+                prompt_resolver=lambda layer_id, project: workbench.resolve(layer_id, project).text,
             )
             session = service.create_session(root, title="测试会话")
             streamed = []
@@ -147,6 +154,7 @@ class ProjectAgentServiceTests(unittest.TestCase):
                 ("project_overview", "project_search", "creation_observe"),
             )
             self.assertIn("冷面读者", runtime.requests[0].system_prompt)
+            self.assertIn("本次应尊重人物的日常停留。", runtime.requests[0].system_prompt)
 
     def test_advisor_session_cannot_be_used_as_project_agent(self):
         with tempfile.TemporaryDirectory() as temporary:

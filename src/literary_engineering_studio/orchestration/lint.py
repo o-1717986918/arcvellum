@@ -288,15 +288,6 @@ def _error(
     issues.append(PlanIssue(code, PlanIssueSeverity.ERROR, message, node_ids))
 
 
-def _warning(
-    issues: list[PlanIssue],
-    code: str,
-    message: str,
-    node_ids: tuple[str, ...] = (),
-) -> None:
-    issues.append(PlanIssue(code, PlanIssueSeverity.WARNING, message, node_ids))
-
-
 def _severity_order(value: PlanIssueSeverity) -> int:
     return {
         PlanIssueSeverity.ERROR: 0,

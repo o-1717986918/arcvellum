@@ -8,8 +8,10 @@ from literary_engineering_studio.application.assets.loader import AssetLoader
 from literary_engineering_studio.application.assets.owner_transactions import AssetVersionConflictError, OwnerTransactionService
 from literary_engineering_studio.application.assets.recycle_bin import RecycleBinService
 from literary_engineering_studio.application.assets.registry import AssetViewRegistry
+from literary_engineering_studio.application.assets.structured_editor import StructuredAssetService, StructuredFieldError
 from literary_engineering_studio.application.style.owner_directive import read_owner_style_directive, write_owner_style_directive
 from literary_engineering_studio.project_agent.archive_actions import archive_change_action, archive_read_action
+from literary_engineering_studio.project_agent.asset_reconcile_actions import asset_reconcile_action
 from literary_engineering_studio.project_agent.contracts import ProjectAgentActionDependencies, ProjectAgentDependencies, ProjectAgentToolCall
 from literary_engineering_studio.project_agent.read_models import dependencies_from_read_models
 from literary_engineering_studio.project_agent.tools import ProjectAgentToolDispatcher, available_action_tools, available_read_tools
@@ -35,6 +37,7 @@ class ProjectAgentOwnerPermissionTests(unittest.TestCase):
             transactions=OwnerTransactionService(registry, loader),
             creation=OwnerCreationService(registry, loader),
             recycle_bin=RecycleBinService(registry, loader),
+            structured_editor=StructuredAssetService(registry, loader),
         )
         self.read = archive_read_action(archive)
         self.change = archive_change_action(archive)
@@ -80,6 +83,75 @@ class ProjectAgentOwnerPermissionTests(unittest.TestCase):
         })
         self.assertEqual(archived["operation"], "archive")
         self.assertEqual(restored["operation"], "restore")
+
+    def test_registered_fields_use_the_same_structured_editor_and_owner_receipt(self):
+        (self.root / "characters/lin.yaml").write_text(
+            "character_id: lin\nname: 林澈\nimportance: major\ncustom_note: 保留此行\n",
+            encoding="utf-8",
+        )
+        fields = self.read(self.root, {"section": "fields", "asset_id": "character:lin"})
+        self.assertEqual(fields["asset_id"], "character:lin")
+        self.assertIn("background_story", {item["name"] for item in fields["fields"]})
+        revised = self.change(self.root, {
+            "operation": "fields", "asset_id": "character:lin",
+            "base_revision": fields["source_revision"],
+            "fields": {"background_story": {"formative_event": "少年时失去故乡"}},
+            "reason": "补足人物童年的经历及其当下影响。",
+        })
+        self.assertEqual(revised["receipt"]["authority"], "owner")
+        detail = self.read(self.root, {"section": "detail", "asset_id": "character:lin"})
+        self.assertIn("custom_note: 保留此行", detail["content"])
+        self.assertIn("少年时失去故乡", detail["content"])
+        with self.assertRaises(AssetVersionConflictError):
+            self.change(self.root, {
+                "operation": "fields", "asset_id": "character:lin",
+                "base_revision": fields["source_revision"],
+                "fields": {"role": "主角"}, "reason": "调整人物在故事中的角色位置。",
+            })
+        with self.assertRaises(StructuredFieldError):
+            self.change(self.root, {
+                "operation": "fields", "asset_id": "character:lin",
+                "base_revision": detail["asset"]["revision"],
+                "fields": {"not_registered": "不应写入"},
+                "reason": "检查未登记字段不能绕开编辑器。",
+            })
+
+    def test_world_rule_fields_are_available_without_a_special_agent_path(self):
+        (self.root / "canon").mkdir()
+        (self.root / "canon/world_rules.yaml").write_text(
+            "world_name: 雾都\nrules: []\n", encoding="utf-8",
+        )
+        fields = self.read(self.root, {"section": "fields", "asset_id": "world-rule:world_rules"})
+        changed = self.change(self.root, {
+            "operation": "fields", "asset_id": "world-rule:world_rules",
+            "base_revision": fields["source_revision"],
+            "fields": {"rules": [{"name": "潮汐之门", "effect": "每夜只开启一次"}]},
+            "reason": "明确世界机制及其时间限制。",
+        })
+        self.assertEqual(changed["receipt"]["asset_type"], "world-rule")
+
+    def test_planned_asset_reconcile_is_a_registered_project_action(self):
+        calls = []
+        action = asset_reconcile_action(
+            lambda root, **values: calls.append((root, values)) or {"characters_created": 1},
+        )
+        result = action(self.root, {
+            "asset_id": "character:lin", "reason": "补齐规划中缺失的人物档案。",
+        })
+        self.assertEqual(result["characters_created"], 1)
+        self.assertEqual(calls[0][1], {"target_asset_id": "character:lin"})
+        actions = ProjectAgentActionDependencies(lambda _root, _args: {}, lambda _root, _args: {},
+                                                 reconcile_assets=action)
+        self.assertIn("project_assets_reconcile", available_action_tools(actions))
+        dispatcher = ProjectAgentToolDispatcher(
+            self.root, ProjectAgentDependencies(lambda _root, _args: {}, lambda _root, _args: {},
+                                                lambda _root, _args: {}),
+            enabled=("project_assets_reconcile",), actions=actions,
+        )
+        self.assertEqual(dispatcher(ProjectAgentToolCall(
+            "reconcile-1", "turn", "project_assets_reconcile",
+            {"asset_id": "character:lin", "reason": "补齐规划中缺失的人物档案。"},
+        ))["operation"], "assets_reconcile")
 
     def test_owner_style_revision_and_detach(self):
         first = read_owner_style_directive(self.root)

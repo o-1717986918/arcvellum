@@ -1,4 +1,3 @@
-import { createAdvisorClient } from "@/features/advisor/services/advisorClient";
 import { createCreativeLiveClient } from "@/features/creative-live/services/creativeLiveClient";
 import { createDeliveryClient } from "@/features/delivery/services/deliveryClient";
 import { createOrreryClient } from "@/features/orrery/services/orreryClient";
@@ -13,7 +12,6 @@ export function createFeatureClientHarness() {
   return {
     transport,
     clients: {
-      advisor: createAdvisorClient(transport),
       creativeLive: createCreativeLiveClient(transport),
       delivery: createDeliveryClient(transport),
       orrery: createOrreryClient(transport),

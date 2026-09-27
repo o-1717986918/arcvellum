@@ -120,6 +120,7 @@ def materialize_agent_context_contract(
         execution_context=execution_context,
         execution_profile=execution_profile,
         prompt_access=prompt_access,
+        prompt_asset_override=prompt_program.prompt_asset_override,
     )
     materialize_execution_boundaries(run_root, task_dir, task_context_path=context_path)
     ledger = materialize_runtime_context_ledger(

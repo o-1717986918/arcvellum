@@ -323,16 +323,6 @@
 .creative-live-footer span { display: flex; min-width: 0; align-items: center; gap: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .creative-live-footer i { width: 5px; height: 5px; background: var(--live-signal); border-radius: 50%; }
 
-.observatory-diagnostics { margin: 8px; color: var(--live-ink); background: rgba(18, 33, 28, .8); border: 1px solid rgba(160, 197, 183, .11); }
-.observatory-diagnostics > summary { display: grid; grid-template-columns: 16px auto 1fr; gap: 6px; align-items: center; padding: 9px 12px; color: #a8bab3; cursor: pointer; font-size: 9px; list-style: none; }
-.observatory-diagnostics > summary::-webkit-details-marker { display: none; }
-.observatory-diagnostics > summary small { color: #667b73; text-align: right; }
-.observatory-diagnostics[open] > summary svg { transform: rotate(180deg); }
-.diagnostic-heading { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px 0; }
-.diagnostic-heading h2 { margin: 2px 0 0; font-size: 16px; }
-.observatory-diagnostics .strategy-grid,
-.observatory-diagnostics .strategy-events { margin: 10px; }
-
 /* The Orrery consumes the same project event stream. Live state decorates
    formal nodes without altering their project status or spatial identity. */
 .orrery-v3-node.creative-live-active {

@@ -262,15 +262,6 @@ def promote_candidate_asset(
     return AssetPromotionResult(root, candidate_path, manifest_path, report_path, output_paths, "promoted")
 
 
-def create_project_seed_candidates(project_root: Path, *, provider: str = "auto", brief: str = "") -> list[AssetCreationResult]:
-    results = [
-        create_asset_candidate(project_root, asset_type="world", brief=brief, provider=provider),
-        create_asset_candidate(project_root, asset_type="character", brief=brief, provider=provider),
-        create_asset_candidate(project_root, asset_type="outline", brief=brief, provider=provider),
-    ]
-    return results
-
-
 def _normalize_asset_type(value: str) -> str:
     normalized = value.strip().lower().replace("_", "-")
     aliases = {

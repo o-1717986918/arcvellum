@@ -11,7 +11,7 @@ import { runWorker } from "./worker.ts";
 import { runConversation } from "./conversation.ts";
 import { runProjectAgentProcess } from "./project-agent.ts";
 
-const VERSION = "0.99.11";
+const VERSION = "0.99.12";
 const DEFAULT_STATES = ["asset-creation-agent-task", "canon-review-agent-task", "candidate-review"];
 
 async function main(): Promise<number> {
@@ -99,7 +99,7 @@ function parseOptions(args: string[]): RunnerOptions {
 	const mode = single(values, "--mode") || "task";
 	if (!isWorkerMode(mode)) throw new Error(`unsupported worker mode: ${mode}`);
 	const conversationRole = single(values, "--conversation-role") || "default";
-	if (!["default", "character-actor", "environment-writer"].includes(conversationRole)) {
+	if (!["default", "character-actor", "environment-writer", "character-describer", "object-describer", "scene-describer"].includes(conversationRole)) {
 		throw new Error(`unsupported conversation role: ${conversationRole}`);
 	}
 	if (mode !== "conversation" && conversationRole !== "default") {

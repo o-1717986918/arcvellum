@@ -23,6 +23,15 @@ class TaskProtocolV1GoldenTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.fixture = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
 
+    def test_published_v1_schema_mirror_matches_embedded_engine(self):
+        root = Path(__file__).resolve().parents[1]
+        for name in ("agent_task", "agent_submission", "agent_completion"):
+            with self.subTest(schema=name):
+                canonical = root / "src" / "literary_engineering_studio_engine" / "_engine" / "schemas" / f"{name}.v1.json"
+                mirror = root / "protocol" / "schemas" / f"{name}.v1.json"
+                self.assertEqual(json.loads(mirror.read_text(encoding="utf-8")),
+                                 json.loads(canonical.read_text(encoding="utf-8")))
+
     def test_fixture_covers_every_formal_route_once(self):
         routes = [case["name"] for case in self.fixture["cases"]]
         self.assertEqual(len(routes), len(set(routes)))

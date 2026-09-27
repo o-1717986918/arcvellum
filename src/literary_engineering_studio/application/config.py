@@ -21,7 +21,7 @@ CONFIG_SCHEMA = "literary-engineering-studio/config/v0.9"
 DEFAULT_PI_MODEL = "deepseek/deepseek-v4-flash"
 _PI_MODEL_ROLES = (
     "worker", "reviewer", "planner", "advisor", "steward", "style", "archaeology",
-    "character-actor", "environment-writer",
+    "character-actor", "environment-writer", "character-describer", "object-describer", "scene-describer",
 )
 
 

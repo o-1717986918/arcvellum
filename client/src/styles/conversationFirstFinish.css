@@ -111,7 +111,7 @@
 .creative-live-view .creative-live-dock[data-status="blocked"] { --live-signal: #b85845; }
 .creative-live-view :is(.creative-live-left, .creative-live-right, .creative-live-heading, .creative-task-card) { background: #f3f6f2; }
 .creative-live-view .scene-transaction-pulse { background: #e8f1ec; }
-.creative-live-view :is(.creative-transcript, .revision-diff-scroll, .observatory-diagnostics) {
+.creative-live-view :is(.creative-transcript, .revision-diff-scroll) {
   color: var(--live-ink);
   background: #fff;
   border-color: var(--live-line);
@@ -122,7 +122,6 @@
 .creative-live-view .creative-identity-rail li,
 .creative-live-view .creative-review-rail li small,
 .creative-live-view .creative-live-footer,
-.creative-live-view .observatory-diagnostics > summary,
 .creative-live-view .creative-context-summary > summary,
 .creative-live-view .creative-technical-identity > summary { color: #536b5f; }
 .creative-live-view .creative-technical-identity code,

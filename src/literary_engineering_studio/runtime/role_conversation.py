@@ -9,6 +9,7 @@ import threading
 import time
 from typing import Any, Callable, Sequence
 
+from literary_engineering_studio_engine.public.prompting import prompt_layer_spec
 from ..runtimes import build_runtime
 from .runtime_selection import runtime_for_role
 
@@ -75,11 +76,36 @@ class RoleConversationGateway:
         return self._execute(workspace, payload, role="character-actor", timeout=timeout,
                              event_sink=event_sink, cancel_event=None, turns=1)
 
+    def run_role_turn(
+        self, workspace: Path, *, role: str, initialization: str,
+        history: Sequence[tuple[str, str]], prompt: str, timeout: int,
+        event_sink: Callable[[str, dict[str, Any]], None] | None = None,
+    ) -> RoleConversationResult:
+        if role not in {"environment-writer", "character-describer", "object-describer", "scene-describer"}:
+            raise ValueError("unsupported initialized literary role")
+        if not initialization.strip() or not prompt.strip() or len(history) > 16:
+            raise ValueError("role turn needs initialization, prompt, and bounded history")
+        payload = json.dumps({
+            "schema": "arcvellum/role-conversation/v1", "initialization": initialization,
+            "initialization_answer": "",
+            "history": [{"prompt": question, "answer": answer} for question, answer in history],
+            "prompt": prompt,
+        }, ensure_ascii=False)
+        return self._execute(workspace, payload, role=role, timeout=timeout,
+                             event_sink=event_sink, cancel_event=None, turns=1)
+
     def _execute(
         self, workspace: Path, prompt: str, *, role: str, timeout: int,
         event_sink: Callable[[str, dict[str, Any]], None] | None,
         cancel_event: threading.Event | None, turns: int,
     ) -> RoleConversationResult:
+        if role not in {"character-actor", "environment-writer", "character-describer",
+                        "object-describer", "scene-describer"}:
+            prompt = json.dumps({
+                "schema": "arcvellum/default-conversation/v1",
+                "system_prompt": prompt_layer_spec("pi.conversation.system").default_text,
+                "prompt": prompt,
+            }, ensure_ascii=False)
         runtime_id = runtime_for_role(self.config, role)
         if runtime_id != "pi-worker":
             raise RuntimeError(f"tool-free role conversation is unsupported by runtime: {runtime_id}")
@@ -101,7 +127,7 @@ class RoleConversationGateway:
             event_sink=observe,
             cancel_event=cancel_event,
             worker_mode="conversation",
-            conversation_role=(role if role in {"character-actor", "environment-writer"} else "default"),
+            conversation_role=(role if role in {"character-actor", "environment-writer", "character-describer", "object-describer", "scene-describer"} else "default"),
             reasoning_policy=str(settings.get("thinking") or "medium"),
             max_turns=turns,
             max_tool_calls=1,
@@ -109,7 +135,7 @@ class RoleConversationGateway:
         )
         worker_result = _worker_result(result.metadata)
         final_answer = str(worker_result.get("answer") or "").strip()
-        answer = final_answer if role == "character-actor" or (role == "environment-writer" and turns > 1) else "".join(pieces).strip() or final_answer
+        answer = final_answer if role in {"character-actor", "environment-writer", "character-describer", "object-describer", "scene-describer"} else "".join(pieces).strip() or final_answer
         if result.status != "completed":
             raise RuntimeError(result.message or f"{role} conversation failed")
         if not answer:

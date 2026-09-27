@@ -16,6 +16,7 @@ from literary_engineering_studio_engine.public.literary import (
     normalize_scene_window,
     rebalance_lean_budget,
     render_outline,
+    load_scene_facts,
 )
 from literary_engineering_studio_engine.public.projects import atomic_write_text
 
@@ -55,6 +56,7 @@ class LeanLongformPlanningService:
             try:
                 budget = rebalance_lean_budget(base_budget, answer)
                 plan = normalize_initial_plan(answer, budget, project_digest=digest)
+                _check_existing_first_window(root, plan)
             except ValueError as exc:
                 self._emit_validation_failure("initial", exc)
                 answer = self._ask(
@@ -64,6 +66,7 @@ class LeanLongformPlanningService:
                 )
                 budget = rebalance_lean_budget(base_budget, answer)
                 plan = normalize_initial_plan(answer, budget, project_digest=digest)
+                _check_existing_first_window(root, plan)
             _write_json(plan_path, plan)
         if not budget_path.is_file() or _read_json(budget_path) != budget:
             _write_json(budget_path, budget)
@@ -155,9 +158,16 @@ class LeanLongformPlanningService:
 
 
 def _initial_prompt(root: Path, budget: dict[str, Any]) -> str:
-    directions = [str(row.get("message") or "") for row in read_directions(root, limit=10)]
+    directions = list(dict.fromkeys(
+        str(row.get("message") or "") for row in read_directions(root, limit=10)
+    ))
     _, source_context = imported_source_context(root)
     existing_outline = root / "plot" / "outline.md"
+    existing_scenes = [
+        f"### {path.name}\n{path.read_text(encoding='utf-8')[:5000]}"
+        for path in sorted((root / "scenes").glob("scene_*.yaml"))[:8]
+        if path.is_file()
+    ]
     chapter_rows = [
         {key: row[key] for key in ("chapter_id", "volume_id", "target_words", "scene_count")}
         for row in budget["chapter_budgets"]
@@ -168,6 +178,7 @@ def _initial_prompt(root: Path, budget: dict[str, Any]) -> str:
         "只返回一个 JSON 对象；不写任务回执、文件路径、ID、字数或模型说明。",
         "chapters 与下列章节容量顺序相同；first_window 只写第一章场景，数量匹配预算。用户指定的章序、终局位置与最终画面优先。",
         "场景字段：name, function, participants(人名数组), conflict, information_release, consequence, setup_payoff_role, rhythm_role, obligation；可加 story_time 和 length_weight。story_time 写本场在故事时间中的位置，场景排列是阅读顺序。rhythm_role 取 setup、escalation、climax、payoff、aftermath、bridge、transition 之一。",
+        "已有场景档案是作者已定的场面事实；first_window 保持其场次、章节、参与人物与目标容量，围绕其中尚未决定的情节展开。",
         "返回字段：premise, central_question, ending_choice, narrative_design, volume_obligations, volume_length_weights, chapters, first_window, characters, world_facts。narrative_design 可写 narrative_mode、temporal_structure、viewpoint_design、pacing_design、structural_signature。每章写 title、dramatic_turn、obligation、reader_question，并可写 length_weight。volume_length_weights 是按卷排列的相对篇幅权重。长度权重只表达详略，内核按全书目标核算；场景数是容量，事件由你决定。",
         "每个人物只写 name, role, importance(major/secondary/cameo), background, desire。只列全书重要人物；first_window 中所有有专名的 participants 必须逐字复用 characters 的 name，临时路人使用无专名角色称谓。world_facts 只写当前故事确需成立的虚构世界事实与机制；章场数量、人物出场范围、视角和语言形式留在规划或用户方向中。尚未确定的世界事实保持开放，现实题材可返回空数组。",
         "用角色选择与后果支撑章节转向；让时间调度、视角切换和章节长短共同服务阅读体验。人物之间的生活语言、玩笑、误会、亲疏与突然改变的看法本身就能支撑戏剧变化；每人有自己的兴趣和词域。给单场保留可供对话、心理、环境生长的中心压力：conflict 写冲突的双方与欲望，consequence 可以写条件性的可能变化；尚待角色在场说出的话、做出的举动及其具体结果留给推演与正文。其他世界信息可以随人物认识逐步展开。相邻场景承接已经发生的变化。既定时间和数值事实保持一致，未知事实保留未知。后续场景按章滚动展开。",
@@ -177,6 +188,7 @@ def _initial_prompt(root: Path, budget: dict[str, Any]) -> str:
             existing_outline.read_text(encoding="utf-8")[:5000]
             if existing_outline.is_file() else "无"
         ),
+        "\n## 已填场景档案\n" + ("\n".join(existing_scenes)[:14000] or "无"),
         "\n## 导入作品的可追溯片段\n" + (source_context or "无导入来源")
         + "\n片段不代表全文；不确定的既有事实需留待来源核对，不可编造。",
         "\n## 体量与章节分配\n" + json.dumps(
@@ -321,6 +333,27 @@ def _project_contract_digest(root: Path) -> str:
     digest = hashlib.sha256()
     digest.update((root / "project.yaml").read_bytes())
     return digest.hexdigest()
+
+
+def _check_existing_first_window(root: Path, plan: dict[str, Any]) -> None:
+    planned = {scene["scene_id"]: scene for scene in plan["scenes"]}
+    for path in sorted((root / "scenes").glob("scene_*.yaml")):
+        facts = load_scene_facts(path)
+        scene = planned.get(path.stem)
+        if scene is None:
+            raise ValueError(f"existing authored scene {path.stem} is absent from first_window")
+        if facts.scene_id != scene["scene_id"] or facts.chapter_id != scene["chapter_id"]:
+            raise ValueError(f"existing authored scene {path.stem} identity or chapter differs")
+        if facts.word_count_target and facts.word_count_target != scene["target_chars"]:
+            raise ValueError(
+                f"existing authored scene {path.stem} target is {facts.word_count_target}, "
+                f"first_window target is {scene['target_chars']}"
+            )
+        if facts.participants and set(facts.participants) != set(scene["participants"]):
+            raise ValueError(
+                f"existing authored scene {path.stem} participants are {facts.participants}, "
+                f"first_window participants are {scene['participants']}"
+            )
 
 
 def _check_plan(plan: dict[str, Any], digest: str) -> None:

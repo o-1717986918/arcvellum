@@ -1,0 +1,1 @@
+若声明语义成果，先完成真实判断；不得把 pending 模板或 completion receipt 当作正式结论。

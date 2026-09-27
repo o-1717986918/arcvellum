@@ -84,8 +84,8 @@ class AutopilotService:
         execution_coordinator=None,
         style_mount_service: StyleMountApplicationService | None = None,
         prepared_context_cache: PreparedContextCache | None = None,
-        live_events=None,
-        scene_transactions=None,
+        live_events=None, scene_transactions=None,
+        prompt_resolver=None,
     ):
         self.config = config
         persistence = resolve_autopilot_persistence(
@@ -93,6 +93,7 @@ class AutopilotService:
         self.runs, self.sessions, self.plans = persistence.runs, persistence.sessions, persistence.plans
         self._session_event_tracker = persistence.session_event_tracker
         self.runtime_pool = runtime_pool
+        self._prompt_resolver = prompt_resolver
         self.execution_coordinator = execution_coordinator
         self.style_mount_service = style_mount_service or StyleMountApplicationService()
         self.prepared_context_cache = prepared_context_cache
@@ -339,10 +340,10 @@ class AutopilotService:
         run_claimed(self, run_id, stop, ROUTE_ORDER, _pending_asset_dependency)
 
     def _build_steward(self, run_id: str) -> CreativeSteward:
-        steward = (
-            CreativeSteward(self.config, runtime_pool=self.runtime_pool)
-            if self.runtime_pool is not None else CreativeSteward(self.config)
-        )
+        options = {"prompt_resolver": self._prompt_resolver} if self._prompt_resolver is not None else {}
+        if self.runtime_pool is not None:
+            options["runtime_pool"] = self.runtime_pool
+        steward = CreativeSteward(self.config, **options)
         setattr(steward, "event_sink", lambda event, data: self._steward_event(run_id, event, data))
         return steward
 

@@ -1,0 +1,152 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+import tempfile
+import unittest
+from unittest.mock import patch
+
+from literary_engineering_studio.runtime.role_conversation import RoleConversationResult
+from literary_engineering_studio.application.prompt_workbench import PromptWorkbenchService
+from literary_engineering_studio.persistence.prompt_layers import FilePromptLayerRepository
+from literary_engineering_studio.runtimes.pi_scene_transaction import PiSceneTransactionRuntime
+from literary_engineering_studio_engine.public.literary import VerificationReport
+from tests.test_lean_kernel_v2_pi_runtime import _brief
+from tests.test_scene_interaction import _fixture
+
+
+_INTENT = {"reader_experience": "先让旧杯子显得平常，稍后才使它成为关系裂缝的线索",
+           "reader_misreads": "读者暂信杯子只是破损", "withheld": "谁转动了杯沿"}
+
+
+class _IntentGateway:
+    def __init__(self, *, request: bool):
+        self.request = request
+        self.calls: list[tuple[str, str]] = []
+        self.role_turns: list[tuple[str, int]] = []
+
+    def run(self, workspace, prompt, *, role, timeout, event_sink=None, cancel_event=None):
+        self.calls.append((role, prompt))
+        if role == "reviewer":
+            answer = {"decision": "pass", "summary": "有线索的短场成立", "evidence": [], "revision_instructions": []}
+        elif self.request and len([item for item in self.calls if item[0] == "worker"]) == 1:
+            answer = {"creative_intent": _INTENT, "material_requests": [{
+                "kind": "object-description", "target": "旧杯子", "purpose": "让日常物件先安抚读者再留下可回看线索",
+                "scene_moment": "晚饭后递杯时", "cue": "杯沿的缺口朝内",
+            }]}
+        else:
+            answer = {"creative_intent": _INTENT, "prose": "他把杯子推了过去，缺口仍朝着自己。",
+                      "decision_summary": "以日常动作留下疑问。", "scene_delta": {},
+                      "material_decisions": [{"candidate_id": "d1:1", "decision": "adapt", "reason": "保留缺口，删去解释"}]}
+        return RoleConversationResult("pi-worker", "fake", "test/model", json.dumps(answer, ensure_ascii=False))
+
+    def run_role_turn(self, workspace, *, role, initialization, history, prompt, timeout, event_sink=None):
+        self.role_turns.append((role, len(history)))
+        answer = {"candidates": [{"text": "杯沿有一道旧缺口，握久了仍会碰疼手指。", "focus": "习惯里的细小阻力"}]}
+        return RoleConversationResult("pi-worker", "desc", "test/model", json.dumps(answer, ensure_ascii=False))
+
+
+class CreatorIntentFlowTests(unittest.TestCase):
+    def test_creator_prompt_versions_stay_fixed_through_review(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "project.yaml").write_text("title: Test\n", encoding="utf-8")
+            workbench = PromptWorkbenchService(FilePromptLayerRepository(root / ".studio"))
+            workbench.save("scene.creator.identity", "以旧杯子的使用痕迹观察关系。", scope="global")
+            gateway = _IntentGateway(request=False)
+            runtime = PiSceneTransactionRuntime({}, project_root=root, data_root=root / ".studio",
+                                                gateway=gateway, prompt_snapshot_provider=workbench.snapshot)
+            first = runtime.create_scene("tx-pinned-a", _brief())
+            self.assertIn("以旧杯子的使用痕迹观察关系。", gateway.calls[-1][1])
+            workbench.save("scene.creator.identity", "以窗外的声音观察关系。", scope="global")
+            runtime.review_scene("tx-pinned-a", _brief(), first,
+                                 VerificationReport("scene_0001", len(first.prose)))
+            snapshot = json.loads((root / ".studio/scene-transactions/tx-pinned-a/prompt_assembly_v1.json").read_text(encoding="utf-8"))
+            self.assertEqual(snapshot["texts"]["scene.creator.identity"], "以旧杯子的使用痕迹观察关系。")
+            runtime.create_scene("tx-pinned-b", _brief())
+            self.assertIn("以窗外的声音观察关系。", gateway.calls[-1][1])
+            self.assertNotIn("你是本场小说主创。你要先判断", gateway.calls[-1][1])
+
+    def test_interrupted_material_batch_resumes_without_repeating_completed_calls(self):
+        class Gateway(_IntentGateway):
+            def __init__(self):
+                super().__init__(request=True)
+                self.fail_scene_once = True
+
+            def run(self, workspace, prompt, *, role, timeout, event_sink=None, cancel_event=None):
+                if role == "worker" and not any(item[0] == "worker" for item in self.calls):
+                    self.calls.append((role, prompt))
+                    answer = {"creative_intent": _INTENT, "material_requests": [
+                        {"kind": "object-description", "target": "旧杯子", "purpose": "留下可回看线索",
+                         "scene_moment": "递杯时", "cue": "缺口朝内"},
+                        {"kind": "scene-description", "target": "饭桌", "purpose": "让距离可见",
+                         "scene_moment": "递杯之后", "cue": "两人沉默"},
+                    ]}
+                    return RoleConversationResult("pi-worker", "fake", "test/model", json.dumps(answer, ensure_ascii=False))
+                return super().run(workspace, prompt, role=role, timeout=timeout,
+                                   event_sink=event_sink, cancel_event=cancel_event)
+
+            def run_role_turn(self, workspace, *, role, initialization, history, prompt, timeout, event_sink=None):
+                if role == "scene-describer" and self.fail_scene_once:
+                    self.fail_scene_once = False
+                    self.role_turns.append((role, len(history)))
+                    raise RuntimeError("interrupted")
+                return super().run_role_turn(workspace, role=role, initialization=initialization,
+                                             history=history, prompt=prompt, timeout=timeout, event_sink=event_sink)
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            gateway = Gateway()
+            runtime = PiSceneTransactionRuntime({"application": {"scene_performance_agents": {"enabled": True}}},
+                                                project_root=root, data_root=root / ".studio", gateway=gateway)
+            _, plan = _fixture(["character/protagonist", "character/sister"])
+            with patch("literary_engineering_studio.runtimes.scene_performance._generate_performance_plan", return_value=plan):
+                with self.assertRaisesRegex(RuntimeError, "interrupted"):
+                    runtime.create_scene("tx-resume", _brief())
+                memory_path = root / ".studio/scene-transactions/tx-resume/scene_creator_memory.json"
+                self.assertEqual(json.loads(memory_path.read_text(encoding="utf-8"))["phase"], "requesting-material")
+                result = runtime.create_scene("tx-resume", _brief())
+            self.assertIn("杯子", result.prose)
+            self.assertEqual([role for role, _ in gateway.calls].count("worker"), 2)
+            self.assertEqual([role for role, _ in gateway.role_turns].count("object-describer"), 1)
+            self.assertEqual([role for role, _ in gateway.role_turns].count("scene-describer"), 2)
+            memory = json.loads(memory_path.read_text(encoding="utf-8"))
+            self.assertIsNone(memory["pending_request"])
+            self.assertEqual(memory["candidate_ids"], ["d1:1", "d2:1"])
+
+    def test_direct_short_scene_keeps_intent_without_automatic_padding(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            gateway = _IntentGateway(request=False)
+            runtime = PiSceneTransactionRuntime({"application": {"scene_performance_agents": {"enabled": True}}},
+                                                project_root=root, data_root=root / ".studio", gateway=gateway)
+            with patch("literary_engineering_studio.runtimes.scene_performance._generate_performance_plan") as plan:
+                result = runtime.create_scene("tx-direct", _brief())
+            plan.assert_not_called()
+            self.assertLess(len(result.prose), _brief().length.soft_min)
+            memory = json.loads((root / ".studio/scene-transactions/tx-direct/scene_creator_memory.json").read_text(encoding="utf-8"))
+            self.assertEqual(memory["intent"]["reader_experience"], _INTENT["reader_experience"])
+            self.assertEqual([role for role, _ in gateway.calls], ["worker"])
+
+    def test_requested_describer_candidate_reaches_creator_and_review(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            gateway = _IntentGateway(request=True)
+            runtime = PiSceneTransactionRuntime({"application": {"scene_performance_agents": {"enabled": True}}},
+                                                project_root=root, data_root=root / ".studio", gateway=gateway)
+            _, plan = _fixture(["character/protagonist", "character/sister"])
+            with patch("literary_engineering_studio.runtimes.scene_performance._generate_performance_plan", return_value=plan) as planner:
+                result = runtime.create_scene("tx-object", _brief())
+            planner.assert_not_called()
+            self.assertEqual(gateway.role_turns, [("object-describer", 0)])
+            self.assertIn("杯沿有一道旧缺口", gateway.calls[1][1])
+            self.assertIn("d1:1", gateway.calls[1][1])
+            memory = json.loads((root / ".studio/scene-transactions/tx-object/scene_creator_memory.json").read_text(encoding="utf-8"))
+            self.assertEqual(memory["candidate_ids"], ["d1:1"])
+            self.assertEqual(memory["material_decisions"][0]["decision"], "adapt")
+            runtime.review_scene("tx-object", _brief(), result, VerificationReport("scene_0001", len(result.prose)))
+            self.assertIn("reader_misreads", gateway.calls[-1][1])
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -344,18 +344,3 @@ def _style_eval_reference(profile_dir: Path) -> Path | None:
         return style_session_holdout_reference(profile_dir)
     candidates = sorted((profile_dir / "corpus").glob("*.txt"))
     return next((path for path in candidates if path.is_file() and path.stat().st_size > 0), None)
-
-
-def _accepted_style_evals(profile_dir: Path) -> list[dict[str, object]]:
-    accepted: list[dict[str, object]] = []
-    for path in sorted((profile_dir / "evaluation_results").glob("*/style_eval_*.json")):
-        payload = _read_json(path)
-        risk = str(payload.get("risk_level") or "")
-        try:
-            score = float(payload.get("overall_score") or 0)
-        except (TypeError, ValueError):
-            score = 0.0
-        if risk in {"high_copy_risk", "low_similarity"} or score < 45:
-            continue
-        accepted.append({"path": str(path), "overall_score": score, "risk_level": risk})
-    return accepted

@@ -37,6 +37,8 @@ const PROJECT_ACTOR_PERSONAS_TOOL = "project_actor_personas";
 const PROJECT_ACTOR_PERSONA_UPDATE_TOOL = "project_actor_persona_update";
 const PROJECT_ARCHIVE_READ_TOOL = "project_archive_read";
 const PROJECT_ARCHIVE_CHANGE_TOOL = "project_archive_change";
+const PROJECT_ASSETS_RECONCILE_TOOL = "project_assets_reconcile";
+const PROJECT_PLANNING_PREPARE_TOOL = "project_planning_prepare";
 const PROJECT_OWNER_STYLE_READ_TOOL = "project_owner_style_read";
 const PROJECT_OWNER_STYLE_WRITE_TOOL = "project_owner_style_write";
 const PROJECT_STYLE_VERSIONS_TOOL = "project_style_versions";
@@ -62,6 +64,8 @@ const SUPPORTED_TOOLS = new Set([
 	PROJECT_ACTOR_PERSONA_UPDATE_TOOL,
 	PROJECT_ARCHIVE_READ_TOOL,
 	PROJECT_ARCHIVE_CHANGE_TOOL,
+	PROJECT_ASSETS_RECONCILE_TOOL,
+	PROJECT_PLANNING_PREPARE_TOOL,
 	PROJECT_OWNER_STYLE_READ_TOOL,
 	PROJECT_OWNER_STYLE_WRITE_TOOL,
 	PROJECT_STYLE_VERSIONS_TOOL,
@@ -299,28 +303,43 @@ function projectToolDefinition(name: string): {
 	};
 	if (name === PROJECT_ARCHIVE_READ_TOOL) return {
 		label: "Read Archive Assets",
-		description: "Read the same registered archive tree, asset detail, history, creation options, or recycle bin exposed in the editor. Detail content is paged; use offset until has_more is false.",
+		description: "Read the registered archive tree, lean-plan asset alignment, asset detail, editable fields, history, creation options, or recycle bin. Detail content is paged; use offset until has_more is false. Read fields before changing individual editor fields.",
 		parameters: Type.Object({
 			work_id: workId(),
-			section: Type.Union([Type.Literal("tree"), Type.Literal("detail"), Type.Literal("history"), Type.Literal("creation_options"), Type.Literal("recycle_bin")]),
+			section: Type.Union([Type.Literal("tree"), Type.Literal("plan_alignment"), Type.Literal("detail"), Type.Literal("fields"), Type.Literal("history"), Type.Literal("creation_options"), Type.Literal("recycle_bin")]),
 			asset_id: Type.Optional(Type.String({ maxLength: 300 })),
 			offset: Type.Optional(Type.Integer({ minimum: 0 })),
 		}),
 	};
 	if (name === PROJECT_ARCHIVE_CHANGE_TOOL) return {
 		label: "Change Archive Asset",
-		description: "Use the editor's audited owner transaction for a registered asset. Read its revision first. Replace requires the full new content and exact base_revision; create requires asset_type and local_id. Archive and restore use the editor's recycle-bin rules. All changes return receipts and may stale dependent work.",
+		description: "Manage registered project assets with the same author services as the Archive editor. For an individual field edit, first read section=fields, then pass operation=fields, exact base_revision, and a mapping of registered field names to new values; the structured editor preserves other fields. Replace requires full new content. Create, archive and restore use the editor's existing rules. Changes return audited receipts and may stale dependent work.",
 		parameters: Type.Object({
 			work_id: workId(),
-			operation: Type.Union([Type.Literal("create"), Type.Literal("replace"), Type.Literal("archive"), Type.Literal("restore")]),
+			operation: Type.Union([Type.Literal("create"), Type.Literal("fields"), Type.Literal("replace"), Type.Literal("archive"), Type.Literal("restore")]),
 			asset_id: Type.Optional(Type.String({ maxLength: 300 })),
 			asset_type: Type.Optional(Type.String({ maxLength: 100 })),
 			local_id: Type.Optional(Type.String({ maxLength: 200 })),
 			base_revision: Type.Optional(Type.String({ maxLength: 100 })),
 			entry_id: Type.Optional(Type.String({ maxLength: 200 })),
 			content: Type.Optional(Type.String({ maxLength: 50000 })),
+			fields: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
 			reason: Type.String({ minLength: 6, maxLength: 2000 }),
 		}),
+	};
+	if (name === PROJECT_ASSETS_RECONCILE_TOOL) return {
+		label: "Reconcile Planned Assets",
+		description: "For one missing or generated-stub character/world asset in a lean-v2 plan, run the same creation and enrichment route used at initialization. First read project_archive_read section=plan_alignment. Identity conflicts are reported for author resolution; unplanned assets use project_archive_change operation=create. This may take a long time.",
+		parameters: Type.Object({
+			work_id: workId(),
+			asset_id: Type.String({ minLength: 3, maxLength: 300 }),
+			reason: Type.String({ minLength: 6, maxLength: 2000 }),
+		}),
+	};
+	if (name === PROJECT_PLANNING_PREPARE_TOOL) return {
+		label: "Prepare Story Plan",
+		description: "Run the standard lean-v2 budget, chapter and first-scene planning route without starting Autopilot, character performance, prose generation or promotion. Use when the user asks to stop before roleplay or drafting. Existing authored scene assets are preserved and checked for alignment. This may take a long time.",
+		parameters: Type.Object({ work_id: workId() }),
 	};
 	if (name === PROJECT_OWNER_STYLE_READ_TOOL) return {
 		label: "Read Author Style Directive",

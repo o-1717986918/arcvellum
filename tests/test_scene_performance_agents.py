@@ -9,7 +9,7 @@ from literary_engineering_studio.runtime.role_conversation import RoleConversati
 from literary_engineering_studio.application.config import default_config, load_config
 from literary_engineering_studio.application.scene_performance_preferences import get_scene_performance_preferences
 from literary_engineering_studio.runtimes.pi_scene_transaction import PiSceneTransactionRuntime
-from literary_engineering_studio.runtimes.scene_performance import _generate_performance_plan, scene_performance_materials
+from literary_engineering_studio.runtimes.scene_performance import _generate_performance_plan
 from literary_engineering_studio_engine.public.literary import (
     parse_actor_material,
     parse_actor_scene_material,
@@ -290,9 +290,8 @@ ANTI_CONCISE'''
         self.assertIn('ANTI_SHORT_SENTENCES', prompt)
         self.assertIn('从人物档案、关系和过往选择中', prompt)
         self.assertIn('傲娇与依恋', prompt)
-        self.assertIn('每人通常挑三到五个能彼此作用的核心人设标签', prompt)
+        self.assertIn('不设固定标签数量', prompt)
         self.assertIn('叙事职能、本场任务与具体动作进入后续场景资料', prompt)
-        self.assertIn('让这一层比其余标签更鲜明', prompt)
         self.assertIn('人格和口头气质标签应当换一个场景仍然成立', prompt)
         self.assertIn('CADENCE_OWN_LITERARY_RHYTHM', prompt)
         self.assertIn('actor_tasks 给此人一个有生活感的起点', prompt)
@@ -303,7 +302,7 @@ ANTI_CONCISE'''
         self.assertIn('从已知场地、人物和事件自然生长', prompt)
         self.assertIn('若一人的关键言行构成另一人回应的前因，先让前者获得自己的轮次', prompt)
         self.assertIn('此人主要面对谁、凭什么开口、关系压力何在', prompt)
-        self.assertIn('不要把 PLAIN、SHORT、CLIPPED、COUNTED、ACCOUNTING、INVENTORY、MINIMAL', prompt)
+        self.assertIn('平实、短促、克制、清单感等语言倾向是否适合人物', prompt)
         self.assertNotIn('ANTI_CONCISE', prompt)
         self.assertNotIn('TRAIT_内在性情', prompt)
         self.assertIn("actor_prompts", prompt)
@@ -573,36 +572,6 @@ ANTI_CONCISE'''
             parse_environment_material({"scene_id": "scene_0001", "passages": [{"beat_id": "b1", "focal_character": "character/outsider", "description": "门外下雨。"}]}, _brief().to_dict(), [beat])
         self.assertEqual(parse_environment_material({"scene_id": "scene_0001", "passages": []}, _brief().to_dict(), [beat])["passages"], [])
 
-    def test_actor_capacity_falls_back_without_partial_cast_or_extra_call(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            gateway = _PerformanceGateway()
-            events = []
-            materials = scene_performance_materials(
-                brief=_brief().to_dict(), expression={}, sources="", style_reference="",
-                cache_root=Path(temporary) / "cache",
-                config={"application": {"scene_performance_agents": {"enabled": True, "max_actor_calls": 1}}},
-                invoke=lambda prompt, role: gateway.run(Path(temporary), prompt, role=role, timeout=30).answer,
-                emit=lambda event, data: events.append((event, data)),
-            )
-            self.assertEqual(materials, "")
-            self.assertEqual(gateway.calls, [])
-            self.assertEqual(events[0][1]["stage"], "actor-capacity")
-
-    def test_default_capacity_attempts_five_character_rehearsal(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            brief = {**_brief().to_dict(), "participants": [f"character/{index}" for index in range(5)]}
-            calls = []
-            events = []
-            materials = scene_performance_materials(
-                brief=brief, expression={}, sources="", style_reference="",
-                cache_root=Path(temporary) / "cache",
-                config={"application": {"scene_performance_agents": {"enabled": True}}},
-                invoke=lambda prompt, role: calls.append(role) or "{}",
-                emit=lambda event, data: events.append((event, data)),
-            )
-            self.assertEqual(materials, "")
-            self.assertEqual(calls, ["worker", "worker"])
-            self.assertEqual(events[-1][1]["stage"], "plan")
 
     def test_invalid_director_plan_falls_back_to_single_writer(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -615,9 +584,9 @@ ANTI_CONCISE'''
                 event_sink=lambda event, data: events.append(event),
             )
             runtime.create_scene("performance-fallback", _brief())
-            self.assertEqual([role for role, _ in gateway.calls[:2]], ["worker", "worker"])
-            self.assertNotIn("Character And Environment Candidate Materials", gateway.calls[1][1])
-            self.assertIn("scene.performance.fallback", events)
+            self.assertEqual([role for role, _ in gateway.calls], ["worker"])
+            self.assertNotIn("Character And Environment Candidate Materials", gateway.calls[0][1])
+            self.assertNotIn("scene.performance.fallback", events)
 
 
 if __name__ == "__main__":

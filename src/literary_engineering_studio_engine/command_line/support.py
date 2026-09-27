@@ -28,19 +28,6 @@ def print_human_decision_notice(task_path: Path, *, project: Path | None = None)
     print("next_action: review the offered options in Studio and record one deliberate decision. Do not create Agent artifacts or completion markers for this task.")
 
 
-def read_prompt_arg(project: Path, file_arg: str, text_arg: str, label: str) -> str:
-    if text_arg:
-        return text_arg
-    if not file_arg:
-        raise ValueError(f"{label} prompt requires --{label} or --{label}-text")
-    path = Path(file_arg)
-    if not path.is_absolute():
-        path = project / path
-    if not path.exists():
-        raise ValueError(f"{label} prompt file does not exist: {path}")
-    return path.read_text(encoding="utf-8")
-
-
 def render_formal_help(project: str, route: str) -> str:
     project_arg = f'"{project}"' if project else '"<project>"'
     route_arg = route or "scene-development"

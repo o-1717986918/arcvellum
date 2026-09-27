@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from dataclasses import replace
 import tempfile
 import unittest
 
@@ -179,6 +180,27 @@ class LeanKernelV2TransactionServiceTests(unittest.TestCase):
         self.assertEqual(committed.status, SceneTransactionStatus.COMMITTED)
         self.assertEqual(runtime.generations, 1)
         self.assertEqual(critic.calls, 0)
+
+    def test_short_low_risk_scene_goes_to_reader_review_without_forced_padding(self) -> None:
+        class ShortBriefs(_Briefs):
+            def prepare(self, project_root, scene_id, mode):
+                prepared = super().prepare(project_root, scene_id, mode)
+                return PreparedScene(replace(prepared.brief, length=LengthTarget(200, 100, 300)),
+                                     prepared.base_revision)
+
+        critic = _Critic(ReviewDecision.PASS)
+        service = SceneTransactionService(
+            briefs=ShortBriefs(SceneRiskLevel.LOW), runtime=_Runtime(), critic=critic,
+            repository=self.repository, commits=_Commits(), id_factory=lambda: "scene-tx-1",
+        )
+        transaction = service.prepare(self.root, "scene_0001")
+        created = service.create(transaction.transaction_id)
+        verified = service.verify(transaction.transaction_id)
+        reviewed = service.review_if_required(transaction.transaction_id)
+        self.assertEqual(verified.status, SceneTransactionStatus.REVIEWING)
+        self.assertEqual(reviewed.status, SceneTransactionStatus.COMMITTABLE)
+        self.assertEqual(critic.calls, 1)
+        self.assertEqual(reviewed.creative_result.prose, created.creative_result.prose)
 
     def test_standard_risk_requires_one_independent_review(self) -> None:
         critic = _Critic()

@@ -37,7 +37,7 @@ export function createProjectAgentClient(transport: ApiTransport = featureTransp
     ),
     startTurn: (sessionId, message) => transport.request<ProjectAgentTurnStart>(
       `/project-agent/sessions/${encodeURIComponent(sessionId)}/turns`,
-      { method: "POST", body: JSON.stringify({ message, timeout: 240 }) },
+      { method: "POST", body: JSON.stringify({ message, timeout: 4200 }) },
     ),
     readJob: (jobId) => transport.request<ProjectAgentJob>(
       `/project-agent/jobs/${encodeURIComponent(jobId)}`,

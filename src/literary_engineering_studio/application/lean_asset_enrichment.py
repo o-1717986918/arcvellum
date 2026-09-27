@@ -17,7 +17,7 @@ from ..runtime.role_conversation import RoleConversationGateway
 
 
 def enrich_lean_planning_assets(
-    project_root: Path, gateway: RoleConversationGateway,
+    project_root: Path, gateway: RoleConversationGateway, *, target_asset_id: str | None = None,
 ) -> dict[str, int]:
     """Create hidden histories and operational world rules after stub creation.
 
@@ -28,9 +28,14 @@ def enrich_lean_planning_assets(
     plan = json.loads((root / "plot" / "lean_project_plan.json").read_text(encoding="utf-8"))
     characters = plan.get("characters") or []
     eligible = _eligible_characters(root, characters)
+    if target_asset_id is not None:
+        eligible = {
+            name: path for name, path in eligible.items()
+            if target_asset_id == f"character:{path.stem}"
+        }
     world_facts = plan.get("world_facts") or []
     world_path = root / "canon" / "world_rules.yaml"
-    enrich_world = _is_generated_world(world_path, world_facts)
+    enrich_world = target_asset_id in (None, "world-rule:world_rules") and _is_generated_world(world_path, world_facts)
     if not eligible and not enrich_world:
         return {"background_stories_created": 0, "world_rules_enriched": 0}
 
@@ -45,13 +50,28 @@ def enrich_lean_planning_assets(
                                 lambda value: _validated_voices(value, {row["name"] for row in rows}))
         for row in rows:
             row["speech_style"] = voices["voices"][row["name"]]
-    writes = {eligible[row["name"]]: _render_character(eligible[row["name"]], row) for row in rows}
+    writes = _eligible_character_writes(characters, eligible, rows)
     if enrich_world:
         prompt = _enrichment_prompt(root, characters, {}, world_facts)
         payload = _ask_validated(root, gateway, prompt, _validate_world_payload)
-        writes[world_path] = _render_world(payload.get("world"))
+        if _is_generated_world(world_path, world_facts):
+            writes[world_path] = _render_world(payload.get("world"))
     atomic_write_batch(writes)
-    return {"background_stories_created": len(rows), "world_rules_enriched": int(enrich_world)}
+    return {"background_stories_created": sum(path.parent == root / "characters" for path in writes),
+            "world_rules_enriched": int(world_path in writes)}
+
+
+def _eligible_character_writes(
+    characters: list[dict[str, object]], eligible: dict[str, Path], rows: list[dict[str, Any]],
+) -> dict[Path, str]:
+    planned = {str(item["name"]): item for item in characters}
+    writes: dict[Path, str] = {}
+    for row in rows:
+        path = eligible[row["name"]]
+        slug = character_slug(row["name"])
+        if path.is_file() and path.read_text(encoding="utf-8") == _character_stub(slug, planned[row["name"]]):
+            writes[path] = _render_character(path, row)
+    return writes
 
 
 def _eligible_characters(root: Path, characters: list[dict[str, object]]) -> dict[str, Path]:

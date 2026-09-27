@@ -1,0 +1,1 @@
+中文内容字符必须保持在 [[ARCVELLUM_PROMPT_0]]-[[ARCVELLUM_PROMPT_1]]，并尽量接近 [[ARCVELLUM_PROMPT_2]]；

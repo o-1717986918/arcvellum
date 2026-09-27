@@ -2,6 +2,27 @@
 
 All notable ArcVellum changes are documented in this file. Detailed release evidence remains under `docs/releases/`.
 
+## [0.99.12] - 2026-09-28
+
+### Added
+
+- Added scene creator intent, selective character/environment/description material requests, bounded creator memory, and three description agents while retaining personalized character initialization.
+- Added layered prompt registration and a Settings workbench with global/project versions, assembly preview, history activation, and read-only protocol boundaries.
+- Added a planning-only Project Agent action, asset reconciliation, structured archive-field editing, and stronger goal-resume evidence.
+
+### Changed
+
+- Sent soft scene-length shortfalls to literary review instead of automatic prose padding; carried director cues and material choices into scene authorship.
+- Made Project Agent long-running tool receipts and goal checkpoints reflect persisted outcomes.
+- Removed disconnected client views, unused scene and direct-provider paths, private wrappers, and generated desktop HTML from source control; retained declared compatibility surfaces.
+
+### Fixed
+
+- Aligned the published v1 task Schema mirror with the Engine source and added parity coverage.
+- Corrected lean project preparation around pre-existing scene plans, formal-output detection, and plan-source diagnostics.
+
+[0.99.12]: https://github.com/o-1717986918/arcvellum/releases/tag/v0.99.12
+
 ## [0.99.11] - 2026-09-25
 
 ### Added

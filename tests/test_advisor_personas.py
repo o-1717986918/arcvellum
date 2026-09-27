@@ -9,6 +9,8 @@ from literary_engineering_studio.advisor_personas import (
     save_custom_persona,
     select_persona,
 )
+from literary_engineering_studio.application.prompt_workbench import PromptWorkbenchService
+from literary_engineering_studio.persistence.prompt_layers import FilePromptLayerRepository
 
 
 class AdvisorPersonaTests(unittest.TestCase):
@@ -42,6 +44,24 @@ class AdvisorPersonaTests(unittest.TestCase):
         self.assertLess(prompt.index("第一层：顾问宪法"), prompt.index("第三层：当前人格"))
         self.assertIn("人格只改变", prompt)
         self.assertIn("禁止编辑", prompt)
+
+    def test_builtin_persona_catalog_and_model_input_share_project_override(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            data = Path(temporary) / "data"
+            project = Path(temporary) / "project"
+            project.mkdir()
+            (project / "project.yaml").write_text("title: Test\n", encoding="utf-8")
+            workbench = PromptWorkbenchService(FilePromptLayerRepository(data))
+            workbench.save("advisor.persona.cold-reader", "以读者身份追问留白是否有线索。",
+                           scope="project", project_root=project)
+            resolver = lambda layer_id, root: workbench.resolve(layer_id, root).text
+            select_persona(data, project, "cold-reader", prompt_resolver=resolver)
+            selected = active_persona(data, project, prompt_resolver=resolver)
+            catalog = persona_catalog(data, project, prompt_resolver=resolver)
+            self.assertEqual(selected["prompt"], "以读者身份追问留白是否有线索。")
+            self.assertEqual(next(item["prompt"] for item in catalog["items"]
+                                  if item["persona_id"] == "cold-reader"), selected["prompt"])
+            self.assertIn(selected["prompt"], _advisor_prompt("留白是否成立？", [], persona=selected))
 
 
 if __name__ == "__main__":

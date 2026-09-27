@@ -21,6 +21,8 @@ from .materialization_rendering import (
     repair_generated_rhythm_contracts,
 )
 from .materialization_state import has_formal_scene_output
+from .materialization_authored_scene import authored_scene_conflicts
+from .materialization_scaffold import is_blank_scene_scaffold as _is_blank_scene_scaffold
 
 
 MATERIALIZATION_SCHEMA = "literary-engineering-workbench/longform-materialization/v1"
@@ -156,11 +158,16 @@ def _lean_scene_writes(
         chapter = obligations.get(str(scene.get("chapter_id") or ""), {})
         rendered = render_scene_yaml(scene, chapter, previous)
         if path.is_file() and not _is_blank_scene_scaffold(path):
-            conflicts = _scene_conflicts(root, path, scene)
             if replace_uncommitted and not has_formal_scene_output(root, path.stem):
                 prepared.append((path, rendered))
-            elif conflicts:
-                raise ValueError("refusing to overwrite a non-scaffold formal scene: " + "; ".join(conflicts))
+            else:
+                conflicts = (
+                    _scene_conflicts(root, path, scene)
+                    if has_formal_scene_output(root, path.stem)
+                    else authored_scene_conflicts(path, scene)
+                )
+                if conflicts:
+                    raise ValueError("refusing to overwrite a non-scaffold formal scene: " + "; ".join(conflicts))
         else:
             prepared.append((path, rendered))
         previous = scene
@@ -352,18 +359,6 @@ def _formal_outline(expansion_text: str, inventory_text: str) -> str:
     ]
     body = "\n".join(cleaned).strip()
     return "# 正式长篇大纲\n\n" + (body if len(body) >= 200 else inventory_text.strip()) + "\n"
-
-
-def _is_blank_scene_scaffold(path: Path) -> bool:
-    text = path.read_text(encoding="utf-8", errors="ignore")
-    return bool(re.search(r'(?m)^scene_id:\s*["\']?\s*["\']?$', text)) and not any(
-        (path.parent.parent / relative).exists()
-        for relative in (
-            f"drafts/scenes/{path.stem}.md",
-            f"drafts/candidates/{path.stem}-platform-agent.md",
-            f"reviews/agent/{path.stem}_scene_review.json",
-        )
-    )
 
 
 def _existing_formal_scene_conflicts(

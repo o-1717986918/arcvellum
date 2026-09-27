@@ -6,6 +6,9 @@ import tempfile
 import unittest
 
 from literary_engineering_studio.contracts import TaskPackage
+from literary_engineering_studio.application.prompt_workbench import PromptWorkbenchService
+from literary_engineering_studio.persistence.prompt_layers import FilePromptLayerRepository
+from literary_engineering_studio_engine.public.prompting import resolve_prompt_asset
 from literary_engineering_studio.runtime.context_budget import resolve_task_context_budget
 from literary_engineering_studio.runtime.context_materialization import _legacy_user_direction
 from literary_engineering_studio.runtime.context_selection import select_agent_context
@@ -1758,6 +1761,33 @@ class PromptProgramV3Tests(unittest.TestCase):
             ]
             self.assertEqual(len(indexed), 1)
             self.assertEqual(indexed[0]["source_ref"], "canon")
+
+    def test_formal_asset_project_version_reaches_materialized_prompt(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            project = root / "work"
+            project.mkdir()
+            (project / "project.yaml").write_text("project:\n  title: Test\n", encoding="utf-8")
+            for name in ("source.md", "source-copy.md", "exact.md"):
+                (project / name).write_text("证据\n", encoding="utf-8")
+            task = _task(project)
+            asset = resolve_prompt_asset("route.character-world-assets.create.v1").asset
+            assert asset is not None
+            task.payload["prompt_asset"]["resolved_id"] = asset.prompt_asset_id
+            task.payload["prompt_asset"]["body"] = asset.body
+            layer_id = f"formal.asset.{asset.path.stem}"
+            workbench = PromptWorkbenchService(FilePromptLayerRepository(root / "app"))
+            workbench.save(layer_id, "作品级正式创作意图：让人物自行选择。", scope="project", project_root=project)
+            sandbox = stage_task(
+                task, root / "runs", runtime="host-agent", run_id="asset-versioned",
+                prompt_program_config={"registry_data_root": str(root / "app")},
+            )
+            prompt = sandbox.prompt_path.read_text(encoding="utf-8")
+            context = json.loads((sandbox.workspace / "TASK_CONTEXT.json").read_text(encoding="utf-8"))
+            manifest = json.loads(sandbox.manifest_path.read_text(encoding="utf-8"))
+            self.assertIn("作品级正式创作意图：让人物自行选择。", prompt)
+            self.assertEqual(context["prompt_asset"]["body"], "作品级正式创作意图：让人物自行选择。")
+            self.assertEqual(manifest["prompt_program"]["prompt_asset_override"]["source"], "project")
 
     def test_prose_prompt_manifest_is_recovery_evidence_not_inline_drafting_material(self):
         with tempfile.TemporaryDirectory() as temporary:

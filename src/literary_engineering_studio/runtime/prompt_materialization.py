@@ -8,7 +8,11 @@ import json
 from pathlib import Path
 from typing import Any, Mapping
 
+from literary_engineering_studio_engine.public.prompting import resolve_prompt_asset
+
+from ..application.prompt_workbench import PromptWorkbenchService
 from ..contracts import TaskPackage
+from ..persistence.prompt_layers import FilePromptLayerRepository
 from .execution_context import ExecutionContextEnvelope
 from .prompt_program import resolve_prompt_program_rollout
 from .task_program import CompiledWorkerProgram, compile_worker_program
@@ -20,6 +24,7 @@ class PromptMaterialization:
     shadow: CompiledWorkerProgram | None
     shadow_path: Path | None
     rollout: Mapping[str, object]
+    prompt_asset_override: Mapping[str, object] | None = None
 
     def access_contract(
         self,
@@ -79,6 +84,9 @@ class PromptMaterialization:
                 if self.shadow_path is not None
                 else ""
             ),
+            "prompt_asset_override": {
+                key: value for key, value in (self.prompt_asset_override or {}).items() if key != "body"
+            },
         }
 
 
@@ -98,6 +106,7 @@ def materialize_prompt_programs(
     execution_context: ExecutionContextEnvelope,
     execution_profile: dict[str, object] | None,
 ) -> PromptMaterialization:
+    asset_override = _formal_asset_override(task, config)
     common = {
         "user_direction": user_direction,
         "reference_paths": reference_paths,
@@ -111,6 +120,7 @@ def materialize_prompt_programs(
         "prompt_lint_config": (
             config.get("lint") if isinstance(config, Mapping) else {}
         ),
+        "prompt_asset_override": asset_override,
     }
     v2 = compile_worker_program(task, prompt_version="v2", **common)
     rollout = resolve_prompt_program_rollout(
@@ -139,7 +149,30 @@ def materialize_prompt_programs(
     if rollout["emit_shadow"] is True and v3 is not None:
         shadow_path = run_root / "prompt-v3-shadow.md"
         shadow_path.write_text(v3.text, encoding="utf-8")
-    return PromptMaterialization(formal, v3 if v3 is not formal else None, shadow_path, rollout)
+    return PromptMaterialization(formal, v3 if v3 is not formal else None, shadow_path, rollout,
+                                 asset_override)
+
+
+def _formal_asset_override(
+    task: TaskPackage, config: Mapping[str, Any] | None,
+) -> Mapping[str, object] | None:
+    data_root = str(config.get("registry_data_root") or "") if isinstance(config, Mapping) else ""
+    if not data_root:
+        return None
+    payload = task.payload.get("prompt_asset")
+    identity = str(payload.get("resolved_id") or "") if isinstance(payload, Mapping) else ""
+    preview = resolve_prompt_asset(identity)
+    if preview.asset is None:
+        raise ValueError(f"formal prompt asset is not registered: {identity}")
+    layer_id = f"formal.asset.{preview.asset.path.stem}"
+    workbench = PromptWorkbenchService(FilePromptLayerRepository(Path(data_root)))
+    resolved = workbench.resolve(layer_id, task.project_root)
+    if resolved.source == "package":
+        return None
+    return {
+        "body": resolved.text, "version": f"{preview.asset.version}+{resolved.source}.{resolved.version}",
+        "layer_id": layer_id, "source": resolved.source, "digest": resolved.digest,
+    }
 
 
 def _enforce_prompt_lint(

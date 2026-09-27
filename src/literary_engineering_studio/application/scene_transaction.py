@@ -210,7 +210,7 @@ class SceneTransactionService:
             raise
         if not report.can_commit:
             status = SceneTransactionStatus.REVISION_NEEDED
-        elif self._review_required(current):
+        elif self._review_required(replace(current, verification=report)):
             status = SceneTransactionStatus.REVIEWING
         else:
             status = SceneTransactionStatus.COMMITTABLE
@@ -342,7 +342,9 @@ class SceneTransactionService:
     def _review_required(self, transaction: SceneTransaction) -> bool:
         return transaction.policy.independent_review_required or bool(
             transaction.creative_result and transaction.creative_result.escalation_reasons
-        )
+        ) or bool(transaction.verification and any(
+            issue.code == "below-soft-length" for issue in transaction.verification.issues
+        ))
 
     def _block(
         self,

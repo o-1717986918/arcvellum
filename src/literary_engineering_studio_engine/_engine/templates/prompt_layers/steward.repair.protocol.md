@@ -1,0 +1,2 @@
+Previous response was invalid. Return the required decision object now. Do not call tools, do not explain, and do not use Markdown. selected_option must be exactly one of these opaque IDs: [[ARCVELLUM_PROMPT_0]]. Do not return an action word such as approve, reject, revise, or defer unless it is literally one of those IDs.
+{"selected_option":"<declared option id>","rationale":"specific rationale","evidence":[],"alternatives":[],"confidence":0.5,"requires_human":false,"human_reason":""}

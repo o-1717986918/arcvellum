@@ -34,9 +34,6 @@ from literary_engineering_studio_engine.literary.style.prompt import (
 from literary_engineering_studio_engine.literary.style.snapshot import (
     active_style_evidence_paths,
 )
-from literary_engineering_studio_engine.literary.style.prompt_agent import (
-    _dry_style_prompt,
-)
 from literary_engineering_studio_engine.prompting.style_context import (
     resolve_style_prompt_context,
 )
@@ -74,13 +71,9 @@ class DefaultStylePresetTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
 
         quality = style_prompt_quality_report(prompt)
-        generated_prompt = _dry_style_prompt([])["prompt_markdown"]
-        generated_quality = style_prompt_quality_report(str(generated_prompt))
         self.assertTrue(quality["length_ok"])
         self.assertTrue(quality["structure_ok"])
         self.assertLess(len(prompt), 2_000)
-        self.assertTrue(generated_quality["length_ok"])
-        self.assertTrue(generated_quality["structure_ok"])
         self.assertIn("抽象文风要求必须在初稿中落实", prompt)
         self.assertIn("语言从何处蓄势、何处抬高、何处骤停", prompt)
         self.assertIn("句长服从意义和呼吸", prompt)
@@ -118,12 +111,6 @@ class DefaultStylePresetTests(unittest.TestCase):
         self.assertNotIn("do not batch-delete digits", revision_prompt)
         self.assertIn("at least one real function", revision_prompt)
         self.assertNotIn("five-part necessity test", revision_prompt)
-        self.assertIn("无关精确数字默认不用", generated_prompt)
-        self.assertIn("一个又一个", generated_prompt)
-        self.assertIn("一项实际功能", generated_prompt)
-        self.assertIn("不批量删除，也不机械换成模糊量词", generated_prompt)
-        self.assertIn("白描只是可用底色之一", generated_prompt)
-        self.assertIn("证据之后停笔", generated_prompt)
 
         corpus = (template_root / "training-sample.md").read_text(
             encoding="utf-8"
