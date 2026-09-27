@@ -91,3 +91,21 @@ module_change_packet:
   rollback_unit: "路径规范化修复提交"
   documentation: ["发布验证中的 CI 记录"]
 ```
+
+## P6：生成式桌面资源的 CI 顺序
+
+```yaml
+module_change_packet:
+  objective: "移出版本控制的 desktop/dist 在 Windows desktop-shell 检查前由正式前端构建生成"
+  primary_module: ".github/workflows/ci.yml"
+  public_entry: "desktop-shell job 的 cargo check --locked"
+  variation_point: "Vue/Windows/macOS 作业各有独立 checkout，不能共享生成资源"
+  inputs: ["clean checkout", "npm lockfile", "client build"]
+  outputs: ["desktop/dist/index.html", "Tauri 前端资源"]
+  invariants: ["不重新跟踪生成文件", "发布工作流已有的构建顺序不变", "前端构建失败阻断桌面壳检查"]
+  allowed_dependencies: ["desktop-shell job", "既有 client:build 脚本"]
+  forbidden_dependencies: ["提交生成 index.html", "依赖另一个 job 的本地磁盘"]
+  tests: ["本地 client:build", "Windows desktop-shell CI"]
+  rollback_unit: "Windows CI 生成资源修复提交"
+  documentation: ["发布验证中的 CI 记录"]
+```

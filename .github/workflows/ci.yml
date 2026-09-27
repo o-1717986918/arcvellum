@@ -84,6 +84,12 @@ jobs:
           cache: npm
           cache-dependency-path: workers/pi-worker/package-lock.json
       - uses: dtolnay/rust-toolchain@stable
+      - name: Build frontend required by Tauri context
+        shell: pwsh
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          npm ci
+          npm run client:build
       - name: Freeze the sidecar required by the Tauri resource contract
         shell: pwsh
         run: |
