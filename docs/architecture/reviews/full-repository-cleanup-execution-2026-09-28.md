@@ -46,4 +46,4 @@
 
 ## 验证
 
-Python 全量运行 1666 项（1665 通过、1 跳过）；Vue 全量 247 项、Pi Worker 114 项通过，客户端生产构建通过。Prompt Registry 59 个资产与 73 个任务 ID、确定性提示评估 17 项、兼容表面、v1 Schema 镜像测试、OpenAPI、模块地图、架构审计与七处版本同步均通过。设置页桌面及移动浏览器用例通过。并行负载下曾有一项旧路由测试触及 5 秒超时；单项和独立全套复跑均通过。发布工作流与附件结果见[发布验证](../../releases/v0.99.12-verification.md)；执行变更见 [Change Packets](v09912-cleanup-change-packets.md)。
+Python 本地全量运行 1666 项（1665 通过、1 跳过），Linux CI 运行 1667 项通过；Vue 全量 247 项、Pi Worker 114 项通过，客户端生产构建通过。Prompt Registry 59 个资产与 73 个任务 ID、确定性提示评估 17 项、兼容表面、v1 Schema 镜像测试、OpenAPI、模块地图、架构审计与七处版本同步均通过。设置页桌面及移动浏览器用例通过。并行负载下曾有一项旧路由测试触及 5 秒超时；单项和独立全套复跑均通过。主分支六个 CI 作业与标签发布四个作业全部成功；工作流和附件结果见[发布验证](../../releases/v0.99.12-verification.md)，执行变更见 [Change Packets](v09912-cleanup-change-packets.md)。
