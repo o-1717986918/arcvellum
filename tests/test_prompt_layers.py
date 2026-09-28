@@ -38,13 +38,12 @@ class PromptLayerTests(unittest.TestCase):
         repository = Path(__file__).resolve().parents[1]
         resources = repository / "src" / "literary_engineering_studio_engine" / "_engine" / "templates" / "prompt_layers"
         from_files = {path.stem for path in resources.glob("*.md")}
-        from_catalog = {spec.layer_id for spec in list_prompt_layer_specs()
-                        if not spec.layer_id.startswith("legacy.template.")}
+        from_catalog = {spec.layer_id for spec in list_prompt_layer_specs()}
         self.assertEqual(from_files, from_catalog)
-        legacy = repository / "src" / "literary_engineering_studio_engine" / "_engine" / "templates" / "prompts"
-        self.assertEqual({f"legacy.template.{path.stem}" for path in legacy.glob("*.md")},
-                         {spec.layer_id for spec in list_prompt_layer_specs()
-                          if spec.layer_id.startswith("legacy.template.")})
+        for retired in ("legacy.template.scene_generation_system", "scene.length.legacy",
+                        "scene.sources", "scene.interaction.direction.protocol"):
+            with self.subTest(retired=retired), self.assertRaisesRegex(ValueError, "unknown prompt layer"):
+                prompt_layer_spec(retired)
 
 
 if __name__ == "__main__":

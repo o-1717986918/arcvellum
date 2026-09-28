@@ -2,6 +2,8 @@
 
 日期：2026-09-27。范围：当前仓库的 Engine、Studio、Vue 客户端、Pi Worker、桌面宿主、脚本、测试、协议与打包入口。每发现一项立即记入本表；“候选”不等于可以直接删除。判断时同时核查静态引用、运行注册、公开 API、持久化读取、测试和已发布兼容承诺。既有 [旧表面退役审计](../arcvellum-legacy-surface-retirement-audit-2026-09-14.md) 的兼容限制仍有效。本轮只列清单，不删除用户文件或旧项目读者。
 
+2026-09-28 更新：用户已明确不要求旧作品兼容。后续清理批次将旧项目场景模板、Engine 直连 Provider、旧 CLI/HTTP 兼容入口和相关转发层纳入删除目标；当前提示词工作台已关闭 `legacy.template.*` 编辑入口并从活动目录剥离。各入口删除仍按调用与任务合同逐批执行，清单见 [提示词流程树与退役核查](../../implementation/creative-kernel/09-prompt-flow-tree-and-retirement.md)。下表的兼容窗口说明记录的是 2026-09-27 当时的判断，不再作为保留旧作品入口的产品要求。
+
 | 编号 | 类别与位置 | 已核实证据 | 建议和清理前门槛 |
 | --- | --- | --- | --- |
 | C01 | 旧自动补长：`src/literary_engineering_studio/runtimes/scene_length_completion.py` | 全仓符号搜索中 `complete_first_draft_length` 只有本文件定义；`render_scene_length_completion_prompt` 只在该文件和 `tests/test_lean_kernel_v2_pi_runtime.py` 使用。新交易路径已将软字数不足交独立审读。 | **高可信可退役候选**。移除模块与专属测试前确认没有外部插件按私有路径导入；保留“软下限只提示”回归。 |

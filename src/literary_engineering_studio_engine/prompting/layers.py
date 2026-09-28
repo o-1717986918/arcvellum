@@ -55,7 +55,6 @@ _LAYER_METADATA = (
     ("scene.creator.revise", "stage", "修订", True, "Studio", 3),
     ("scene.review", "stage", "独立文学审读", True, "Studio", 2),
     ("scene.performance.plan", "stage", "主创表演规划", True, "Engine literary", 1),
-    ("scene.interaction.direction", "stage", "旧自动逐轮导演；仅供查阅，新路径由主创请求素材", False, "Engine literary", 1),
     ("scene.actor.identity", "identity", "角色人格初始化附加指引", True, "Engine literary", 1),
     ("scene.actor.turn", "stage", "角色本轮回应", True, "Engine literary", 1),
     ("scene.environment.identity", "identity", "环境观察方式", True, "Engine literary", 1),
@@ -65,9 +64,6 @@ _LAYER_METADATA = (
     ("scene.describer.scene", "identity", "场面描写", True, "Engine literary", 1),
     ("scene.description.turn", "stage", "描写器当轮任务", True, "Engine literary", 1),
     ("scene.material.selection", "stage", "主创对角色与描写候选的取舍", True, "Engine literary", 1),
-    ("scene.sources", "dynamic", "SceneBrief 与来源材料", False, "Studio", 1),
-    ("scene.repair.json", "repair", "结构化答复修复", False, "Studio", 1),
-    ("scene.length.legacy", "repair", "旧首稿补长，当前创作路径停用", False, "Studio", 1),
     ("formal.prompt_program.v3", "protocol", "正式任务结构化 IR", False, "Studio", 2),
     ("scene.creator.create.protocol", "protocol", "主创成稿事实与交付模板", False, "Studio", 2),
     ("scene.creator.revise.protocol", "protocol", "主创修订事实与交付模板", False, "Studio", 2),
@@ -75,8 +71,7 @@ _LAYER_METADATA = (
     ("scene.performance.plan.protocol", "protocol", "人格化规划与输出合同模板", False, "Engine literary", 1),
     ("scene.actor.scene.protocol", "protocol", "角色场景回应模板", False, "Engine literary", 1),
     ("scene.environment.turn.protocol", "protocol", "环境观察输出模板", False, "Engine literary", 1),
-    ("scene.interaction.direction.protocol", "protocol", "旧逐轮导演模板", False, "Engine literary", 1),
-    ("scene.actor.interaction.protocol", "protocol", "旧角色逐轮回应模板", False, "Engine literary", 1),
+    ("scene.actor.interaction.protocol", "protocol", "角色按需取材的逐轮回应模板", False, "Engine literary", 1),
     ("scene.describer.initialization.protocol", "protocol", "描写器人格初始化结构模板", False, "Engine literary", 1),
     ("scene.describer.character.protocol", "protocol", "人物描写的视角与行动边界", False, "Engine literary", 1),
     ("scene.describer.object.protocol", "protocol", "事物描写的事实边界", False, "Engine literary", 1),
@@ -112,11 +107,8 @@ _LAYER_METADATA = (
     ("scene.review.convergence.normal.protocol", "protocol", "常规审读返修范围", False, "Studio", 1),
     ("scene.review.convergence.strict.protocol", "protocol", "多轮返修后收敛范围", False, "Studio", 1),
     ("scene.performance.plan-repair.protocol", "protocol", "场景规划结构补救", False, "Studio", 1),
-    ("scene.interaction.direction-repair.protocol", "protocol", "逐轮导演结构补救", False, "Studio", 1),
     ("scene.actor.turn-repair.protocol", "protocol", "角色本轮结构补救", False, "Studio", 1),
     ("scene.ownership.action-audit.protocol", "protocol", "一级言行来源审查", False, "Studio", 1),
-    ("scene.ownership.repair.action.protocol", "protocol", "已退役的角色动作来源修订指引；仅供查阅", False, "Studio", 1),
-    ("scene.ownership.repair.dialogue.protocol", "protocol", "已退役的角色发言来源修订指引；仅供查阅", False, "Studio", 1),
     ("scene.fallbacks.protocol", "protocol", "场景主创、审读和取材的无资料占位及上限说明", False, "Studio", 1),
     ("pi.worker.main-creative.protocol", "protocol", "正式主创 Worker 工具与写入权限", False, "Pi Worker", 1),
     ("pi.worker.incremental-repair.protocol", "protocol", "正式修复 Worker 写入范围", False, "Pi Worker", 1),
@@ -168,22 +160,10 @@ _LAYER_METADATA = (
     ("formal.objective.user-direction.protocol", "protocol", "正式任务用户方向标题", False, "Studio", 1),
     ("formal.objective.empty.protocol", "protocol", "正式任务正文为空时的默认说明", False, "Studio", 1),
     ("advisor.snapshot-readme.protocol", "protocol", "顾问只读资料快照的信任边界", False, "Studio", 1),
-    ("legacy.template.character_creation_system", "protocol", "旧资产人物创建系统模板", False, "Engine legacy", 1),
-    ("legacy.template.character_creation_user", "stage", "旧资产人物创建任务模板", False, "Engine legacy", 1),
-    ("legacy.template.director_system", "protocol", "旧总导演系统模板", False, "Engine legacy", 1),
-    ("legacy.template.director_user", "stage", "旧总导演任务模板", False, "Engine legacy", 1),
-    ("legacy.template.outline_creation_system", "protocol", "旧资产大纲创建系统模板", False, "Engine legacy", 1),
-    ("legacy.template.outline_creation_user", "stage", "旧资产大纲创建任务模板", False, "Engine legacy", 1),
-    ("legacy.template.scene_generation_system", "identity", "旧项目场景正文系统模板", True, "Engine legacy project", 1),
-    ("legacy.template.scene_generation_user", "stage", "旧项目场景正文任务模板", True, "Engine legacy project", 1),
-    ("legacy.template.worldbuilding_system", "protocol", "旧资产世界创建系统模板", False, "Engine legacy", 1),
-    ("legacy.template.worldbuilding_user", "stage", "旧资产世界创建任务模板", False, "Engine legacy", 1),
 )
 
 
 def _default_text(layer_id: str) -> str:
-    if layer_id.startswith("legacy.template."):
-        return engine_path("templates", "prompts", f"{layer_id.removeprefix('legacy.template.')}.md").read_text(encoding="utf-8").strip()
     return engine_path("templates", "prompt_layers", f"{layer_id}.md").read_text(encoding="utf-8").strip()
 
 

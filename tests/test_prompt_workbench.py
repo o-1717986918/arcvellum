@@ -47,7 +47,9 @@ class PromptWorkbenchTests(unittest.TestCase):
             client = TestClient(app)
             catalog = client.get("/prompts/catalog")
             self.assertEqual(catalog.status_code, 200)
+            self.assertEqual(catalog.json()["schema"], "arcvellum/prompt-workbench/v2")
             self.assertTrue(catalog.json()["formal_assets"])
+            self.assertTrue(catalog.json()["flow_tree"])
             formal = next(layer for layer in catalog.json()["layers"]
                           if layer["responsibility"] == "formal-asset")
             self.assertTrue(formal["editable"])
@@ -76,8 +78,22 @@ class PromptWorkbenchTests(unittest.TestCase):
                                 json={"scope": "global", "expected_digest": saved.json()["effective"]["digest"]})
             self.assertEqual(reset.status_code, 200)
             self.assertEqual(reset.json()["effective"]["source"], "package")
+            catalog_ids = {layer["layer_id"] for layer in catalog.json()["layers"]}
+            leaves = {leaf["layer_id"] for group in catalog.json()["flow_tree"]
+                      for stage in group["children"] for leaf in stage["children"]}
+            self.assertEqual(catalog_ids, leaves)
+            self.assertNotIn("scene.length.legacy", catalog_ids)
+            self.assertNotIn("legacy.template.scene_generation_system", catalog_ids)
+            self.assertNotIn("formal.asset.route.scene-development.state-apply.v1", catalog_ids)
+            self.assertEqual([group["id"] for group in catalog.json()["flow_tree"]],
+                             ["direction", "source", "planning", "scene", "audit", "release", "execution"])
             self.assertEqual(next(layer for layer in catalog.json()["layers"]
-                                  if layer["layer_id"] == "scene.length.legacy")["usage_status"], "legacy")
+                                  if layer["layer_id"] == "scene.actor.interaction.protocol")["editable"], False)
+            self.assertIn("[[ARCVELLUM_PROMPT_", next(layer for layer in catalog.json()["layers"]
+                          if layer["layer_id"] == "scene.actor.interaction.protocol")["effective_text"])
+            denied_non_model = client.put("/prompts/layers/formal.asset.route.scene-development.state-apply.v1",
+                                          json={"scope": "global", "text": "不会成为模型提示"})
+            self.assertEqual(denied_non_model.status_code, 400)
 
     def test_steward_guidance_is_versioned_but_decision_contract_is_fixed(self):
         from literary_engineering_studio.advisor.creative_steward import _decision_prompt
@@ -120,36 +136,12 @@ class PromptWorkbenchTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "invalid active version"):
                 service.resolve("scene.creator.identity")
 
-    def test_legacy_scene_project_template_edits_feed_engine_and_can_roll_back(self):
-        from literary_engineering_studio_engine.prompting.pack import _load_template
-
+    def test_retired_project_template_edit_endpoints_are_closed(self):
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            project = root / "work"
-            project.mkdir()
-            (project / "project.yaml").write_text("title: Test\n", encoding="utf-8")
-            layer_id = "legacy.template.scene_generation_system"
-            service = PromptWorkbenchService(FilePromptLayerRepository(root / "app"))
-            initial = service.resolve(layer_id, project).text
-            with self.assertRaises(ValueError):
-                service.save(layer_id, "全局不可用", scope="global")
-            with self.assertRaisesRegex(ValueError, "registered input fields"):
-                service.save("legacy.template.scene_generation_user", "删光任务资料", scope="project",
-                             project_root=project)
-            service.save(layer_id, initial + "\n本作请留意日常细节。", scope="project", project_root=project)
-            self.assertIn("本作请留意日常细节", _load_template(project, "scene_generation_system.md"))
-            versions = service.history(layer_id, scope="project", project_root=project)["versions"]
-            self.assertEqual(len(versions), 2)
-            service.activate(layer_id, 1, scope="project", project_root=project)
-            self.assertEqual(_load_template(project, "scene_generation_system.md").strip(), initial)
-            service.reset(layer_id, scope="project", project_root=project)
-            self.assertEqual(_load_template(project, "scene_generation_system.md").strip(), initial)
-            catalog = service.catalog(project)
-            row = next(item for item in catalog["layers"] if item["layer_id"] == layer_id)
-            self.assertEqual((row["usage_status"], row["source"], row["editable"]),
-                             ("legacy-project", "project-asset", True))
-            self.assertFalse(next(item for item in service.catalog()["layers"]
-                                  if item["layer_id"] == layer_id)["editable"])
+            service = PromptWorkbenchService(FilePromptLayerRepository(Path(directory)))
+            for layer_id in ("legacy.template.scene_generation_system", "legacy.template.scene_generation_user"):
+                with self.subTest(layer_id=layer_id), self.assertRaisesRegex(ValueError, "unknown prompt layer"):
+                    service.save(layer_id, "旧项目覆盖", scope="global")
 
 
 if __name__ == "__main__":

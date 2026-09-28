@@ -12,9 +12,13 @@ describe("prompt workbench", () => {
     api.promptCatalog.mockImplementation(async (root: string) => ({ layers: [{
       layer_id: "scene.creator.identity", responsibility: "identity", purpose: "主创文学使命",
       source: root ? "project" : "global", version: "1", owner: "Studio", editable: true,
-      digest: "digest-1", usage_status: "active",
+      digest: "digest-1", usage_status: "active", flow_stage: "scene.entry",
       default_text: "随包默认", effective_text: root ? "作品指引" : "全局指引",
-    }], formal_assets: [] }));
+    }], formal_assets: [], flow_tree: [{ id: "scene", label: "04 · 场景创作", children: [
+      { id: "scene.entry", label: "入场与意图", children: [
+        { id: "scene.creator.identity", layer_id: "scene.creator.identity", label: "主创文学使命" },
+      ] },
+    ] }] }));
     api.promptHistory.mockResolvedValue({ versions: [] });
     const { default: PromptWorkbench } = await import("./PromptWorkbench.vue");
     const wrapper = mount(PromptWorkbench, { props: { projectRoot: "C:/Books/Work" } });
@@ -40,13 +44,18 @@ describe("prompt workbench", () => {
     api.promptCatalog.mockResolvedValue({ layers: [
       { layer_id: "scene.creator.identity", responsibility: "identity", purpose: "主创文学使命",
         source: "package", version: "1", owner: "Studio", editable: true,
-        digest: "digest-2", usage_status: "active",
+        digest: "digest-2", usage_status: "active", flow_stage: "scene.entry",
         default_text: "旧指引", effective_text: "旧指引" },
       { layer_id: "scene.protocol", responsibility: "protocol", purpose: "固定权限",
         source: "package", version: "1", owner: "Engine", editable: false,
-        digest: "digest-3", usage_status: "active",
+        digest: "digest-3", usage_status: "active", flow_stage: "scene.entry",
         default_text: "协议", effective_text: "协议" },
-    ], formal_assets: [] });
+    ], formal_assets: [], flow_tree: [{ id: "scene", label: "04 · 场景创作", children: [
+      { id: "scene.entry", label: "入场与意图", children: [
+        { id: "scene.creator.identity", layer_id: "scene.creator.identity", label: "主创文学使命" },
+        { id: "scene.protocol", layer_id: "scene.protocol", label: "固定权限" },
+      ] },
+    ] }] });
     api.promptHistory.mockResolvedValue({ versions: [{ version: 1, text: "旧指引", created_at: "now" }] });
     api.savePromptLayer.mockResolvedValue({ saved: { version: 2 } });
     api.activatePromptVersion.mockResolvedValue({ activated: { version: 1 } });
@@ -64,9 +73,16 @@ describe("prompt workbench", () => {
     expect(api.activatePromptVersion).toHaveBeenCalledWith("scene.creator.identity", {
       scope: "global", project_root: "", version: 1, expected_digest: "digest-2",
     });
-    await wrapper.find("select[aria-label='提示词层']").setValue("scene.protocol");
+    expect(wrapper.findAll(".prompt-tree-leaf")).toHaveLength(2);
+    await wrapper.findAll(".prompt-tree-leaf")[1].trigger("click");
     await flushPromises();
-    expect((wrapper.findAll("textarea")[1].element as HTMLTextAreaElement).readOnly).toBe(true);
-    expect((wrapper.find(".primary-button").element as HTMLButtonElement).disabled).toBe(true);
+    expect(wrapper.find(".prompt-fixed-template pre").text()).toBe("协议");
+    expect(wrapper.findAll("textarea")).toHaveLength(0);
+    expect(wrapper.find(".primary-button").exists()).toBe(false);
+    await wrapper.find(".prompt-tree-stage").trigger("click");
+    expect(wrapper.findAll(".prompt-tree-leaf")).toHaveLength(0);
+    await wrapper.find(".prompt-tree-stage").trigger("click");
+    await wrapper.find("select[aria-label='提示词职责筛选']").setValue("protocol");
+    expect(wrapper.findAll(".prompt-tree-leaf")).toHaveLength(1);
   });
 });

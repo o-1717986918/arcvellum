@@ -90,28 +90,6 @@ def _valid_material_role(kind: str, speaker: str, scene_change: str, participant
     return not scene_change and (kind != "environment" or not speaker)
 
 
-def render_interaction_direction_prompt(
-    brief: dict[str, Any], plan: dict[str, Any], public_log: list[dict[str, Any]],
-    turn: int, sources: str, creative_intent: str = "",
-) -> str:
-    """Let the main creator choose the next participant and situation, not their line."""
-
-    observed = validated_public_log(brief, public_log[-24:])
-    unheard = [name for name in brief.get("participants") or ()
-               if name not in {entry.get("speaker") for entry in public_log}]
-    direction_plan = {key: plan[key] for key in ("beats", "actor_tasks", "opening_direction", "unknown_slots")
-                      if key in plan}
-    return render_prompt_template("scene.interaction.direction.protocol", (
-        json.dumps(brief, ensure_ascii=False),
-        creative_intent or '依据公开言行现场判断读者怎样经历这一场；人物展示、日常、趣味、留白和误导都可有价值。',
-        json.dumps(direction_plan, ensure_ascii=False),
-        sources[:7000] or '仅 SceneBrief。',
-        turn + 1,
-        json.dumps(observed, ensure_ascii=False),
-        json.dumps(unheard, ensure_ascii=False),
-    ))
-
-
 def parse_interaction_direction(payload: dict[str, Any], brief: dict[str, Any], plan: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(payload, dict) or not isinstance(payload.get("finish"), bool):
         raise ValueError("interaction direction requires a finish decision")
@@ -210,4 +188,4 @@ def _repeated_phrase(value: str) -> bool:
                for size in range(2, min(80, len(value) // 4) + 1))
 
 
-__all__ = ["MaterialRequestV2", "parse_interaction_direction", "parse_scene_material_requests", "render_actor_interaction_prompt", "render_interaction_direction_prompt", "render_interaction_materials"]
+__all__ = ["MaterialRequestV2", "parse_interaction_direction", "parse_scene_material_requests", "render_actor_interaction_prompt", "render_interaction_materials"]

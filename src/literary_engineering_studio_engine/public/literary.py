@@ -104,7 +104,6 @@ from ..literary.scene.roleplay.interaction import (
     parse_interaction_direction,
     parse_scene_material_requests,
     render_actor_interaction_prompt,
-    render_interaction_direction_prompt,
     render_interaction_materials,
 )
 from ..literary.scene.roleplay.relay_plan import parse_relay_plan, render_relay_plan_prompt
@@ -340,7 +339,6 @@ __all__ = sorted([
     "project_brief_expression_context",
     "parse_interaction_direction",
     "render_actor_interaction_prompt",
-    "render_interaction_direction_prompt",
     "render_interaction_materials",
     "actor_personas_for_participants",
     "list_actor_personas",

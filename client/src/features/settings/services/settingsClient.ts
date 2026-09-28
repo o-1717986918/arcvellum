@@ -11,9 +11,11 @@ interface ScenePerformanceResponse { ok: boolean; preferences: ScenePerformanceP
 export interface PromptLayerSummary {
   layer_id: string; responsibility: string; purpose: string; source: string; version: string;
   digest: string; editable: boolean; default_text: string; effective_text: string; owner: string;
-  usage_status: "active" | "legacy" | "legacy-project" | "dynamic" | "formal-route";
+  usage_status: "active" | "formal-route"; flow_stage: string;
 }
-export interface PromptCatalog { schema: string; layers: PromptLayerSummary[]; formal_assets: Array<Record<string, unknown>> }
+export interface PromptFlowNode { id: string; label: string; count?: number; layer_id?: string; children?: PromptFlowNode[] }
+export interface PromptCatalog { schema: string; layers: PromptLayerSummary[];
+  formal_assets: Array<Record<string, unknown>>; flow_tree: PromptFlowNode[] }
 export interface PromptHistory { layer_id: string; scope: string; versions: Array<{ version: number; text: string; created_at: string }> }
 export interface PromptPreview { schema: string; digest: string; layers: Array<Record<string, unknown>>;
   texts: Record<string, string>; assembled_template: string | null; assembly_kind: string }
