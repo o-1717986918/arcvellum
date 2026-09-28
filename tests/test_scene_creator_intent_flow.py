@@ -10,6 +10,9 @@ from literary_engineering_studio.runtime.role_conversation import RoleConversati
 from literary_engineering_studio.application.prompt_workbench import PromptWorkbenchService
 from literary_engineering_studio.persistence.prompt_layers import FilePromptLayerRepository
 from literary_engineering_studio.runtimes.pi_scene_transaction import PiSceneTransactionRuntime
+from literary_engineering_studio.runtimes.scene_creator_material_policy import (
+    initial_material_choice_error, material_selection_error,
+)
 from literary_engineering_studio_engine.public.literary import VerificationReport
 from tests.test_lean_kernel_v2_pi_runtime import _brief
 from tests.test_scene_interaction import _fixture
@@ -50,6 +53,93 @@ class _IntentGateway:
 
 
 class CreatorIntentFlowTests(unittest.TestCase):
+    def test_empty_library_is_not_a_literary_reason_to_skip_agents(self):
+        self.assertIn("empty candidate library", initial_material_choice_error({
+            "material_requests": [],
+            "material_skip_reason": "只读素材库为空，没有候选可读，所以由主创直接成稿。",
+        }))
+        self.assertEqual(initial_material_choice_error({
+            "material_requests": [],
+            "material_skip_reason": "这一短场只需保留人物停顿，另取素材会解释掉读者能推想的空白。",
+        }), "")
+
+    def test_material_choice_must_name_a_real_candidate(self):
+        known = ["d1:1"]
+        self.assertIn("real candidate", material_selection_error({"material_decisions": []}, known, []))
+        self.assertIn("known candidate IDs", material_selection_error({"material_decisions": [
+            {"candidate_id": "", "decision": "discard", "reason": "目录为空"},
+        ]}, known, []))
+        self.assertEqual(material_selection_error({"material_decisions": [
+            {"candidate_id": "d1:1", "decision": "adapt", "reason": "保留可回看的线索"},
+        ]}, known, []), "")
+
+    def test_empty_library_reason_is_repaired_into_creator_directed_material_request(self):
+        class Gateway(_IntentGateway):
+            def __init__(self):
+                super().__init__(request=False)
+
+            def run(self, workspace, prompt, *, role, timeout, event_sink=None, cancel_event=None):
+                if role == "worker" and len(self.calls) < 2:
+                    self.calls.append((role, prompt))
+                    answer = ({"creative_intent": _INTENT, "prose": "她还在等。", "scene_delta": {},
+                               "material_requests": [], "material_skip_reason": "素材库为空，没有候选可读。"}
+                              if len(self.calls) == 1 else
+                              {"creative_intent": _INTENT, "material_requests": [{
+                                  "kind": "event-narration", "target": "昨夜取信",
+                                  "purpose": "让读者重新理解今日沉默里被藏起的信",
+                                  "scene_moment": "她推信之前", "cue": "信已在昨夜被取走",
+                              }]})
+                    return RoleConversationResult("pi-worker", "fake", "test/model", json.dumps(answer, ensure_ascii=False))
+                return super().run(workspace, prompt, role=role, timeout=timeout,
+                                   event_sink=event_sink, cancel_event=cancel_event)
+
+        material = "一级候选\n" + json.dumps({"description_candidates": [{
+            "candidate_id": "d1:1", "kind": "event-narration", "target": "昨夜取信",
+            "purpose": "改变读者认知", "scene_moment": "她推信之前", "text": "信昨夜已不在抽屉。",
+            "basis": "confirmed", "source_note": "已确认来源",
+        }]}, ensure_ascii=False)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            gateway = Gateway()
+            runtime = PiSceneTransactionRuntime({"application": {"scene_performance_agents": {"enabled": True}}},
+                                                project_root=root, data_root=root / ".studio", gateway=gateway)
+            with patch("literary_engineering_studio.runtimes.pi_scene_transaction.fulfill_scene_material_requests",
+                       return_value=material) as fulfill:
+                result = runtime.create_scene("tx-empty-repair", _brief())
+            self.assertIn("空抽屉", result.prose)
+            self.assertEqual(fulfill.call_count, 1)
+            self.assertEqual(len([role for role, _ in gateway.calls if role == "worker"]), 3)
+            self.assertIn("空素材目录是正常初态", gateway.calls[1][1])
+            self.assertNotIn("信昨夜已不在抽屉", gateway.calls[-1][1])
+
+    def test_creator_repairs_a_fabricated_material_decision(self):
+        class Gateway(_IntentGateway):
+            def __init__(self):
+                super().__init__(request=True)
+
+            def run(self, workspace, prompt, *, role, timeout, event_sink=None, cancel_event=None):
+                if role == "worker" and len([item for item in self.calls if item[0] == "worker"]) == 1:
+                    self.calls.append((role, prompt))
+                    answer = {"creative_intent": _INTENT, "prose": "她把信推了过去。", "scene_delta": {},
+                              "material_decisions": [{"candidate_id": "", "decision": "discard",
+                                                      "reason": "目录为空"}]}
+                    return RoleConversationResult("pi-worker", "fake", "test/model", json.dumps(answer, ensure_ascii=False))
+                return super().run(workspace, prompt, role=role, timeout=timeout,
+                                   event_sink=event_sink, cancel_event=cancel_event)
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            gateway = Gateway()
+            runtime = PiSceneTransactionRuntime({"application": {"scene_performance_agents": {"enabled": True}}},
+                                                project_root=root, data_root=root / ".studio", gateway=gateway)
+            runtime.create_scene("tx-selection-repair", _brief())
+            workers = [prompt for role, prompt in gateway.calls if role == "worker"]
+            self.assertEqual(len(workers), 3)
+            self.assertIn("上一回答没有给出可核验的素材取舍", workers[-1])
+            memory = json.loads((root / ".studio/scene-transactions/tx-selection-repair/scene_creator_memory.json")
+                                .read_text(encoding="utf-8"))
+            self.assertEqual(memory["material_decisions"][0]["candidate_id"], "d1:1")
+
     def test_enabled_materials_require_a_reason_for_first_direct_draft(self):
         class UnreasonedGateway(_IntentGateway):
             def run(self, workspace, prompt, *, role, timeout, event_sink=None, cancel_event=None):

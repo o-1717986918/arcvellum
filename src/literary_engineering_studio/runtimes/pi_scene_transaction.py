@@ -12,7 +12,6 @@ from typing import Any, Callable
 from literary_engineering_studio_engine.public.prompting import (
     list_prompt_layer_specs, prompt_assembly_manifest, resolve_prompt_layer,
 )
-
 from literary_engineering_studio_engine.public.literary import (
     CreativeResult,
     ReviewResult,
@@ -37,6 +36,7 @@ from .scene_performance import (
 )
 from .scene_performance_ownership import has_actor_entries
 from .scene_creator_memory import SceneCreatorMemoryV1
+from .scene_creator_material_policy import repair_material_choice
 from .scene_material_library import SceneMaterialLibrary
 from ..runtime.prompt_recipes import lean_scene_prompt_recipe
 from .scene_source_evidence import scene_source_evidence
@@ -256,10 +256,13 @@ class PiSceneTransactionRuntime:
                 prompt = render_prompt(self._material_prompt(transaction_id, materials),
                                        intent, memory.render_context())
                 payload = _answer_payload(self._run(prompt, role="worker", transaction_id=transaction_id))
-                if (_scene_performance_enabled(self._config) and memory.phase == "opening"
-                        and not payload.get("material_requests")
-                        and not 10 <= len(str(payload.get("material_skip_reason") or "").strip()) <= 300):
-                    raise ValueError("initial direct scene draft needs a specific literary material_skip_reason")
+                if _scene_performance_enabled(self._config):
+                    payload, prompt = repair_material_choice(
+                        payload, prompt, phase=memory.phase, candidate_ids=memory.candidate_ids,
+                        prior_decisions=memory.material_decisions,
+                        invoke=lambda current: _answer_payload(self._run(
+                            current, role="worker", transaction_id=transaction_id)),
+                    )
                 memory.record_creator(payload, brief, prompt=prompt)
                 memory.save(memory_path)
                 if memory.pending_request is None:

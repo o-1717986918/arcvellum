@@ -37,7 +37,7 @@ export async function readSceneMaterial(root: string, candidateId = ""): Promise
 	try { resolvedRoot = await realpath(root); }
 	catch {
 		if (candidateId) throw new Error("scene material library is empty");
-		return "[]";
+		return emptyMaterialIndex();
 	}
 	const indexPath = await authorizedPath(resolvedRoot, "index.json");
 	const index = JSON.parse(await readFile(indexPath, "utf8")) as { schema?: string; entries?: MaterialEntry[] };
@@ -45,6 +45,7 @@ export async function readSceneMaterial(root: string, candidateId = ""): Promise
 		throw new Error("scene material index is invalid");
 	}
 	if (!candidateId) {
+		if (index.entries.length === 0) return emptyMaterialIndex();
 		return JSON.stringify(index.entries.map(({ file: _file, ...metadata }) => metadata));
 	}
 	const entry = index.entries.find((item) => item.candidate_id === candidateId);
@@ -59,6 +60,14 @@ export async function readSceneMaterial(root: string, candidateId = ""): Promise
 		throw new Error("scene material file does not match its index");
 	}
 	return text;
+}
+
+function emptyMaterialIndex(): string {
+	return JSON.stringify({
+		status: "empty_before_request",
+		entries: [],
+		message: "本场尚未生成候选。请按作者意图在最终 JSON 中提交 material_requests；read_scene_material 只能读取生成后的文件。空目录不是 agent 不可用的证据。",
+	});
 }
 
 async function authorizedPath(root: string, filename: string): Promise<string> {

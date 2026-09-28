@@ -135,7 +135,8 @@ class SceneInteractionTests(unittest.TestCase):
                 for batch in ("first", "second"):
                     result = fulfill_scene_material_requests(
                         brief=brief, expression={}, sources="", style_reference="",
-                        payload={"material_requests": [{"kind": "environment", "cue": "观察桌沿的光"}]},
+                        payload={"material_requests": [{"kind": "environment", "cue": "观察桌沿的光",
+                                                       "purpose": "让读者感到等待变长", "scene_moment": "信封被放下时"}]},
                         cache_root=Path(directory), config={"application": {"scene_performance_agents": {"enabled": True}}},
                         invoke=lambda prompt, role: "", invoke_actor_turn=None,
                         invoke_role_turn=role_turn, request_batch_id=batch,
@@ -215,7 +216,7 @@ class SceneInteractionTests(unittest.TestCase):
             "spoken": "信是我的。", "first_person_action": "我压住信封。", "private_impulse": "我害怕。",
         }], None, viewpoint=brief["viewpoint"])
         self.assertIn("只读素材文件目录", block)
-        self.assertIn("按作者意图比较候选", block)
+        self.assertIn("按作者意图把候选分成可用", block)
         self.assertIn('"entry_id":"t1:1"', block)
 
     def test_author_handoff_keeps_new_events_once_and_omits_repetitive_notes(self):
@@ -287,11 +288,23 @@ class SceneInteractionTests(unittest.TestCase):
                     if self.create_count == 1:
                         self.calls.append((role, prompt))
                         request = {"material_requests": [
-                            {"kind": "actor", "speaker": "character/sister", "cue": "信已经打开"},
-                            {"kind": "actor", "speaker": "character/protagonist", "cue": "回应妹妹"},
-                            {"kind": "environment", "cue": "门边的光"},
+                            {"kind": "actor", "speaker": "character/sister", "cue": "信已经打开",
+                             "purpose": "让质问带出妹妹自己的判断", "scene_moment": "看见旧信时"},
+                            {"kind": "actor", "speaker": "character/protagonist", "cue": "回应妹妹",
+                             "purpose": "让承认显出关系代价", "scene_moment": "妹妹追问后"},
+                            {"kind": "environment", "cue": "门边的光",
+                             "purpose": "让停顿在空间里可见", "scene_moment": "承认之后"},
                         ]}
                         return RoleConversationResult("pi-worker", "request", "test/model", json.dumps(request, ensure_ascii=False))
+                    self.calls.append((role, prompt))
+                    return RoleConversationResult("pi-worker", "draft", "test/model", json.dumps({
+                        "prose": "她把信放回桌上，说是自己拿的。妹妹没有接话。",
+                        "decision_summary": "把人物回应与门边的光编成承认后的停顿。",
+                        "scene_delta": {}, "material_decisions": [{
+                            "candidate_id": "t1:1", "decision": "adapt",
+                            "reason": "保留妹妹的追问，主创补写承认后的沉默",
+                        }],
+                    }, ensure_ascii=False))
                 if prompt.startswith("# Scene Performance Direction"):
                     self.calls.append((role, prompt))
                     _, plan = _fixture(["character/protagonist", "character/sister"])
@@ -350,7 +363,7 @@ class SceneInteractionTests(unittest.TestCase):
             self.assertNotIn('"actor_prompts"', creator_prompts[0])
             self.assertNotIn('"environment_initialization"', creator_prompts[0])
             self.assertIn("希望读者怎样经历这一场", creator_prompts[0])
-            self.assertIn("优先按需调取一级素材", creator_prompts[0])
+            self.assertIn("先把作者意图落实成需要观察", creator_prompts[0])
             material_index = json.loads((root / ".studio/scene-transactions/tx-interaction/materials/index.json").read_text(encoding="utf-8"))
             self.assertTrue(any(item["kind"] == "actor" for item in material_index["entries"]))
             self.assertTrue(all("[LANGUAGE_STYLE]\nANTI_PLAIN\nPOLISHED\nANTI_SHORT_SENTENCES" in call[1]
@@ -389,12 +402,16 @@ class SceneInteractionTests(unittest.TestCase):
                     self.create_prompts.append(_creator_prompt(prompt))
                     if len(self.create_prompts) == 1:
                         answer = {"material_requests": [
-                            {"kind": "actor", "speaker": "character/solo", "beat_id": "b1", "cue": "看见对方仍在等回答"},
-                            {"kind": "environment", "beat_id": "b1", "cue": "雨光在信封上的变化"},
+                            {"kind": "actor", "speaker": "character/solo", "beat_id": "b1", "cue": "看见对方仍在等回答",
+                             "purpose": "显出他回应时的犹疑", "scene_moment": "信被推来后"},
+                            {"kind": "environment", "beat_id": "b1", "cue": "雨光在信封上的变化",
+                             "purpose": "让等待的时间可感", "scene_moment": "他回答前"},
                         ]}
                     else:
                         answer = {"prose": "他说：“你还等着，我怎么能装作没看见？”窗上的雨光漫到信封背面。",
-                                  "decision_summary": "看见与回应使关系变化。", "scene_delta": {}, "material_requests": []}
+                                  "decision_summary": "看见与回应使关系变化。", "scene_delta": {}, "material_requests": [],
+                                  "material_decisions": [{"candidate_id": "t1:1", "decision": "adapt",
+                                                          "reason": "保留自主回应，由主创安排雨光与信封的叙述"}]}
                     return RoleConversationResult("pi-worker", "creator", "test/model", json.dumps(answer, ensure_ascii=False))
                 if prompt.startswith("# First-Level Visible Action Source Audit"):
                     return RoleConversationResult("pi-worker", "audit", "test/model", '{"status":"clean","violations":[]}')
@@ -443,26 +460,36 @@ class SceneInteractionTests(unittest.TestCase):
     def test_material_requests_follow_known_roles_and_beats(self):
         brief, plan = _fixture(["character/solo"])
         requests = parse_scene_material_requests({"material_requests": [
-            {"kind": "actor", "speaker": "character/solo", "cue": "多说些眼前的事"},
-            {"kind": "environment", "cue": "观察雨后的桌面"},
+            {"kind": "actor", "speaker": "character/solo", "cue": "多说些眼前的事",
+             "purpose": "显出他对旧信的回避", "scene_moment": "信打开时"},
+            {"kind": "environment", "cue": "观察雨后的桌面",
+             "purpose": "让读者感到雨后的空寂", "scene_moment": "停顿时"},
         ]}, brief, plan)
         self.assertEqual([item["kind"] for item in requests], ["actor", "environment"])
         self.assertEqual([item["beat_id"] for item in requests], ["b1", "b1"])
         self.assertEqual(requests[0]["scene_change"], "")
         from_entry = parse_scene_material_requests({"material_requests": [
-            {"kind": "actor", "speaker": "character/solo", "beat_id": "t2:1", "cue": "继续回应"},
+            {"kind": "actor", "speaker": "character/solo", "beat_id": "t2:1", "cue": "继续回应",
+             "purpose": "让承认继续改变信任", "scene_moment": "上一句之后"},
         ]}, brief, plan, actor_entries=[{"entry_id": "t2:1", "beat_id": "b1", "speaker": "character/solo"}])
         self.assertEqual(from_entry[0]["beat_id"], "b1")
+        with self.assertRaisesRegex(ValueError, "literary purpose"):
+            parse_scene_material_requests({"material_requests": [{
+                "kind": "actor", "speaker": "character/solo", "cue": "继续回应",
+            }]}, brief, plan)
         with self.assertRaisesRegex(ValueError, "speaker"):
-            parse_scene_material_requests({"material_requests": [{"kind": "actor", "speaker": "unknown", "cue": "说话"}]}, brief, plan)
+            parse_scene_material_requests({"material_requests": [{"kind": "actor", "speaker": "unknown", "cue": "说话",
+                                                                "purpose": "揭示回避", "scene_moment": "此刻"}]}, brief, plan)
         with self.assertRaisesRegex(ValueError, "known beat"):
-            parse_scene_material_requests({"material_requests": [{"kind": "environment", "beat_id": "b9", "cue": "观察"}]}, brief, plan)
+            parse_scene_material_requests({"material_requests": [{"kind": "environment", "beat_id": "b9", "cue": "观察",
+                                                                "purpose": "显示距离", "scene_moment": "此刻"}]}, brief, plan)
 
     def test_creator_can_add_a_new_change_between_turns_of_same_actor(self):
         brief, plan = _fixture(["character/solo"])
         requests = parse_scene_material_requests({"material_requests": [
             {"kind": "actor", "speaker": "character/solo", "beat_id": "b1",
-             "scene_change": "门外传来一声敲门", "cue": "我认得这个敲门习惯"},
+             "scene_change": "门外传来一声敲门", "cue": "我认得这个敲门习惯",
+             "purpose": "让旧关系在敲门声里浮现", "scene_moment": "敲门之后"},
         ]}, brief, plan)
         state = new_scene_session(brief, {}, plan, None)
         prompts = []
@@ -490,10 +517,13 @@ class SceneInteractionTests(unittest.TestCase):
                 if _creator_prompt(prompt).startswith("# Scene Revision"):
                     self.revision_prompts.append(_creator_prompt(prompt))
                     answer = ({"material_requests": [{"kind": "actor", "speaker": "character/protagonist",
-                                                     "cue": "再回应妹妹一次"}]}
+                                                     "cue": "再回应妹妹一次", "purpose": "让承诺显出代价",
+                                                     "scene_moment": "妹妹再次追问后"}]}
                               if len(self.revision_prompts) == 1 else
                               {"prose": "他说：“我会把信交给你。”", "decision_summary": "修订关系转折。",
-                               "scene_delta": {}, "material_requests": []})
+                               "scene_delta": {}, "material_requests": [],
+                               "material_decisions": [{"candidate_id": "t2:1", "decision": "use",
+                                                       "reason": "角色续演给出关系转折的对白"}]})
                     return RoleConversationResult("pi-worker", "revision", "test/model", json.dumps(answer, ensure_ascii=False))
                 return super().run(workspace, prompt, role=role, timeout=timeout,
                                    event_sink=event_sink, cancel_event=cancel_event)
@@ -523,7 +553,7 @@ class SceneInteractionTests(unittest.TestCase):
 
     def test_retry_reuses_requested_materials_without_replaying_preparation(self):
         supplemented = "环境候选\n" + json.dumps({"actor_entries": [], "environment_candidates": {
-            "passages": [{"beat_id": "b1", "description": "雨停了。"}],
+            "passages": [{"candidate_id": "environment:1", "beat_id": "b1", "description": "雨停了。"}],
         }}, ensure_ascii=False)
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -532,14 +562,17 @@ class SceneInteractionTests(unittest.TestCase):
                 {"application": {"scene_performance_agents": {"enabled": True}}},
                 project_root=root, data_root=root / ".studio", gateway=_Gateway(),
             )
-            request = json.dumps({"material_requests": [{"kind": "environment", "cue": "看看雨后"}]}, ensure_ascii=False)
+            request = json.dumps({"material_requests": [{"kind": "environment", "cue": "看看雨后",
+                                                        "purpose": "让雨后的停顿可感", "scene_moment": "争执后"}]}, ensure_ascii=False)
             with patch("literary_engineering_studio.runtimes.pi_scene_transaction.fulfill_scene_material_requests",
                        return_value=supplemented) as fulfill, patch.object(
                            runtime, "_run", side_effect=[request, RuntimeError("temporary provider stop")]):
                 with self.assertRaisesRegex(RuntimeError, "temporary provider stop"):
                     runtime.create_scene("tx-resume", brief)
             self.assertEqual(fulfill.call_count, 1)
-            final = json.dumps({"prose": "雨停了。", "decision_summary": "雨后停留。", "scene_delta": {}}, ensure_ascii=False)
+            final = json.dumps({"prose": "雨停了。", "decision_summary": "雨后停留。", "scene_delta": {},
+                                "material_decisions": [{"candidate_id": "environment:1", "decision": "adapt",
+                                                        "reason": "保留雨停时的停顿，由主创补写人物动作"}]}, ensure_ascii=False)
             with patch.object(runtime, "_run", return_value=final):
                 result = runtime.create_scene("tx-resume", brief)
             self.assertEqual(result.prose, "雨停了。")

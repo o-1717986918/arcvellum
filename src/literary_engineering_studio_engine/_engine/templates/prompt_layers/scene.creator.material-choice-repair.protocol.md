@@ -1,0 +1,1 @@
+上一回答的独写理由只说明目前没有候选，或没有说明取材将怎样损害读者体验。空素材目录是正常初态：只有你先返回 material_requests，Studio 才会生成候选文件。请重新根据作者意图判断五类工具的用途。若需要人物自主回应、环境观察、人物可见呈现、场外事件说明或已发生言行的空间构图，返回 creative_intent 和具体 material_requests，不要同时写 prose；每项写明 kind、target、purpose、scene_moment、cue。若确实独写更好，返回 creative_intent、完整 prose、SceneDelta，并用 material_skip_reason 解释具体阅读效果为何会因取材受损，不能把目录为空或尚无候选当成理由。只返回一个 JSON 对象。

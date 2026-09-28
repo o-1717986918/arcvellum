@@ -41,6 +41,8 @@ class SceneMaterialLibrary:
         rows = value.get("entries")
         if not isinstance(rows, list):
             raise ValueError("scene material entries are invalid")
+        if not rows:
+            return "本场尚无候选；如作者意图需要外部观察或人物自主回应，请先提交 material_requests。空目录不代表 agent 不可用。"
         visible = [{key: row[key] for key in ("candidate_id", "kind", "target", "purpose", "scene_moment")}
                    | ({"basis": row["basis"]} if row.get("basis") else {}) for row in rows]
         return "可用素材文件目录（仅元数据，不含候选正文）：" + json.dumps(visible, ensure_ascii=False, separators=(",", ":"))

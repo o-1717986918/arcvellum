@@ -32,7 +32,8 @@ class SceneMaterialLibraryTests(unittest.TestCase):
     def test_empty_library_still_has_an_index(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             library = SceneMaterialLibrary(Path(directory) / "materials")
-            library.write("")
+            guidance = library.write("")
+            self.assertIn("material_requests", guidance)
             index = json.loads((library.root / "index.json").read_text(encoding="utf-8"))
             self.assertEqual(index["entries"], [])
 

@@ -34,7 +34,7 @@ prose 的目标为 [[ARCVELLUM_PROMPT_9]] 个中文正文字符，建议范围 [
 ## Output
 [[ARCVELLUM_PROMPT_13]]{"creative_intent":{"reader_experience":"希望读者怎样经历这一场","reader_knows":"可选","reader_misreads":"可选","withheld":"可选"},"prose":"完整正文；取材请求时可省略","decision_summary":"不超过三句","scene_delta":{"character_changes":[],"canon_candidates":[],"continuity_changes":[],"promise_updates":[],"reader_question_updates":[],"next_handoff":[],"new_asset_candidates":[]},"decision_trace":[],"escalation_reasons":[],"material_requests":[],"material_skip_reason":"首次直接成稿时说明不取材的文学理由","material_decisions":[],"unresolved_questions":[]}
 
-首次回答无论直接成稿还是请求素材，都请给出 creative_intent。取材可同时请求多类；若首次直接成稿，material_skip_reason 必须具体指出为何读者体验更适合由主创独写。收到候选后可修订意图并简述缘由；material_decisions 按 candidate_id 记录采用、改写或舍弃的理由。候选未采用不构成缺戏。不要把有意误导或事件叙述器的 proposed 提案写成既有世界事实；若采用新设定，按新事实候选处理。
+首次回答无论直接成稿还是请求素材，都请给出 creative_intent。需要素材时先返回一至八项 material_requests，不同时写 prose；取材可组合多类。素材库最初为空是正常状态，不构成跳过取材的理由。若首次直接成稿，material_skip_reason 必须具体指出哪种阅读效果会因取材受损。收到候选后按真实 candidate_id 在 material_decisions 记录采用、改写或舍弃的理由，再由你调整素材顺序并补写必要叙述；候选未采用不构成缺戏。不要把有意误导或事件叙述器的 proposed 提案写成既有世界事实；若采用新设定，按新事实候选处理。
 
 既有对象变化项使用 {"target_ref":"Allowed Existing Refs 中的精确字符串","summary":"变化","evidence":"正文证据","operation":"update","attributes":{}}。
 character_changes、canon_candidates、continuity_changes、promise_updates、reader_question_updates 的 target_ref 只能逐字选自 Allowed Existing Refs，禁止自造同义 ID。

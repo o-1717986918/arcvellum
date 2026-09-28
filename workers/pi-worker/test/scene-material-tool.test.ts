@@ -9,6 +9,17 @@ const roots: string[] = [];
 afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
 
 describe("scene creator material permission", () => {
+	it("explains that an empty library needs a creator request", async () => {
+		const root = await mkdtemp(join(tmpdir(), "arcvellum-material-"));
+		roots.push(root);
+		await writeFile(join(root, "index.json"), JSON.stringify({
+			schema: "arcvellum/scene-material-library/v1", entries: [],
+		}));
+		const empty = JSON.parse(await readSceneMaterial(root));
+		expect(empty.status).toBe("empty_before_request");
+		expect(empty.message).toContain("material_requests");
+	});
+
 	it("lists metadata and reads only indexed candidates", async () => {
 		const root = await mkdtemp(join(tmpdir(), "arcvellum-material-"));
 		roots.push(root);

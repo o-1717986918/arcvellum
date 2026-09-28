@@ -274,7 +274,7 @@ class LeanKernelV2PiRuntimeTests(unittest.TestCase):
         self.assertIn("人物的欲望、回避和关系", create)
         self.assertIn("既有变化组的 target_ref 只能逐字选自 Allowed Existing Refs", revision)
         self.assertIn("保留有效的声音、日常细节、留白与突停", revision)
-        self.assertIn("需要新的自主回应、事件说明或构图时，主动调用", revision)
+        self.assertIn("需要新的自主回应、事件说明或构图时，以 material_requests 主动委托", revision)
         self.assertIn("新增精确数字默认不用", revision)
         self.assertIn("不要求五项同时成立", revision)
         self.assertIn("修订可以删减、重排、拓展心理和环境", revision)

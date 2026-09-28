@@ -76,7 +76,7 @@ def _check_material_request(
         raise ValueError("material request needs a known beat and a concise scene cue")
     if len(purpose) > 300 or len(scene_moment) > 200 or len(speaker) > 120:
         raise ValueError("material request literary purpose, moment, or target is too long")
-    if "target" in item and (not purpose or not scene_moment):
+    if not purpose or not scene_moment:
         raise ValueError("material request needs a literary purpose and scene moment")
     if not _valid_material_role(kind, speaker, scene_change, participants):
         raise ValueError("material request speaker is outside its role")
