@@ -99,7 +99,7 @@ function parseOptions(args: string[]): RunnerOptions {
 	const mode = single(values, "--mode") || "task";
 	if (!isWorkerMode(mode)) throw new Error(`unsupported worker mode: ${mode}`);
 	const conversationRole = single(values, "--conversation-role") || "default";
-	if (!["default", "character-actor", "environment-writer", "character-describer", "object-describer", "scene-describer"].includes(conversationRole)) {
+	if (!["default", "character-actor", "environment-writer", "character-describer", "event-narrator", "scene-describer", "scene-creator"].includes(conversationRole)) {
 		throw new Error(`unsupported conversation role: ${conversationRole}`);
 	}
 	if (mode !== "conversation" && conversationRole !== "default") {

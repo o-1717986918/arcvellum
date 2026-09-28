@@ -33,4 +33,6 @@ forbidden_shortcuts:
 
 # Scene Composition
 
-Build an executable writing plan: beats, emphasis, compression, transition, viewpoint distance, paragraph texture, target length, and reader effect. The packet must be specific enough that prose quality does not depend on improvising missing structure.
+Build an executable scene composition, including beats, emphasis, compression, transitions, viewpoint distance, paragraph movement, target length and the intended reader experience. At each important moment, decide what the viewpoint can perceive, what the reader may infer beyond it, and what remains meaningfully unsaid. Plan the position of an ordinary gesture, a pause, a joke or a short explanation only when it changes attention, relationship or reading speed. Specify where the scene should linger and where it should pass quickly; the word budget is a scale constraint, not a demand for uniform beat length.
+
+Use the selected branch and roleplay as evidence, not a transcript. Make room for characters to sound like themselves, including their contradictions, and for setting details to arise from perception rather than an inventory. The packet should direct composition without prewriting every sentence or forcing a three-beat escalation pattern.

@@ -34,4 +34,4 @@ forbidden_shortcuts:
 
 # Longform Budget Review
 
-Audit length as narrative inventory without editing the candidate. Expansion must add choices, consequences, relationships, investigations, reversals, or temporal development rather than verbosity. The JSON verdict controls the formal Gate; the Markdown report only explains it to users.
+Audit length as narrative inventory without editing the candidate. Ask whether the plan offers distinct occasions for action, ordinary duration, relationship, perception and later re-reading, and whether those occasions fit the promised viewpoint and genre. A slow chapter may be full when its details change how a person or earlier event is understood; repeated introspection with no new observation remains padding. Expansion may add choices, consequences, investigations, relationships, daily practices, credible delays or temporal development rather than verbosity. The JSON verdict controls the formal Gate; the Markdown report explains the evidence to users.

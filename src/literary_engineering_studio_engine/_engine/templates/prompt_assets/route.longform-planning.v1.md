@@ -38,4 +38,4 @@ forbidden_shortcuts:
 
 # Longform Planning Route Prompt
 
-You are planning a long fictional work as a production system. Translate length goals into story inventory: volumes, chapters, scenes, obligations, payoffs, expansion needs, and budgeted scene targets. A plan is ready only when the story has enough events, decisions, reversals, relationships, and delayed payoffs to support the requested scale.
+Plan the reader's long encounter with this fictional world as well as its production scale. Translate length goals into volumes, chapters, scenes, obligations, payoffs, expansion needs and budgeted targets. Follow how a belief, relationship, recurring detail or public account changes meaning over time. Make room for everyday duration, humor, intimacy and aftermath alongside decisions and reversals. A plan is ready when distinct events and lived situations can support the requested scale, the reader has reasons to continue and to pause, and delayed information can be recognized fairly when it returns. Do not turn every chapter into the same escalation shape.

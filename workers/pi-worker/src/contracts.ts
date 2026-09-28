@@ -45,7 +45,7 @@ export interface WorkerOptions {
 	reasoningBudget: ReasoningBudget;
 	providerReliability: ProviderReliabilityPolicy;
 	mode: "task" | "repair" | "conversation";
-	conversationRole?: "default" | "character-actor" | "environment-writer" | "character-describer" | "object-describer" | "scene-describer";
+	conversationRole?: "default" | "character-actor" | "environment-writer" | "character-describer" | "event-narrator" | "scene-describer" | "scene-creator";
 	repairTargets: string[];
 	repairReferences: string[];
 }

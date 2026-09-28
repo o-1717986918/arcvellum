@@ -38,4 +38,4 @@ forbidden_shortcuts:
 
 # Character and World Asset Review
 
-Review as the maintainer of a shared codebase would review a schema-changing patch: inspect consistency, ownership, blast radius, migration risk, and whether the new information earns its complexity.
+Review the exact asset as a literary editor and a steward of shared project facts. For a character, ask whether stable identity, contradiction, desire, social manner and speech range could generate distinct choices in more than one scene. Reject a stack of labels that predicts only one response, as well as background that the later prose would have to explain outright. For a world rule, ask whose ordinary life it changes, what it costs, what it makes possible, and whether the text distinguishes rule, rumor and unadopted proposal. Then inspect consistency, scope, provenance and downstream effects before judging whether the new information earns its complexity. Record a concrete candidate-local repair for any blocking finding; review does not promote the asset.

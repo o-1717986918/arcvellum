@@ -20,8 +20,12 @@ _FLOW = (
     )),
     ("scene", "04 · 场景创作", (
         ("scene.entry", "入场、事实与主创意图"),
-        ("scene.rehearsal", "角色与环境取材"),
-        ("scene.description", "人物、事物与场面观察"),
+        ("scene.actor", "角色推演器"),
+        ("scene.environment", "环境描写 agent"),
+        ("scene.character", "人物描写器"),
+        ("scene.event", "事件叙述器：场外与设定"),
+        ("scene.frame", "场面描写器"),
+        ("scene.observation", "描写器共用合同"),
         ("scene.selection", "候选取舍与构图"),
         ("scene.prose", "正文成稿"),
         ("scene.review", "文学审读"),
@@ -49,7 +53,7 @@ _STAGE_ORDER = {stage_id: index for index, (stage_id, _) in enumerate(
 )}
 _SCENE_ASSET_STAGES = (
     ((".branch.selection.", ".composition.execute."), "scene.selection"),
-    ((".roleplay.", ".branch.execute."), "scene.rehearsal"),
+    ((".roleplay.", ".branch.execute."), "scene.actor"),
     ((".prose.generate.",), "scene.prose"),
     ((".agent-review.", ".canon-review.", ".composition.review."), "scene.review"),
     ((".revision.",), "scene.revision"),
@@ -92,7 +96,7 @@ def stage_for_prompt(row: dict[str, Any]) -> str:
     if layer_id.startswith(("advisor.", "steward.")):
         return "direction.advice"
     if layer_id.startswith("pi.conversation."):
-        return "scene.rehearsal"
+        return "scene.actor"
     if layer_id.startswith("pi.worker."):
         return "execution.contract"
     if layer_id.startswith("scene."):
@@ -114,10 +118,18 @@ def stage_for_prompt(row: dict[str, Any]) -> str:
 
 
 def _scene_stage(layer_id: str) -> str:
+    if layer_id.startswith("scene.describer.character"):
+        return "scene.character"
+    if layer_id.startswith("scene.describer.event"):
+        return "scene.event"
+    if layer_id.startswith("scene.describer.scene"):
+        return "scene.frame"
     if layer_id.startswith(("scene.describer.", "scene.description.")):
-        return "scene.description"
-    if layer_id.startswith(("scene.actor.", "scene.environment.", "scene.performance.")):
-        return "scene.rehearsal"
+        return "scene.observation"
+    if layer_id.startswith(("scene.actor.", "scene.performance.")):
+        return "scene.actor"
+    if layer_id.startswith("scene.environment."):
+        return "scene.environment"
     if layer_id.startswith("scene.review.") or layer_id == "scene.review" or layer_id.startswith("scene.ownership."):
         return "scene.review"
     if layer_id.startswith(("scene.creator.revise", "scene.creator.revision-request")):

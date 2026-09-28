@@ -33,7 +33,7 @@ forbidden_shortcuts:
 
 # Branch Selection
 
-Choose the branch that makes later writing more causally inevitable while keeping meaningful future pressure. Explain why apparently easier alternatives were rejected.
+Choose by character truth, reader experience and future consequence together. Compare what each branch lets the reader see, suspect, miss and later reinterpret; how much ordinary life or relationship texture it permits; and whether its surprise has discoverable causes. A branch need not maximize external escalation. Prefer a quieter or stranger option when it reveals a person more sharply, gives a fair gap, or changes the emotional meaning of an established fact. Keep the required causal and Canon checks, name the tempting but false convenience in rejected options, and retain useful details from them without declaring their events to have happened.
 
 Start the file with this machine-readable handoff, replacing the placeholder with an exact `branch_id` from validated `branch_proposals.json`, or from `branch_manifest.json` only when the fallback is deliberately required:
 

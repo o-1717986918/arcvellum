@@ -13,6 +13,11 @@ test("prompt workbench fits desktop and mobile viewports", async ({ page }) => {
   await expect(page.locator(".prompt-workbench .prompt-workbench-columns textarea")).toHaveCount(2);
   await page.screenshot({ path: path.join(captures, "prompt-workbench-desktop.png"), fullPage: true });
   await assertNoHorizontalOverflow(page);
+  await page.locator(".prompt-tree-stage").filter({ hasText: "事件叙述器：场外与设定" }).click();
+  await page.locator(".prompt-tree-leaf").filter({ hasText: "scene.describer.event" }).first().click();
+  await expect(page.locator(".prompt-detail-heading")).toContainText("场外事件与世界说明叙述");
+  await expect(page.locator(".prompt-workbench-columns textarea").first()).toHaveValue(/事件叙述器/);
+  await page.screenshot({ path: path.join(captures, "prompt-workbench-event-narrator.png"), fullPage: true });
   await page.locator(".prompt-tree-leaf").filter({ hasText: "scene.protocol" }).click();
   await expect(page.locator(".prompt-fixed-template pre")).toContainText("只有主创写正式正文");
   await page.screenshot({ path: path.join(captures, "prompt-workbench-fixed-template.png"), fullPage: true });

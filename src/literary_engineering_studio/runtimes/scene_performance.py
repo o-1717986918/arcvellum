@@ -58,7 +58,7 @@ def fulfill_scene_material_requests(
         request_id = _request_id(request_batch_id, index)
         if request_id and request_id in state.get("fulfilled_requests", []):
             continue
-        if request["kind"] in {"character-description", "object-description", "scene-description"}:
+        if request["kind"] in {"character-description", "event-narration", "scene-description"}:
             if invoke_role_turn is None:
                 raise RuntimeError("initialized describer continuation is unavailable")
             candidates = continue_scene_describer(
@@ -164,7 +164,7 @@ def _plan_for_requests(
 ) -> dict[str, Any]:
     path = cache_root / f"performance-plan-{digest}.json"
     requests = payload.get("material_requests")
-    description_kinds = {"character-description", "object-description", "scene-description"}
+    description_kinds = {"character-description", "event-narration", "scene-description"}
     if not path.is_file() and isinstance(requests, list) and requests and all(
         isinstance(item, dict) and item.get("kind") in description_kinds for item in requests
     ):

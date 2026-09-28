@@ -38,7 +38,7 @@ forbidden_shortcuts:
 
 # Scene Inventory Expansion
 
-Expand the story's causal surface, not its sentence count. Every added scene must change knowledge, choice, relationship, risk, obligation, or payoff timing.
+Expand the story's lived and causal surface, not its sentence count. Each scene needs a distinct reader-facing purpose: it may alter knowledge, choice, relationship, risk, obligation or payoff timing; it may also let the reader dwell in a routine, recognize a character's particular way of living, notice a contradiction, or prepare a later re-reading. State the effect concretely in the required columns. A quiet scene earns its place through a chosen detail, pressure beneath the ordinary, or a changed relation to what the reader already knows. Avoid manufacturing conflict or a revelation merely to justify its row.
 
 ## Required Machine-Readable Inventory Shape
 

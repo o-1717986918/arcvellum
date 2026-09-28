@@ -15,8 +15,8 @@ from tests.test_lean_kernel_v2_pi_runtime import _brief
 from tests.test_scene_interaction import _fixture
 
 
-_INTENT = {"reader_experience": "先让旧杯子显得平常，稍后才使它成为关系裂缝的线索",
-           "reader_misreads": "读者暂信杯子只是破损", "withheld": "谁转动了杯沿"}
+_INTENT = {"reader_experience": "先让取信一事显得平常，稍后才使它成为关系裂缝的线索",
+           "reader_misreads": "读者暂信取信只是误会", "withheld": "谁先发现了空抽屉"}
 
 
 class _IntentGateway:
@@ -31,22 +31,43 @@ class _IntentGateway:
             answer = {"decision": "pass", "summary": "有线索的短场成立", "evidence": [], "revision_instructions": []}
         elif self.request and len([item for item in self.calls if item[0] == "worker"]) == 1:
             answer = {"creative_intent": _INTENT, "material_requests": [{
-                "kind": "object-description", "target": "旧杯子", "purpose": "让日常物件先安抚读者再留下可回看线索",
-                "scene_moment": "晚饭后递杯时", "cue": "杯沿的缺口朝内",
+                "kind": "event-narration", "target": "昨夜取信", "purpose": "让读者重新理解今日的沉默",
+                "scene_moment": "承认取信之前", "cue": "已确认信在昨夜被取走",
             }]}
         else:
-            answer = {"creative_intent": _INTENT, "prose": "他把杯子推了过去，缺口仍朝着自己。",
-                      "decision_summary": "以日常动作留下疑问。", "scene_delta": {},
+            answer = {"creative_intent": _INTENT, "prose": "她把信推了过去，眼睛仍盯着空抽屉。",
+                      "decision_summary": "以日常动作留下疑问。", "material_skip_reason": "现有日常动作已经承载留白，额外取材会让这个短场解释过度。", "scene_delta": {},
                       "material_decisions": [{"candidate_id": "d1:1", "decision": "adapt", "reason": "保留缺口，删去解释"}]}
         return RoleConversationResult("pi-worker", "fake", "test/model", json.dumps(answer, ensure_ascii=False))
 
     def run_role_turn(self, workspace, *, role, initialization, history, prompt, timeout, event_sink=None):
         self.role_turns.append((role, len(history)))
-        answer = {"candidates": [{"text": "杯沿有一道旧缺口，握久了仍会碰疼手指。", "focus": "习惯里的细小阻力"}]}
+        candidate = {"text": "昨夜信被取走时，抽屉尚未上锁；今晨妹妹才发现空处。", "focus": "把已发生的事延迟交给读者"}
+        if role == "event-narrator":
+            candidate.update({"basis": "confirmed", "source_note": "场景已确认来源：昨夜取信"})
+        answer = {"candidates": [candidate]}
         return RoleConversationResult("pi-worker", "desc", "test/model", json.dumps(answer, ensure_ascii=False))
 
 
 class CreatorIntentFlowTests(unittest.TestCase):
+    def test_enabled_materials_require_a_reason_for_first_direct_draft(self):
+        class UnreasonedGateway(_IntentGateway):
+            def run(self, workspace, prompt, *, role, timeout, event_sink=None, cancel_event=None):
+                result = super().run(workspace, prompt, role=role, timeout=timeout,
+                                     event_sink=event_sink, cancel_event=cancel_event)
+                payload = json.loads(result.answer)
+                payload.pop("material_skip_reason", None)
+                return RoleConversationResult(result.runtime, result.run_id, result.model,
+                                              json.dumps(payload, ensure_ascii=False))
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            runtime = PiSceneTransactionRuntime({"application": {"scene_performance_agents": {"enabled": True}}},
+                                                project_root=root, data_root=root / ".studio",
+                                                gateway=UnreasonedGateway(request=False))
+            with self.assertRaisesRegex(ValueError, "material_skip_reason"):
+                runtime.create_scene("tx-unreasoned", _brief())
+
     def test_creator_prompt_versions_stay_fixed_through_review(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -77,8 +98,8 @@ class CreatorIntentFlowTests(unittest.TestCase):
                 if role == "worker" and not any(item[0] == "worker" for item in self.calls):
                     self.calls.append((role, prompt))
                     answer = {"creative_intent": _INTENT, "material_requests": [
-                        {"kind": "object-description", "target": "旧杯子", "purpose": "留下可回看线索",
-                         "scene_moment": "递杯时", "cue": "缺口朝内"},
+                        {"kind": "event-narration", "target": "昨夜取信", "purpose": "留下可回看线索",
+                         "scene_moment": "承认之前", "cue": "信昨夜被取走"},
                         {"kind": "scene-description", "target": "饭桌", "purpose": "让距离可见",
                          "scene_moment": "递杯之后", "cue": "两人沉默"},
                     ]}
@@ -106,9 +127,9 @@ class CreatorIntentFlowTests(unittest.TestCase):
                 memory_path = root / ".studio/scene-transactions/tx-resume/scene_creator_memory.json"
                 self.assertEqual(json.loads(memory_path.read_text(encoding="utf-8"))["phase"], "requesting-material")
                 result = runtime.create_scene("tx-resume", _brief())
-            self.assertIn("杯子", result.prose)
+            self.assertIn("信", result.prose)
             self.assertEqual([role for role, _ in gateway.calls].count("worker"), 2)
-            self.assertEqual([role for role, _ in gateway.role_turns].count("object-describer"), 1)
+            self.assertEqual([role for role, _ in gateway.role_turns].count("event-narrator"), 1)
             self.assertEqual([role for role, _ in gateway.role_turns].count("scene-describer"), 2)
             memory = json.loads(memory_path.read_text(encoding="utf-8"))
             self.assertIsNone(memory["pending_request"])
@@ -126,6 +147,7 @@ class CreatorIntentFlowTests(unittest.TestCase):
             self.assertLess(len(result.prose), _brief().length.soft_min)
             memory = json.loads((root / ".studio/scene-transactions/tx-direct/scene_creator_memory.json").read_text(encoding="utf-8"))
             self.assertEqual(memory["intent"]["reader_experience"], _INTENT["reader_experience"])
+            self.assertIn("解释过度", memory["material_skip_reason"])
             self.assertEqual([role for role, _ in gateway.calls], ["worker"])
 
     def test_requested_describer_candidate_reaches_creator_and_review(self):
@@ -138,9 +160,13 @@ class CreatorIntentFlowTests(unittest.TestCase):
             with patch("literary_engineering_studio.runtimes.scene_performance._generate_performance_plan", return_value=plan) as planner:
                 result = runtime.create_scene("tx-object", _brief())
             planner.assert_not_called()
-            self.assertEqual(gateway.role_turns, [("object-describer", 0)])
-            self.assertIn("杯沿有一道旧缺口", gateway.calls[1][1])
+            self.assertEqual(gateway.role_turns, [("event-narrator", 0)])
+            self.assertNotIn("昨夜信被取走时，抽屉尚未上锁", gateway.calls[1][1])
             self.assertIn("d1:1", gateway.calls[1][1])
+            library = root / ".studio/scene-transactions/tx-object/materials"
+            index = json.loads((library / "index.json").read_text(encoding="utf-8"))
+            item = next(row for row in index["entries"] if row["candidate_id"] == "d1:1")
+            self.assertIn("昨夜信被取走时", (library / item["file"]).read_text(encoding="utf-8"))
             memory = json.loads((root / ".studio/scene-transactions/tx-object/scene_creator_memory.json").read_text(encoding="utf-8"))
             self.assertEqual(memory["candidate_ids"], ["d1:1"])
             self.assertEqual(memory["material_decisions"][0]["decision"], "adapt")

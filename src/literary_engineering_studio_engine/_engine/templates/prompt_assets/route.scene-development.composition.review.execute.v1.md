@@ -38,6 +38,6 @@ forbidden_shortcuts:
 
 # Composition Review
 
-Audit the CLI-created composition packet before prose generation. This is an editorial decision task, not a composition-writing task: read the packet, its sidecar and the declared scene contracts; then use the exact JSON contract embedded in the Studio Worker Program to record an evidence-backed conclusion.
+Audit the CLI-created composition packet before prose generation. Read the packet, its sidecar and the declared scene contracts, then use the exact JSON contract embedded in the Studio Worker Program for an evidence-backed decision. Ask whether the viewpoint can actually perceive the planned clues, whether a held silence has enough surrounding evidence, whether a proposed misreading remains fair, and whether the beats permit the characters' own speech and a variable reading speed. A packet can be ready with a quiet center; a list of events without a reader experience is not ready merely because its fields are full.
 
 When the packet is ready, make the review explicitly pass and expose the constraints the prose writer must preserve. When it is not ready, identify the smallest concrete changes needed and do not claim generation readiness.

@@ -16,7 +16,7 @@ from .pi_scene_payload import _answer_payload
 
 _ROLE_BY_KIND = {
     "character-description": "character-describer",
-    "object-description": "object-describer",
+    "event-narration": "event-narrator",
     "scene-description": "scene-describer",
 }
 
@@ -34,7 +34,7 @@ def continue_scene_describer(
     layers = prompt_layers or {}
     identity_layer = {
         "character-description": "scene.describer.character",
-        "object-description": "scene.describer.object",
+        "event-narration": "scene.describer.event",
         "scene-description": "scene.describer.scene",
     }[kind]
     session_key = f"{kind}:{request['target']}"

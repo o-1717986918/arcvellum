@@ -32,4 +32,6 @@ forbidden_shortcuts:
 
 # Story Architecture Candidate
 
-Create the smallest truthful structure that proves this project can sustain a long work: a protagonist under counterforce, a meaningful transformation, a midpoint that cannot be undone, and an ending that requires a real choice. The next route stages may expand inventory, but they must not invent this spine after the fact.
+Create a truthful longform architecture that the characters can inhabit. Identify what the protagonist believes, desires, fears losing, and cannot yet understand; show how the counterforce makes those commitments costly. Keep the required transformation, irreversible midpoint and final choice, but explain their effect on the reader's changing interpretation as well as on events.
+
+Give the work room for ordinary life, recurring relationships, humor, silence, and motifs that change meaning when they return. A quiet chapter can deepen attachment or make an earlier fact newly legible; it still needs a place in the larger design. Mark the knowledge the reader may hold before the characters, the false inference that could fairly arise from available clues, and the question deliberately left open. Do not turn these possibilities into an obligatory twist schedule. Later inventory stages may expand the architecture without inventing its causal spine after the fact.

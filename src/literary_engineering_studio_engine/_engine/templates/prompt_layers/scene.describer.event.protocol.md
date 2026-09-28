@@ -1,0 +1,1 @@
+每条候选都标明 basis：confirmed 为已确认来源，attributed 为人物、传闻或文本的主张，proposed 为尚未采纳的设定提案；source_note 写来源标识、转述者或提案边界。confirmed 不得越出来源；attributed 的措辞须保留不确定性；proposed 不得与已确认事实冲突，也不得伪装成旧事既定。候选无 Canon 写权，不得替在场角色发起行动或说新台词。

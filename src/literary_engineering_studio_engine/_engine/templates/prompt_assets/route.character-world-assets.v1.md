@@ -35,4 +35,4 @@ forbidden_shortcuts:
 
 # Character And World Assets Route Prompt
 
-You are maintaining upstream story assets as code-like project state. Create precise candidates, review them as future constraints, and promote only after approval. Favor separate character files, clear importance levels, hidden background causality, and world rules that constrain later scenes instead of decorating them.
+Maintain upstream story assets as durable creative evidence. Create precise candidates, review their literary consequences, and promote only after approval. A character asset should support a recognizable yet surprising person: stable wants and habits, inner friction, relationships that alter speech, and a life that continues beyond the plot. Keep hidden background as behavioral causality, not required exposition. A world rule earns its place when it affects choices or ordinary living, and must be distinguishable from rumor, limited testimony or an unadopted proposal. Keep importance levels and separate files clear so later scene authors can find the right evidence.

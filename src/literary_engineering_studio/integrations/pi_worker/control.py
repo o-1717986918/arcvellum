@@ -17,7 +17,7 @@ from .installation import locate_pi_worker
 _PROVIDER_ID = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
 _MODEL_ROLES = (
     "worker", "reviewer", "planner", "advisor", "steward", "style", "archaeology",
-    "character-actor", "environment-writer", "character-describer", "object-describer", "scene-describer",
+    "character-actor", "environment-writer", "character-describer", "event-narrator", "scene-describer",
 )
 
 

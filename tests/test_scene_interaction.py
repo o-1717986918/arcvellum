@@ -21,6 +21,14 @@ from literary_engineering_studio_engine.literary.scene.roleplay.relay_context im
 from tests.test_lean_kernel_v2_pi_runtime import _Gateway, _brief
 
 
+def _creator_prompt(prompt: str) -> str:
+    try:
+        payload = json.loads(prompt)
+    except json.JSONDecodeError:
+        return prompt
+    return str(payload.get("prompt") or prompt) if isinstance(payload, dict) else prompt
+
+
 def _fixture(participants: list[str]):
     brief = {**_brief().to_dict(), "participants": participants, "viewpoint": participants[0]}
     plan = {
@@ -70,7 +78,8 @@ class SceneInteractionTests(unittest.TestCase):
         actor_calls = []
 
         def role_turn(role, initialization, history, prompt):
-            return json.dumps({"candidates": [{"text": "信封边缘磨白了。", "focus": "磨损"}]}, ensure_ascii=False), ""
+            return json.dumps({"candidates": [{"text": "昨夜取信的传闻在清晨传遍了巷子。", "focus": "场外事件的传播",
+                "basis": "attributed", "source_note": "街坊传闻，尚未核实"}]}, ensure_ascii=False), ""
 
         def actor_turn(initialization, initialization_answer, history, prompt):
             actor_calls.append(initialization)
@@ -87,8 +96,8 @@ class SceneInteractionTests(unittest.TestCase):
             with patch("literary_engineering_studio.runtimes.scene_performance._generate_performance_plan", return_value=plan) as planner:
                 first = fulfill_scene_material_requests(
                     brief=brief, expression=expression, sources="", style_reference="",
-                    payload={"material_requests": [{"kind": "object-description", "target": "信封",
-                        "purpose": "留下使用痕迹", "scene_moment": "按住信时", "cue": "边缘磨白"}]},
+                    payload={"material_requests": [{"kind": "event-narration", "target": "昨夜取信",
+                        "purpose": "延后交代已发生事件", "scene_moment": "按住信时", "cue": "信昨夜被取走"}]},
                     cache_root=root, config=config, invoke=lambda prompt, role: "",
                     invoke_actor_turn=actor_turn, invoke_role_turn=role_turn, request_batch_id="describer",
                 )
@@ -101,8 +110,8 @@ class SceneInteractionTests(unittest.TestCase):
                     invoke_actor_turn=actor_turn, invoke_role_turn=role_turn, request_batch_id="actor",
                 )
             self.assertEqual(planner.call_count, 1)
-        self.assertIn("信封边缘磨白了", first)
-        self.assertIn("信封边缘磨白了", second)
+        self.assertIn("昨夜取信的传闻", first)
+        self.assertIn("昨夜取信的传闻", second)
         self.assertIn("信留在这里", second)
         self.assertEqual(len(actor_calls), 1)
         self.assertIn("【PERSONA_LOAD】", actor_calls[0])
@@ -205,8 +214,8 @@ class SceneInteractionTests(unittest.TestCase):
             "entry_id": "t1:1", "speaker": "character/solo", "beat_id": "b1",
             "spoken": "信是我的。", "first_person_action": "我压住信封。", "private_impulse": "我害怕。",
         }], None, viewpoint=brief["viewpoint"])
-        self.assertIn("挑出真正服务本场文学意图的回合", block)
-        self.assertIn("避免逐条把 spoken 与 first_person_action 排成引号加说话动作的清单", block)
+        self.assertIn("只读素材文件目录", block)
+        self.assertIn("按作者意图比较候选", block)
         self.assertIn('"entry_id":"t1:1"', block)
 
     def test_author_handoff_keeps_new_events_once_and_omits_repetitive_notes(self):
@@ -221,7 +230,7 @@ class SceneInteractionTests(unittest.TestCase):
         self.assertIn('"director_turns"', block)
         self.assertNotIn("重复的导演解释", block)
         self.assertEqual(block.count("重复场景说明" * 60), 1)
-        self.assertIn("scene_change 是外部情势候选", block)
+        self.assertIn("scene-context 保存节拍", block)
 
     def test_author_handoff_retains_distinct_external_changes_in_order(self):
         _, plan = _fixture(["character/a", "character/b"])
@@ -230,7 +239,7 @@ class SceneInteractionTests(unittest.TestCase):
             {"turn": 2, "next_speaker": "character/b", "beat_id": "b1", "scene_change": "门被风吹开", "entry_ids": ["t2:1"]},
         ]
         block = render_interaction_materials(plan, turns, [], None)
-        packet = json.loads(block.split("\n", 1)[1])
+        packet = json.loads(block.rsplit("\n", 1)[1])
         self.assertEqual([turn["scene_change"] for turn in packet["director_turns"]],
                          ["窗外传来敲门声", "门被风吹开"])
 
@@ -273,7 +282,7 @@ class SceneInteractionTests(unittest.TestCase):
                 self.environment_turns = []
 
             def run(self, workspace, prompt, *, role, timeout, event_sink=None, cancel_event=None):
-                if prompt.startswith("# Scene Create"):
+                if _creator_prompt(prompt).startswith("# Scene Create"):
                     self.create_count += 1
                     if self.create_count == 1:
                         self.calls.append((role, prompt))
@@ -326,21 +335,24 @@ class SceneInteractionTests(unittest.TestCase):
                 project_root=root, data_root=root / ".studio", gateway=gateway,
             )
             result = runtime.create_scene("tx-interaction", _brief())
-            creator_prompts = [prompt for role, prompt in gateway.calls
-                               if role == "worker" and "## Character And Environment Candidate Materials" in prompt]
+            creator_prompts = [_creator_prompt(prompt) for role, prompt in gateway.calls
+                               if role == "worker" and "## Read-Only Scene Material File Index" in prompt]
             self.assertEqual(len(gateway.actor_turns), 2)
             self.assertEqual(len(creator_prompts), 1)
             self.assertEqual(len(gateway.environment_turns), 1)
             self.assertTrue(gateway.environment_turns[0][1].startswith("【SCENE_LOAD】"))
             self.assertTrue(gateway.environment_turns[0][3].startswith("# Independent Environment Writing"))
-            self.assertIn("你把信拿走了？", creator_prompts[0])
-            self.assertIn("是我拿的，先听我说完。", creator_prompts[0])
-            self.assertIn('"director_turns"', creator_prompts[0])
-            self.assertIn('"environment_candidates"', creator_prompts[0])
+            self.assertNotIn("你把信拿走了？", creator_prompts[0])
+            self.assertNotIn("是我拿的，先听我说完。", creator_prompts[0])
+            self.assertNotIn('"director_turns"', creator_prompts[0])
+            self.assertNotIn('"environment_candidates"', creator_prompts[0])
+            self.assertIn("scene-context", creator_prompts[0])
             self.assertNotIn('"actor_prompts"', creator_prompts[0])
             self.assertNotIn('"environment_initialization"', creator_prompts[0])
             self.assertIn("希望读者怎样经历这一场", creator_prompts[0])
-            self.assertIn("让人物、视角心理、环境与对白随本场意图交织", creator_prompts[0])
+            self.assertIn("优先按需调取一级素材", creator_prompts[0])
+            material_index = json.loads((root / ".studio/scene-transactions/tx-interaction/materials/index.json").read_text(encoding="utf-8"))
+            self.assertTrue(any(item["kind"] == "actor" for item in material_index["entries"]))
             self.assertTrue(all("[LANGUAGE_STYLE]\nANTI_PLAIN\nPOLISHED\nANTI_SHORT_SENTENCES" in call[1]
                                 for call in gateway.actor_turns))
             self.assertTrue(all("[LITERATURE_STYLE]" in call[1] and "【角色沉浸要求】" in call[1]
@@ -373,8 +385,8 @@ class SceneInteractionTests(unittest.TestCase):
                         {"scene_id": "scene_0001", "passages": passages}, ensure_ascii=False))
                 if prompt.startswith("# Scene Interaction Direction"):
                     raise AssertionError("the retired automatic interaction path was invoked")
-                if prompt.startswith("# Scene Create"):
-                    self.create_prompts.append(prompt)
+                if _creator_prompt(prompt).startswith("# Scene Create"):
+                    self.create_prompts.append(_creator_prompt(prompt))
                     if len(self.create_prompts) == 1:
                         answer = {"material_requests": [
                             {"kind": "actor", "speaker": "character/solo", "beat_id": "b1", "cue": "看见对方仍在等回答"},
@@ -418,8 +430,9 @@ class SceneInteractionTests(unittest.TestCase):
             self.assertIn("雨光漫到信封", result.prose)
             self.assertEqual(gateway.actor_histories, [0])
             self.assertEqual(len(gateway.create_prompts), 2)
-            self.assertIn("信给我。", gateway.create_prompts[1])
-            self.assertIn("窗上的雨光慢慢漫到信封背面", gateway.create_prompts[1])
+            self.assertNotIn("信给我。", gateway.create_prompts[1])
+            self.assertNotIn("窗上的雨光慢慢漫到信封背面", gateway.create_prompts[1])
+            self.assertIn("scene-context", gateway.create_prompts[1])
             self.assertEqual(len(gateway.environment_prompts), 1)
             self.assertTrue(all(item["initialization"].startswith("【SCENE_LOAD】")
                                 for item in gateway.environment_prompts))
@@ -474,8 +487,8 @@ class SceneInteractionTests(unittest.TestCase):
                 self.revision_prompts = []
 
             def run(self, workspace, prompt, *, role, timeout, event_sink=None, cancel_event=None):
-                if prompt.startswith("# Scene Revision"):
-                    self.revision_prompts.append(prompt)
+                if _creator_prompt(prompt).startswith("# Scene Revision"):
+                    self.revision_prompts.append(_creator_prompt(prompt))
                     answer = ({"material_requests": [{"kind": "actor", "speaker": "character/protagonist",
                                                      "cue": "再回应妹妹一次"}]}
                               if len(self.revision_prompts) == 1 else
@@ -505,7 +518,7 @@ class SceneInteractionTests(unittest.TestCase):
                 revised = runtime.revise_scene("tx-revision-request", brief, candidate,
                                                VerificationReport(brief.scene_id, len(candidate.prose)), None, attempt=1)
             self.assertEqual(fulfill.call_count, 1)
-            self.assertIn("我会把信交给你", gateway.revision_prompts[1])
+            self.assertNotIn("我会把信交给你", gateway.revision_prompts[1])
             self.assertIn("我会把信交给你", revised.prose)
 
     def test_retry_reuses_requested_materials_without_replaying_preparation(self):

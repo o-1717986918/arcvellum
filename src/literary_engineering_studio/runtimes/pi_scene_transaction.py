@@ -35,8 +35,9 @@ from .scene_performance import (
     fulfill_scene_material_requests, scene_creative_cache_digest,
     scene_expression_snapshot,
 )
-from .scene_performance_ownership import author_handoff_materials, compact_performance_materials, has_actor_entries
+from .scene_performance_ownership import has_actor_entries
 from .scene_creator_memory import SceneCreatorMemoryV1
+from .scene_material_library import SceneMaterialLibrary
 from ..runtime.prompt_recipes import lean_scene_prompt_recipe
 from .scene_source_evidence import scene_source_evidence
 from .pi_scene_review_prompt import render_scene_review_prompt
@@ -120,10 +121,10 @@ class PiSceneTransactionRuntime:
             transaction_id, brief, expression, initial_sources, style_reference, materials_cache, materials,
             lambda current, intent, context: render_scene_create_prompt(
                 brief, source_evidence=self._source_evidence(
-                    brief, purpose="create", reserve_chars=len(author_handoff_materials(current)) + len(author_style) + len(context)),
+                    brief, purpose="create", reserve_chars=len(current) + len(author_style) + len(context)),
                 allowed_refs=known_scene_refs(brief), style_reference_block=author_style,
                 expression_context_block=expression_context,
-                performance_material_block=author_handoff_materials(current),
+                performance_material_block=current,
                 allow_material_requests=_scene_performance_enabled(self._config),
                 creative_intent_block=intent, creator_memory_block=context,
                 literary_guidance="\n\n".join(prompt_layers["texts"][key] for key in
@@ -161,12 +162,12 @@ class PiSceneTransactionRuntime:
             return review_result_from_payload(cached)
         revision_attempts = len(tuple(cache.parent.glob(f"revision_result_*_{projection_digest}_*.json")))
         expression_context = _expression_context_for_prompt(expression, review=True, actor_owned=has_actor_entries(materials))
-        compact_materials = compact_performance_materials(materials)
+        material_index = self._material_prompt(transaction_id, materials)
         empty_sources = "无额外资料。"
         base_prompt = render_scene_review_prompt(
             brief, result, verification, source_evidence=empty_sources,
             revision_attempts=revision_attempts, expression_context_block=expression_context,
-            performance_material_block=compact_materials,
+            performance_material_block=material_index,
             creative_intent_block=memory.render_context(),
             literary_guidance=prompt_layers["texts"]["scene.review"],
         )
@@ -176,7 +177,7 @@ class PiSceneTransactionRuntime:
             brief, result, verification,
             source_evidence=self._source_evidence(brief, purpose="review", max_chars=source_budget),
             revision_attempts=revision_attempts, expression_context_block=expression_context,
-            performance_material_block=compact_materials,
+            performance_material_block=material_index,
             creative_intent_block=memory.render_context(),
             literary_guidance=prompt_layers["texts"]["scene.review"],
         )
@@ -232,7 +233,7 @@ class PiSceneTransactionRuntime:
                     brief, purpose="revise", reserve_chars=len(current) + len(author_style) + len(context)),
                 allowed_refs=known_scene_refs(brief), style_reference_block=author_style,
                 expression_context_block=expression_context,
-                performance_material_block=compact_performance_materials(current) if current else "",
+                performance_material_block=current,
                 allow_material_requests=_scene_performance_enabled(self._config),
                 creative_intent_block=intent, creator_memory_block=context,
                 literary_guidance="\n\n".join(prompt_layers["texts"][key] for key in
@@ -252,8 +253,13 @@ class PiSceneTransactionRuntime:
         for _ in range(16):
             if memory.pending_request is None:
                 intent = json.dumps(memory.intent.to_dict(), ensure_ascii=False) if memory.intent else ""
-                prompt = render_prompt(materials, intent, memory.render_context())
+                prompt = render_prompt(self._material_prompt(transaction_id, materials),
+                                       intent, memory.render_context())
                 payload = _answer_payload(self._run(prompt, role="worker", transaction_id=transaction_id))
+                if (_scene_performance_enabled(self._config) and memory.phase == "opening"
+                        and not payload.get("material_requests")
+                        and not 10 <= len(str(payload.get("material_skip_reason") or "").strip()) <= 300):
+                    raise ValueError("initial direct scene draft needs a specific literary material_skip_reason")
                 memory.record_creator(payload, brief, prompt=prompt)
                 memory.save(memory_path)
                 if memory.pending_request is None:
@@ -275,6 +281,7 @@ class PiSceneTransactionRuntime:
                 if self._event_sink is not None else None,
             )
             materials = updated
+            self._material_prompt(transaction_id, materials)
             _atomic_json(materials_cache, {"materials": materials})
             memory.record_materials(materials)
             memory.save(memory_path)
@@ -282,8 +289,24 @@ class PiSceneTransactionRuntime:
 
     def _run(self, prompt: str, *, role: str, transaction_id: str) -> str:
         self._provider_calls += 2 if role == "environment-writer" else 1
+        if role == "worker" and prompt.startswith(("# Scene Create", "# Scene Revision")):
+            prompt = json.dumps({
+                "schema": "arcvellum/scene-creator/v1",
+                "system_prompt": self._prompt_snapshot(transaction_id)["texts"]["scene.creator.identity"],
+                "material_root": str(self._cache_path(transaction_id, "materials")),
+                "prompt": prompt,
+            }, ensure_ascii=False)
         return invoke_role(self._gateway, self._project_root, self._timeout, self._event_sink,
                            transaction_id, prompt, role)
+
+    def _material_prompt(self, transaction_id: str, materials: str) -> str:
+        library = SceneMaterialLibrary(self._cache_path(transaction_id, "materials"))
+        if not materials:
+            library.write("")
+            return ""
+        index = library.write(materials)
+        guidance = self._prompt_snapshot(transaction_id)["texts"]["scene.material.selection"]
+        return guidance + "\n" + index
 
     def _run_actor_turn(
         self, initialization: str, initialization_answer: str,

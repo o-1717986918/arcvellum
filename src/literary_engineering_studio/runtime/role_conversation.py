@@ -14,6 +14,11 @@ from ..runtimes import build_runtime
 from .runtime_selection import runtime_for_role
 
 
+_INITIALIZED_ROLES = frozenset({
+    "character-actor", "environment-writer", "character-describer", "event-narrator", "scene-describer",
+})
+
+
 @dataclass(frozen=True)
 class RoleConversationResult:
     runtime: str
@@ -24,7 +29,7 @@ class RoleConversationResult:
 
 
 class RoleConversationGateway:
-    """Execute one bounded conversation without project tools or write access."""
+    """Run bounded literary roles; only the scene creator gets material-file reads."""
 
     def __init__(self, config: dict[str, Any], *, data_root: Path):
         self.config = config
@@ -81,7 +86,7 @@ class RoleConversationGateway:
         history: Sequence[tuple[str, str]], prompt: str, timeout: int,
         event_sink: Callable[[str, dict[str, Any]], None] | None = None,
     ) -> RoleConversationResult:
-        if role not in {"environment-writer", "character-describer", "object-describer", "scene-describer"}:
+        if role not in {"environment-writer", "character-describer", "event-narrator", "scene-describer"}:
             raise ValueError("unsupported initialized literary role")
         if not initialization.strip() or not prompt.strip() or len(history) > 16:
             raise ValueError("role turn needs initialization, prompt, and bounded history")
@@ -99,13 +104,7 @@ class RoleConversationGateway:
         event_sink: Callable[[str, dict[str, Any]], None] | None,
         cancel_event: threading.Event | None, turns: int,
     ) -> RoleConversationResult:
-        if role not in {"character-actor", "environment-writer", "character-describer",
-                        "object-describer", "scene-describer"}:
-            prompt = json.dumps({
-                "schema": "arcvellum/default-conversation/v1",
-                "system_prompt": prompt_layer_spec("pi.conversation.system").default_text,
-                "prompt": prompt,
-            }, ensure_ascii=False)
+        prompt, scene_creator = _conversation_prompt(role, prompt)
         runtime_id = runtime_for_role(self.config, role)
         if runtime_id != "pi-worker":
             raise RuntimeError(f"tool-free role conversation is unsupported by runtime: {runtime_id}")
@@ -127,15 +126,15 @@ class RoleConversationGateway:
             event_sink=observe,
             cancel_event=cancel_event,
             worker_mode="conversation",
-            conversation_role=(role if role in {"character-actor", "environment-writer", "character-describer", "object-describer", "scene-describer"} else "default"),
+            conversation_role=_conversation_role(role, scene_creator),
             reasoning_policy=str(settings.get("thinking") or "medium"),
             max_turns=turns,
-            max_tool_calls=1,
+            max_tool_calls=8 if scene_creator else 1,
             max_repairs=0,
         )
         worker_result = _worker_result(result.metadata)
         final_answer = str(worker_result.get("answer") or "").strip()
-        answer = final_answer if role in {"character-actor", "environment-writer", "character-describer", "object-describer", "scene-describer"} else "".join(pieces).strip() or final_answer
+        answer = final_answer if scene_creator or role in _INITIALIZED_ROLES else "".join(pieces).strip() or final_answer
         if result.status != "completed":
             raise RuntimeError(result.message or f"{role} conversation failed")
         if not answer:
@@ -147,6 +146,23 @@ class RoleConversationGateway:
             answer=answer,
             initialization_answer=str(worker_result.get("initializationAnswer") or ""),
         )
+
+
+def _conversation_prompt(role: str, prompt: str) -> tuple[str, bool]:
+    scene_creator = role == "worker" and _scene_creator_envelope(prompt)
+    if scene_creator or role in _INITIALIZED_ROLES:
+        return prompt, scene_creator
+    return json.dumps({
+        "schema": "arcvellum/default-conversation/v1",
+        "system_prompt": prompt_layer_spec("pi.conversation.system").default_text,
+        "prompt": prompt,
+    }, ensure_ascii=False), False
+
+
+def _conversation_role(role: str, scene_creator: bool) -> str:
+    if scene_creator:
+        return "scene-creator"
+    return role if role in _INITIALIZED_ROLES else "default"
 
 
 def _role_settings(config: dict[str, Any], role: str) -> tuple[dict[str, Any], str]:
@@ -183,4 +199,17 @@ def _environment_turn_count(prompt: str) -> int:
     if any(not isinstance(payload.get(key), str) or not payload[key].strip() for key in ("initialization", "prompt")):
         raise ValueError("environment conversation requires initialization and scene prompt")
     return 2
+
+
+def _scene_creator_envelope(prompt: str) -> bool:
+    try:
+        payload = json.loads(prompt)
+    except json.JSONDecodeError:
+        return False
+    if not isinstance(payload, dict) or payload.get("schema") != "arcvellum/scene-creator/v1":
+        return False
+    if any(not isinstance(payload.get(key), str) or not payload[key].strip()
+           for key in ("system_prompt", "material_root", "prompt")):
+        raise ValueError("scene creator envelope is incomplete")
+    return True
 __all__ = ["RoleConversationGateway", "RoleConversationResult"]

@@ -30,7 +30,7 @@
 ## Candidate
 [[ARCVELLUM_PROMPT_6]]
 
-## Original First-Level Character And Environment Materials
+## Scene Material File Index (metadata only)
 [[ARCVELLUM_PROMPT_7]]
 
 ## Relevant Sources

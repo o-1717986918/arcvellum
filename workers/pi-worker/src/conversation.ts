@@ -8,6 +8,7 @@ import { WorkerEventAdapter } from "./event-adapter.ts";
 import { reasoningThinkingBudgets, safeThinkingLevel } from "./reasoning-budget.ts";
 import { classifyProviderFailure, providerStreamControls } from "./provider-reliability.ts";
 import defaultConversationProfile from "../profiles/conversation-system.md?raw";
+import { createSceneMaterialTool } from "./scene-material-tool.ts";
 
 export interface ConversationResult {
 	status: "completed" | "blocked";
@@ -29,7 +30,7 @@ export interface ConversationResult {
 	providerFailureRetryable?: boolean;
 }
 
-/** Run one bounded, tool-free role conversation through the embedded Pi core. */
+/** Run a bounded role conversation; the scene creator alone may read its material library. */
 export async function runConversation(
 	options: WorkerOptions,
 	prompt: string,
@@ -44,9 +45,11 @@ export async function runConversation(
 	if (!auth) throw new Error(`Pi AI provider is not authenticated: ${provider}`);
 
 	const actorConversation = options.conversationRole === "character-actor";
+	const sceneCreator = options.conversationRole === "scene-creator" ? sceneCreatorEnvelope(prompt) : null;
 	const roleTurn = !actorConversation && options.conversationRole !== "default" ? roleTurnEnvelope(prompt) : null;
 	const actorTurn = actorConversation ? actorTurnEnvelope(prompt) : roleTurn;
-	const messages = actorTurn ? [] : conversationMessages(options.conversationRole ?? "default", prompt);
+	const messages = actorTurn ? [] : sceneCreator ? [sceneCreator.prompt]
+		: conversationMessages(options.conversationRole ?? "default", prompt);
 	const initializedEnvironment = options.conversationRole === "environment-writer" && messages.length === 2;
 	const state = emptyState();
 	const sessionId = `arcvellum-conversation-${createHash("sha256").update(prompt).digest("hex").slice(0, 20)}`;
@@ -62,14 +65,17 @@ export async function runConversation(
 	const effectiveThinking = safeThinkingLevel(model, options.thinking);
 	const defaultEnvelope = options.conversationRole === "default" || !options.conversationRole
 		? defaultConversationEnvelope(prompt) : null;
-	const systemPrompt = actorTurn?.initialization ?? defaultEnvelope?.systemPrompt
+	const systemPrompt = sceneCreator?.systemPrompt ?? actorTurn?.initialization ?? defaultEnvelope?.systemPrompt
 		?? conversationSystemPrompt(options.conversationRole ?? "default");
 	const agent = new Agent({
 		initialState: {
 			systemPrompt,
 			model,
 			thinkingLevel: effectiveThinking,
-			tools: [],
+			tools: sceneCreator ? [createSceneMaterialTool(sceneCreator.materialRoot, () => {
+				state.toolCalls += 1;
+				if (state.toolCalls > 8) throw new Error("scene material read limit reached");
+			})] : [],
 			...(actorTurn?.history.length ? { messages: actorHistoryMessages(actorTurn, model) } : {}),
 		},
 		streamFn: (streamModel, streamContext, streamOptions = {}) => models.streamSimple(
@@ -80,7 +86,7 @@ export async function runConversation(
 		sessionId,
 		thinkingBudgets: reasoningThinkingBudgets(options.reasoningBudget)
 			?? { minimal: 128, low: 512, medium: 1024, high: 2048 },
-		shouldStopAfterTurn: () => true,
+		shouldStopAfterTurn: ({ toolResults }) => !sceneCreator || toolResults.length === 0,
 		onPayload: (payload) => {
 			eventAdapter.providerRequest(provider, modelId);
 			return payload;
@@ -119,7 +125,7 @@ export async function runConversation(
 		provider,
 		model: modelId,
 		turns: state.turns,
-		toolCalls: 0,
+		toolCalls: state.toolCalls,
 		providerRequests: state.providerRequests,
 		reasoningCharacters: state.reasoningCharacters,
 		textCharacters: state.textCharacters,
@@ -149,6 +155,18 @@ export function actorTurnEnvelope(prompt: string): ActorTurnEnvelope | null {
 
 export function roleTurnEnvelope(prompt: string): ActorTurnEnvelope | null {
 	return parsedTurnEnvelope(prompt, "arcvellum/role-conversation/v1");
+}
+
+export function sceneCreatorEnvelope(prompt: string): { systemPrompt: string; materialRoot: string; prompt: string } {
+	let value: unknown;
+	try { value = JSON.parse(prompt); } catch { throw new Error("scene creator requires a conversation envelope"); }
+	if (!isRecord(value) || value.schema !== "arcvellum/scene-creator/v1"
+		|| typeof value.system_prompt !== "string" || !value.system_prompt.trim()
+		|| typeof value.material_root !== "string" || !value.material_root.trim()
+		|| typeof value.prompt !== "string" || !value.prompt.trim()) {
+		throw new Error("scene creator envelope needs identity, material root, and current prompt");
+	}
+	return { systemPrompt: value.system_prompt, materialRoot: value.material_root, prompt: value.prompt };
 }
 
 function parsedTurnEnvelope(prompt: string, schema: string): ActorTurnEnvelope | null {
@@ -187,7 +205,7 @@ export function actorHistoryMessages(turn: ActorTurnEnvelope, model: { api: any;
 }
 
 export function conversationSystemPrompt(role: NonNullable<WorkerOptions["conversationRole"]>): string {
-	if (role === "character-actor" || role === "environment-writer" || role === "character-describer" || role === "object-describer" || role === "scene-describer") {
+	if (role === "character-actor" || role === "environment-writer" || role === "character-describer" || role === "event-narrator" || role === "scene-describer" || role === "scene-creator") {
 		return "";
 	}
 	return defaultConversationProfile.trim();

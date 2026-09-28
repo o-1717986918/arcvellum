@@ -25,7 +25,7 @@ def render_scene_create_prompt(
 ) -> str:
     recipe = lean_scene_prompt_recipe("create")
     reference_contract = _reference_contract(brief, allowed_refs)
-    material_section = _material_section(performance_material_block, "Character And Environment Candidate Materials")
+    material_section = _material_section(performance_material_block, "Read-Only Scene Material File Index")
     material_final_pass, material_length_priority = _create_material_guidance(bool(performance_material_block))
     request_guidance = _create_request_guidance(allow_material_requests, performance_material_block)
     literary_guidance = _creator_literary_guidance("scene.creator.create", literary_guidance)
@@ -71,7 +71,7 @@ def render_scene_revision_prompt(
     recipe = lean_scene_prompt_recipe("revise")
     instructions = list(review.revision_instructions) if review is not None else []
     reference_contract = _reference_contract(brief, allowed_refs)
-    material_section = _material_section(performance_material_block, "Original First-Level Character And Environment Materials")
+    material_section = _material_section(performance_material_block, "Read-Only Scene Material File Index")
     request_guidance = _revision_request_guidance(allow_material_requests, performance_material_block)
     literary_guidance = _creator_literary_guidance("scene.creator.revise", literary_guidance)
     prompt = render_prompt_template("scene.creator.revise.protocol", (

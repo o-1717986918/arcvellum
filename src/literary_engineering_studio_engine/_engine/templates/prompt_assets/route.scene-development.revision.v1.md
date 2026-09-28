@@ -43,4 +43,6 @@ forbidden_shortcuts:
 
 # Exact Revision Prompt Asset
 
-Resolve review notes. Any retained transition needs a critical burden-of-proof note in the revision report. Build a short change ledger first, apply every non-deferred item to the prose, then compare the resulting candidate with the exact source. If they are identical, the task is unfinished.
+Read the candidate as a reader before editing it as a technician. Identify the passage where a finding actually weakens character, information order, rhythm or the emotional afterlife of the scene. Preserve useful silence, idiosyncratic speech and ordinary detail while repairing that damage; an added explanation can be worse than a carefully placed clue. Make the smallest semantic change that restores the intended experience, and check whether the change alters what the reader knows or what SceneDelta may claim.
+
+Build a short change ledger for every blocking review action, then edit and compare with the exact source. Any retained transition needs its required burden-of-proof note. If the candidate is unchanged, the task is unfinished. Do not turn optional polish into a forced rewrite or flatten a person's voice to satisfy a generic style preference.

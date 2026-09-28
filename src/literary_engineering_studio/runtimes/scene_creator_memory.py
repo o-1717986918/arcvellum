@@ -18,6 +18,7 @@ class SceneCreatorMemoryV1:
     intent_source: str = ""
     candidate_ids: list[str] = field(default_factory=list)
     material_decisions: list[dict[str, str]] = field(default_factory=list)
+    material_skip_reason: str = ""
     unresolved_questions: list[str] = field(default_factory=list)
     public_stage: list[dict[str, str]] = field(default_factory=list)
     phase: str = "opening"
@@ -46,6 +47,7 @@ class SceneCreatorMemoryV1:
             intent_source=str(payload.get("intent_source") or ""),
             candidate_ids=_texts(payload.get("candidate_ids"), limit=80, size=80),
             material_decisions=_decisions(payload.get("material_decisions")),
+            material_skip_reason=str(payload.get("material_skip_reason") or "")[:300],
             unresolved_questions=_texts(payload.get("unresolved_questions"), limit=8, size=240),
             public_stage=_public_stage(payload.get("public_stage")),
             phase=str(payload.get("phase") or "opening")[:40],
@@ -66,6 +68,7 @@ class SceneCreatorMemoryV1:
             "intent_source": self.intent_source,
             "candidate_ids": self.candidate_ids[-80:],
             "material_decisions": self.material_decisions[-40:],
+            "material_skip_reason": self.material_skip_reason,
             "unresolved_questions": self.unresolved_questions[-8:],
             "public_stage": self.public_stage[-16:],
             "phase": self.phase, "prompt_digest": self.prompt_digest,
@@ -76,6 +79,8 @@ class SceneCreatorMemoryV1:
         context = self.to_dict()
         context.pop("schema")
         context.pop("scene_id")
+        # Rehearsal speech and description remain in read-only material files.
+        context.pop("public_stage")
         return json.dumps(context, ensure_ascii=False, separators=(",", ":"))[:5_000]
 
     def digest(self) -> str:
@@ -93,6 +98,8 @@ class SceneCreatorMemoryV1:
             self.intent = CreativeIntentV1.from_payload({"reader_experience": brief.scene_function or brief.objective})
             self.intent_source = "brief-compatibility"
         self.material_decisions = [*self.material_decisions, *_decisions(payload.get("material_decisions"))][-40:]
+        if payload.get("material_skip_reason"):
+            self.material_skip_reason = str(payload["material_skip_reason"]).strip()[:300]
         if "unresolved_questions" in payload:
             self.unresolved_questions = _texts(payload["unresolved_questions"], limit=8, size=240)
         self.phase = "requesting-material" if payload.get("material_requests") else "drafted"
@@ -101,7 +108,7 @@ class SceneCreatorMemoryV1:
 
     def record_materials(self, materials: str) -> None:
         try:
-            packet = json.loads(materials.split("\n", 1)[1])
+            packet = json.loads(materials.rsplit("\n", 1)[1])
         except (IndexError, json.JSONDecodeError):
             return
         if not isinstance(packet, dict):

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { actorHistoryMessages, actorTurnEnvelope, conversationMessages, conversationSystemPrompt, roleTurnEnvelope } from "../src/conversation.ts";
+import { actorHistoryMessages, actorTurnEnvelope, conversationMessages, conversationSystemPrompt, roleTurnEnvelope, sceneCreatorEnvelope } from "../src/conversation.ts";
 
 describe("bounded scene performance profiles", () => {
 	it("gives the character actor no competing system prompt", () => {
@@ -38,13 +38,20 @@ describe("bounded scene performance profiles", () => {
 	});
 
 	it("initializes each describer with bounded scene history and no competing system prompt", () => {
-		for (const role of ["character-describer", "object-describer", "scene-describer"] as const) {
+		for (const role of ["character-describer", "event-narrator", "scene-describer"] as const) {
 			expect(conversationSystemPrompt(role)).toBe("");
 			const envelope = JSON.stringify({ schema: "arcvellum/role-conversation/v1",
 				initialization: "观察方式", initialization_answer: "",
 				history: [{ prompt: "第一轮", answer: "候选" }], prompt: "第二轮" });
 			expect(roleTurnEnvelope(envelope)?.history).toEqual([{ prompt: "第一轮", answer: "候选" }]);
 		}
+	});
+
+	it("gives the creator its author identity as a system prompt and a material library", () => {
+		const payload = JSON.stringify({ schema: "arcvellum/scene-creator/v1", system_prompt: "作者意图",
+			material_root: "C:\\scene-materials", prompt: "本场任务" });
+		expect(sceneCreatorEnvelope(payload)).toEqual({ systemPrompt: "作者意图", materialRoot: "C:\\scene-materials", prompt: "本场任务" });
+		expect(() => sceneCreatorEnvelope("本场任务")).toThrow("conversation envelope");
 	});
 
 	it("retains the legacy conversation identity for other roles", () => {

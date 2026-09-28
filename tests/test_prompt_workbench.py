@@ -79,6 +79,9 @@ class PromptWorkbenchTests(unittest.TestCase):
             self.assertEqual(reset.status_code, 200)
             self.assertEqual(reset.json()["effective"]["source"], "package")
             catalog_ids = {layer["layer_id"] for layer in catalog.json()["layers"]}
+            self.assertIn("formal.asset.route.longform-planning.reader-experience.v1", catalog_ids)
+            self.assertIn("scene.describer.event", catalog_ids)
+            self.assertNotIn("scene.describer.object", catalog_ids)
             leaves = {leaf["layer_id"] for group in catalog.json()["flow_tree"]
                       for stage in group["children"] for leaf in stage["children"]}
             self.assertEqual(catalog_ids, leaves)

@@ -8,7 +8,7 @@
 | `scene.review` | 独立审读、留白与阅读损害判断 | 文学层可编辑；证据、冲突、输出合同及返修收敛片段固定 |
 | `scene.performance.plan`、`scene.material.selection` | 主创按需取角色或描写素材 | 文学层可编辑；请求与候选合同固定 |
 | `scene.actor.identity/turn` | 作品人设支持的人格初始化和续演 | 人格文学指引可编辑；作品人物档案仍由档案模块维护，私念与言行权限固定 |
-| `scene.environment.*`、`scene.describer.*`、`scene.description.turn` | 环境、人物、事物与场面候选 | 身份与逐轮文学层可编辑；候选无正式写权，结构协议固定 |
+| `scene.environment.*`、`scene.describer.character/event/scene`、`scene.description.turn` | 环境、人物、场外事件与设定、场面候选 | 各 agent 的身份和逐轮文学层可编辑；初始化作为 system prompt，候选无正式写权，结构协议固定；事件候选标注来源状态 |
 | `advisor.identity`、五个 `advisor.persona.*`、`project_agent.creative_direction`、`steward.identity` | 顾问、内置人格、项目总编、自动决策顾问 | 文学职责和内置人格可按作品／全局编辑；自定义人格仍由 Advisor 资产保存；工具、事实与 JSON 权限固定 |
 | `formal.asset.*` | 48 个可进入模型的正式任务提示资产正文 | 可按作品／全局编辑 body；原 PromptAsset ID、route、输出合同与硬约束不可编辑；v2/v3 编译消费有效正文 |
 | `formal.prompt_program.v3`、`formal.semantic.*`、`formal.prepared-context.*`、`formal.context-access.*`、`formal.prose.*`、`formal.repair.*`、`formal.completion.*` | 正式任务组装、语义合同、上下文、正文预算、返修和完成条件 | 固定只读协议资源；动态任务事实由 Studio 投影填入 |

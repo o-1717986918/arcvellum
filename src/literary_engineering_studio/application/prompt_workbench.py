@@ -103,7 +103,7 @@ def _formal_layer_id(asset: Any) -> str:
 def _formal_assets() -> tuple[Any, ...]:
     return tuple(asset for asset in list_prompt_assets()
                  if str(asset.metadata.get("task_type") or "").startswith(
-                     ("formal-", "main-platform-agent-", "platform-agent-")))
+                     ("formal-", "main-agent-", "main-platform-agent-", "platform-agent-")))
 
 
 def _spec(layer_id: str) -> PromptLayerSpec:
@@ -139,7 +139,7 @@ _ASSEMBLY_TARGETS = {
     "scene.environment.turn": ("scene.environment.turn.protocol", 8),
     "scene.description.turn": ("scene.describer.turn.protocol", 1),
     "scene.describer.character": ("scene.describer.initialization.protocol", 1),
-    "scene.describer.object": ("scene.describer.initialization.protocol", 1),
+    "scene.describer.event": ("scene.describer.initialization.protocol", 1),
     "scene.describer.scene": ("scene.describer.initialization.protocol", 1),
     "advisor.identity": ("advisor.conversation.protocol", 11),
     "project_agent.creative_direction": ("project_agent.system.write.protocol", 2),

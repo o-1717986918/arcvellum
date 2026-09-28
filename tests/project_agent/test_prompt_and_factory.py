@@ -31,7 +31,7 @@ class ProjectAgentPromptAndFactoryTests(unittest.TestCase):
         self.assertIn("优先检查结构。", prompt)
         self.assertIn("记录方向时区分三层", prompt)
         self.assertIn("用户要求高自由度时", prompt)
-        self.assertIn("不主动把这些口味写进高优先级创作方向", prompt)
+        self.assertIn("不擅自把这些口味写成高优先级方向", prompt)
         self.assertIn("不能写成长篇高优先级方向替主创定稿", prompt)
         self.assertIn("当前作品会话优先使用 catalog 的 current_work_id", prompt)
         self.assertIn("三到五个能共同塑造此人说话和互动的核心项", prompt)

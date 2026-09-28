@@ -12,7 +12,7 @@ from .relay_context import validated_public_log
 
 
 MATERIAL_KINDS = frozenset({
-    "actor", "environment", "character-description", "object-description", "scene-description",
+    "actor", "environment", "character-description", "event-narration", "scene-description",
 })
 
 
@@ -85,7 +85,7 @@ def _check_material_request(
 def _valid_material_role(kind: str, speaker: str, scene_change: str, participants: set[str]) -> bool:
     if kind in {"actor", "character-description"}:
         return speaker in participants
-    if kind == "object-description":
+    if kind == "event-narration":
         return bool(speaker) and not scene_change
     return not scene_change and (kind != "environment" or not speaker)
 

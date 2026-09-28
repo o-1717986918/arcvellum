@@ -8,11 +8,11 @@ from typing import Any
 from literary_engineering_studio_engine.prompting.layers import prompt_layer_spec, render_prompt_template
 
 
-DESCRIBER_KINDS = frozenset({"character-description", "object-description", "scene-description"})
+DESCRIBER_KINDS = frozenset({"character-description", "event-narration", "scene-description"})
 
 _KIND_LAYER = {
     "character-description": "scene.describer.character",
-    "object-description": "scene.describer.object",
+    "event-narration": "scene.describer.event",
     "scene-description": "scene.describer.scene",
 }
 
@@ -57,13 +57,28 @@ def parse_describer_candidates(payload: dict[str, Any], kind: str) -> list[dict[
         raise ValueError("describer must return zero to three candidates")
     result = []
     for item in candidates:
-        if not isinstance(item, dict):
-            raise ValueError("describer candidate must be an object")
-        text = str(item.get("text") or "").strip()
-        focus = str(item.get("focus") or "").strip()
-        if not 5 <= len(text) <= 700 or not focus or len(focus) > 160:
-            raise ValueError("describer candidate needs bounded text and focus")
-        result.append({"text": text, "focus": focus})
+        result.append(_parse_describer_candidate(item, kind))
     if not result and not str(payload.get("no_material_reason") or "").strip():
         raise ValueError("empty describer response needs a reason")
     return result
+
+
+def _parse_describer_candidate(item: Any, kind: str) -> dict[str, str]:
+    if not isinstance(item, dict):
+        raise ValueError("describer candidate must be an object")
+    text = str(item.get("text") or "").strip()
+    focus = str(item.get("focus") or "").strip()
+    if not 5 <= len(text) <= 700 or not focus or len(focus) > 160:
+        raise ValueError("describer candidate needs bounded text and focus")
+    candidate = {"text": text, "focus": focus}
+    if kind == "event-narration":
+        candidate.update(_event_basis(item))
+    return candidate
+
+
+def _event_basis(item: dict[str, Any]) -> dict[str, str]:
+    basis = str(item.get("basis") or "").strip()
+    source_note = str(item.get("source_note") or "").strip()
+    if basis not in {"confirmed", "attributed", "proposed"} or not source_note or len(source_note) > 240:
+        raise ValueError("event narration needs confirmed, attributed, or proposed basis and source note")
+    return {"basis": basis, "source_note": source_note}

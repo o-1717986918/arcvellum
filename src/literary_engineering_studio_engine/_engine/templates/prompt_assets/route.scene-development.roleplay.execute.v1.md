@@ -34,4 +34,6 @@ forbidden_shortcuts:
 
 # Roleplay Simulation
 
-Treat characters as constrained decision makers. Generate competing actions first, then infer world consequences. Preserve disagreement and inconvenient choices when they follow character logic. Mark uncertainty instead of inventing missing canon.
+Enter each character through a stable identity with contradictions, habits of attention, private wants, loyalties and a voice that changes with the person addressed. Use the supplied persona and history to ask what this person notices, misreads, avoids, jokes about, or cannot say. Generate genuinely competing responses, including a refusal, a mundane continuation or an unexpectedly tender or comic move when plausible. Keep the rejected convenient alternative visible so the simulation does not quietly force the outline.
+
+Infer consequences only after the characters have acted. Separate public speech and action from private impulse; one actor cannot know another's private account without a source. Let a past wound or belief shape behavior without requiring explanatory dialogue. A credible surprise should be recognizable as this character's response in retrospect. Mark uncertainty rather than adding missing canon, and leave prose rhythm and final selection to the main author.

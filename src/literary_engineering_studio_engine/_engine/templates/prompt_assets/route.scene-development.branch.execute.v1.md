@@ -39,4 +39,4 @@ forbidden_shortcuts:
 
 # Branch Simulation
 
-Explore causally distinct futures. A branch is valid when it changes a choice, cost, relationship, revealed fact, or future obligation.
+Explore causally distinct futures that a character could actually bring about. For each required branch, trace the person's motive and mistaken or partial knowledge into a choice, then the visible consequence and next-scene cost. Distinguish the reader's experience as carefully as the events: one branch may disclose, one may delay with a fair clue, one may let a relation change through ordinary conduct. Preserve the manifest's count and fields, including its cost and beat plan; a quiet branch still needs a concrete consequence rather than a cosmetic change. Do not preselect the most dramatic outcome before considering character truth.

@@ -13,10 +13,10 @@ import { useAppStore } from "@/stores/app";
 
 const store = useAppStore();
 const credential = reactive({ provider_id: "deepseek", credential: "" });
-type ModelRole = "worker" | "advisor" | "steward" | "character-actor" | "environment-writer" | "character-describer" | "object-describer" | "scene-describer";
-const selectedModels = reactive<Record<ModelRole, string>>({ worker: "", advisor: "", steward: "", "character-actor": "", "environment-writer": "", "character-describer": "", "object-describer": "", "scene-describer": "" });
-const roleSaving = reactive<Record<ModelRole, boolean>>({ worker: false, advisor: false, steward: false, "character-actor": false, "environment-writer": false, "character-describer": false, "object-describer": false, "scene-describer": false });
-const roleSaved = reactive<Record<ModelRole, boolean>>({ worker: false, advisor: false, steward: false, "character-actor": false, "environment-writer": false, "character-describer": false, "object-describer": false, "scene-describer": false });
+type ModelRole = "worker" | "advisor" | "steward" | "character-actor" | "environment-writer" | "character-describer" | "event-narrator" | "scene-describer";
+const selectedModels = reactive<Record<ModelRole, string>>({ worker: "", advisor: "", steward: "", "character-actor": "", "environment-writer": "", "character-describer": "", "event-narrator": "", "scene-describer": "" });
+const roleSaving = reactive<Record<ModelRole, boolean>>({ worker: false, advisor: false, steward: false, "character-actor": false, "environment-writer": false, "character-describer": false, "event-narrator": false, "scene-describer": false });
+const roleSaved = reactive<Record<ModelRole, boolean>>({ worker: false, advisor: false, steward: false, "character-actor": false, "environment-writer": false, "character-describer": false, "event-narrator": false, "scene-describer": false });
 const performance = reactive<ScenePerformancePreferences>({ enabled: false, max_actor_calls: 12 });
 const performanceConfirmed = reactive<ScenePerformancePreferences>({ enabled: false, max_actor_calls: 12 });
 const performanceSaving = ref(false);
@@ -169,7 +169,7 @@ async function connectProvider(): Promise<void> {
 async function saveModel(role: ModelRole): Promise<void> {
   const expectedModel = selectedModels[role];
   if (!expectedModel || roleSaving[role]) return;
-  const labels = { worker: "正文与审查", advisor: "项目 Agent", steward: "项目监督", "character-actor": "角色表演", "environment-writer": "环境描写", "character-describer": "人物描写", "object-describer": "事物描写", "scene-describer": "场面描写" };
+  const labels = { worker: "正文与审查", advisor: "项目 Agent", steward: "项目监督", "character-actor": "角色表演", "environment-writer": "环境描写", "character-describer": "人物描写", "event-narrator": "事件叙述", "scene-describer": "场面描写" };
   roleSaving[role] = true;
   roleSaved[role] = false;
   feedback.value = "";
@@ -335,7 +335,7 @@ function pathValue(key: string): string {
             { id: 'character-actor', title: '角色表演', text: '按场景任务单扮演人物，提供候选对白和动作。' },
             { id: 'environment-writer', title: '环境描写', text: '按视角与文风创作可选的场景描写。' },
             { id: 'character-describer', title: '人物描写', text: '观察人物可见细节，提供可选素材。' },
-            { id: 'object-describer', title: '事物描写', text: '观察物的质地与使用痕迹。' },
+            { id: 'event-narrator', title: '事件叙述', text: '转写已确认的场外事件、设定和世界背景。' },
             { id: 'scene-describer', title: '场面描写', text: '为已发生言行安排空间构图。' },
           ] as const)" :key="role.id">
             <div><strong>{{ role.title }}</strong><p>{{ role.text }}</p></div>
