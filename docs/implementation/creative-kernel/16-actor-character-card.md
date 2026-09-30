@@ -63,6 +63,9 @@ v2 pending_request 批次预算为 160000 字符，以保存完整角色卡并�
 
 - 68 项角色卡、v2 委托、提示词注册、公开接口、主创意图及旧场景执行测试通过。
 - 102 项沙盒、预检、Worker 执行与恢复、正式状态写回、作品初始化和项目 adapter 测试通过。
+- 顶层 Project Agent 73 项测试通过；Pi Worker 编译及 121 项测试通过。
 - compileall、architecture_audit、prompt-registry-validate、generate_module_map --check 和 diff --check 通过；未修改架构 baseline。
 - 独立设计台脚本语法检查通过，20 个提示词位与 Engine 注册表相符；春日步示例卡经公开合同解析并完整填充系统模板。
 - 未运行真实模型文学效果对照。浏览器对本地页面访问的限制使设计台视觉检查未完成；无替代访问绕过。
+
+合同与模板提交：45dd7d3；顶层人格初始化提交：e0bc0eb。主创运行 adapter 独立提交，用户已有规划模块修改未纳入以上提交。

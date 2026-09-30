@@ -28,7 +28,7 @@ class SceneCreatorMemoryV1:
     SCHEMA = "arcvellum/scene-creator-memory/v1"
 
     @classmethod
-    def load(cls, path: Path, scene_id: str) -> SceneCreatorMemoryV1:
+    def load(cls, path: Path, scene_id: str, *, request_limit_chars: int = 8_000) -> SceneCreatorMemoryV1:
         if not path.is_file():
             return cls(scene_id)
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -52,7 +52,7 @@ class SceneCreatorMemoryV1:
             public_stage=_public_stage(payload.get("public_stage")),
             phase=str(payload.get("phase") or "opening")[:40],
             prompt_digest=str(payload.get("prompt_digest") or "")[:64],
-            pending_request=_pending_request(payload.get("pending_request")),
+            pending_request=_pending_request(payload.get("pending_request"), limit_chars=request_limit_chars),
         )
 
     def save(self, path: Path) -> None:
@@ -86,7 +86,8 @@ class SceneCreatorMemoryV1:
     def digest(self) -> str:
         return hashlib.sha256(self.render_context().encode("utf-8")).hexdigest()[:12]
 
-    def record_creator(self, payload: dict[str, Any], brief: SceneBrief, *, prompt: str) -> None:
+    def record_creator(self, payload: dict[str, Any], brief: SceneBrief, *, prompt: str,
+                       request_limit_chars: int = 8_000) -> None:
         proposed = payload.get("creative_intent")
         if proposed is not None:
             revised = CreativeIntentV1.from_payload(proposed, prior=self.intent)
@@ -104,7 +105,8 @@ class SceneCreatorMemoryV1:
             self.unresolved_questions = _texts(payload["unresolved_questions"], limit=8, size=240)
         self.phase = "requesting-material" if payload.get("material_requests") else "drafted"
         self.prompt_digest = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
-        self.pending_request = _pending_request(payload) if payload.get("material_requests") else None
+        self.pending_request = (_pending_request(payload, limit_chars=request_limit_chars)
+                                if payload.get("material_requests") else None)
 
     def record_materials(self, materials: str) -> None:
         try:
@@ -164,13 +166,13 @@ def _material_ids(packet: dict[str, Any]) -> list[str]:
     return [identifier for identifier in ids if identifier]
 
 
-def _pending_request(value: object) -> dict[str, Any] | None:
+def _pending_request(value: object, *, limit_chars: int = 8_000) -> dict[str, Any] | None:
     if not isinstance(value, dict) or not isinstance(value.get("material_requests"), list):
         return None
     requests = value["material_requests"]
     if not requests or len(requests) > 8:
         raise ValueError("scene material request batch must contain one to eight requests")
     encoded = json.dumps(requests, ensure_ascii=False)
-    if len(encoded) > 8_000:
+    if len(encoded) > limit_chars:
         raise ValueError("scene material request batch exceeds memory limit")
     return {"material_requests": requests}

@@ -9,18 +9,11 @@ from pathlib import Path
 import re
 from typing import Any, Callable
 
-from literary_engineering_studio_engine.public.prompting import (
-    list_prompt_layer_specs, prompt_assembly_manifest, resolve_prompt_layer,
-)
+from literary_engineering_studio_engine.public.prompting import list_prompt_layer_specs, prompt_assembly_manifest, resolve_prompt_layer
 from literary_engineering_studio_engine.public.literary import (
-    CreativeResult,
-    ReviewResult,
-    SceneBrief,
-    VerificationReport,
-    select_active_style_references,
-    recent_formal_reference_ids,
-    active_style_mount_snapshot_payload,
-    active_style_prompt_text,
+    CreativeResult, ReviewResult, SceneBrief, VerificationReport,
+    select_active_style_references, recent_formal_reference_ids,
+    active_style_mount_snapshot_payload, active_style_prompt_text,
     render_style_reference_selection,
 )
 from ..runtime.role_conversation import RoleConversationGateway
@@ -37,6 +30,7 @@ from .scene_performance import (
 from .scene_performance_ownership import has_actor_entries
 from .scene_creator_memory import SceneCreatorMemoryV1
 from .scene_creator_material_policy import repair_material_choice
+from .scene_creator_v2_transaction import SceneCreatorV2Mixin
 from .scene_material_library import SceneMaterialLibrary
 from ..runtime.prompt_recipes import lean_scene_prompt_recipe
 from .scene_source_evidence import scene_source_evidence
@@ -47,7 +41,7 @@ class PiSceneRuntimeMetrics:
     provider_calls: int
     cache_hits: int
 
-class PiSceneTransactionRuntime:
+class PiSceneTransactionRuntime(SceneCreatorV2Mixin):
     """Use the embedded Pi conversation transport behind K2 runtime ports."""
 
     def __init__(
@@ -79,6 +73,8 @@ class PiSceneTransactionRuntime:
         return PiSceneRuntimeMetrics(self._provider_calls, self._cache_hits)
 
     def create_scene(self, transaction_id: str, brief: SceneBrief) -> CreativeResult:
+        if self._uses_creator_v2(transaction_id):
+            return self._create_scene_v2(transaction_id, brief)
         prompt_layers = self._prompt_snapshot(transaction_id)
         selection = self._style_projection(brief, transaction_id)
         expression = self._expression_projection(brief, transaction_id)
@@ -141,6 +137,8 @@ class PiSceneTransactionRuntime:
         result: CreativeResult,
         verification: VerificationReport,
     ) -> ReviewResult:
+        if self._uses_creator_v2(transaction_id):
+            return self._review_scene_v2(transaction_id, brief, result, verification)
         prompt_layers = self._prompt_snapshot(transaction_id)
         selection = self._style_projection(brief, transaction_id)
         expression = self._expression_projection(brief, transaction_id)
@@ -204,6 +202,8 @@ class PiSceneTransactionRuntime:
         *,
         attempt: int,
     ) -> CreativeResult:
+        if self._uses_creator_v2(transaction_id):
+            return self._revise_scene_v2(transaction_id, brief, result, verification, review, attempt)
         prompt_layers = self._prompt_snapshot(transaction_id)
         selection = self._style_projection(brief, transaction_id)
         expression = self._expression_projection(brief, transaction_id)
@@ -338,7 +338,7 @@ class PiSceneTransactionRuntime:
     def _prompt_snapshot(self, transaction_id: str) -> dict[str, Any]:
         path = self._cache_path(transaction_id, "prompt_assembly_v1.json")
         scene_specs = tuple(spec for spec in list_prompt_layer_specs()
-                            if spec.layer_id.startswith("scene."))
+                            if spec.layer_id.startswith("scene.") and not spec.layer_id.startswith("scene.v2."))
         ids = tuple(spec.layer_id for spec in scene_specs)
         saved = _validated_prompt_assembly(path)
         if saved is not None and set(ids).issubset(saved["texts"]):

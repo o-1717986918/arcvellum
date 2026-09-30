@@ -129,7 +129,8 @@ class RoleConversationGateway:
             conversation_role=_conversation_role(role, scene_creator),
             reasoning_policy=str(settings.get("thinking") or "medium"),
             max_turns=turns,
-            max_tool_calls=8 if scene_creator else 1,
+            max_tool_calls=(64 if json.loads(prompt)["schema"] == "arcvellum/scene-creator/v2"
+                            else 8) if scene_creator else 1,
             max_repairs=0,
         )
         worker_result = _worker_result(result.metadata)
@@ -206,10 +207,14 @@ def _scene_creator_envelope(prompt: str) -> bool:
         payload = json.loads(prompt)
     except json.JSONDecodeError:
         return False
-    if not isinstance(payload, dict) or payload.get("schema") != "arcvellum/scene-creator/v1":
+    if not isinstance(payload, dict) or payload.get("schema") not in {
+        "arcvellum/scene-creator/v1", "arcvellum/scene-creator/v2",
+    }:
         return False
-    if any(not isinstance(payload.get(key), str) or not payload[key].strip()
-           for key in ("system_prompt", "material_root", "prompt")):
+    keys = ("system_prompt", "material_root", "prompt")
+    if payload["schema"] == "arcvellum/scene-creator/v2":
+        keys += ("archive_root", "scratch_root")
+    if any(not isinstance(payload.get(key), str) or not payload[key].strip() for key in keys):
         raise ValueError("scene creator envelope is incomplete")
     return True
 __all__ = ["RoleConversationGateway", "RoleConversationResult"]

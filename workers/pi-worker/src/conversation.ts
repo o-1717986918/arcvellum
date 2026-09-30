@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { isAbsolute } from "node:path";
 import { Agent } from "@earendil-works/pi-agent-core";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
@@ -9,6 +10,7 @@ import { reasoningThinkingBudgets, safeThinkingLevel } from "./reasoning-budget.
 import { classifyProviderFailure, providerStreamControls } from "./provider-reliability.ts";
 import defaultConversationProfile from "../profiles/conversation-system.md?raw";
 import { createSceneMaterialTool } from "./scene-material-tool.ts";
+import { createSceneArchiveTool, createSceneScratchTool } from "./scene-creator-workspace-tool.ts";
 
 export interface ConversationResult {
 	status: "completed" | "blocked";
@@ -45,7 +47,9 @@ export async function runConversation(
 	if (!auth) throw new Error(`Pi AI provider is not authenticated: ${provider}`);
 
 	const actorConversation = options.conversationRole === "character-actor";
-	const sceneCreator = options.conversationRole === "scene-creator" ? sceneCreatorEnvelope(prompt) : null;
+	const sceneCreatorV2 = options.conversationRole === "scene-creator" ? sceneCreatorV2Envelope(prompt) : null;
+	const sceneCreator = options.conversationRole === "scene-creator"
+		? sceneCreatorV2 ?? sceneCreatorEnvelope(prompt) : null;
 	const roleTurn = !actorConversation && options.conversationRole !== "default" ? roleTurnEnvelope(prompt) : null;
 	const actorTurn = actorConversation ? actorTurnEnvelope(prompt) : roleTurn;
 	const messages = actorTurn ? [] : sceneCreator ? [sceneCreator.prompt]
@@ -72,10 +76,22 @@ export async function runConversation(
 			systemPrompt,
 			model,
 			thinkingLevel: effectiveThinking,
-			tools: sceneCreator ? [createSceneMaterialTool(sceneCreator.materialRoot, () => {
-				state.toolCalls += 1;
-				if (state.toolCalls > 8) throw new Error("scene material read limit reached");
-			})] : [],
+			tools: sceneCreator ? [
+				createSceneMaterialTool(sceneCreator.materialRoot, () => {
+					state.toolCalls += 1;
+					if (state.toolCalls > (sceneCreatorV2 ? 64 : 8)) throw new Error("scene creator tool call limit reached");
+				}),
+				...(sceneCreatorV2 ? [
+					createSceneArchiveTool(sceneCreatorV2.archiveRoot, () => {
+						state.toolCalls += 1;
+						if (state.toolCalls > 64) throw new Error("scene creator tool call limit reached");
+					}),
+					createSceneScratchTool(sceneCreatorV2.scratchRoot, () => {
+						state.toolCalls += 1;
+						if (state.toolCalls > 64) throw new Error("scene creator tool call limit reached");
+					}),
+				] : []),
+			] : [],
 			...(actorTurn?.history.length ? { messages: actorHistoryMessages(actorTurn, model) } : {}),
 		},
 		streamFn: (streamModel, streamContext, streamOptions = {}) => models.streamSimple(
@@ -167,6 +183,23 @@ export function sceneCreatorEnvelope(prompt: string): { systemPrompt: string; ma
 		throw new Error("scene creator envelope needs identity, material root, and current prompt");
 	}
 	return { systemPrompt: value.system_prompt, materialRoot: value.material_root, prompt: value.prompt };
+}
+
+export function sceneCreatorV2Envelope(prompt: string): {
+	systemPrompt: string; materialRoot: string; archiveRoot: string; scratchRoot: string; prompt: string;
+} | null {
+	let value: unknown;
+	try { value = JSON.parse(prompt); } catch { return null; }
+	if (!isRecord(value) || value.schema !== "arcvellum/scene-creator/v2") return null;
+	if (typeof value.system_prompt !== "string" || !value.system_prompt.trim()
+		|| typeof value.material_root !== "string" || !isAbsolute(value.material_root)
+		|| typeof value.archive_root !== "string" || !isAbsolute(value.archive_root)
+		|| typeof value.scratch_root !== "string" || !isAbsolute(value.scratch_root)
+		|| typeof value.prompt !== "string" || !value.prompt.trim()) {
+		throw new Error("scene creator v2 envelope needs identity, archive, scratch, material root, and prompt");
+	}
+	return { systemPrompt: value.system_prompt, materialRoot: value.material_root,
+		archiveRoot: value.archive_root, scratchRoot: value.scratch_root, prompt: value.prompt };
 }
 
 function parsedTurnEnvelope(prompt: string, schema: string): ActorTurnEnvelope | null {

@@ -18,7 +18,7 @@
 | `src/literary_engineering_studio/automation` | 22 | Campaign control | `automation/controller.py` | application/runtime ports | Engine route implementations |
 | `src/literary_engineering_studio/orchestration` | 51 | Adaptive plan domain | `orchestration services` | Engine catalog and ports | API or task lifecycle |
 | `src/literary_engineering_studio/runtime` | 98 | Controlled execution | `runtime worker/bundle ports` | contracts and infrastructure ports | literary route policy |
-| `src/literary_engineering_studio/runtimes` | 25 | Agent adapters | `runtimes registry` | Runtime SPI and external SDKs | Engine route implementations |
+| `src/literary_engineering_studio/runtimes` | 27 | Agent adapters | `runtimes registry` | Runtime SPI and external SDKs | Engine route implementations |
 | `src/literary_engineering_studio/persistence` | 29 | Durable adapters | `repository facades` | SQLite and file storage | literary decisions |
 | `src/literary_engineering_studio/projections` | 36 | Studio read models | `projection services` | read ports and Engine facts | promotion/writeback |
 | `src/literary_engineering_studio/preflight` | 31 | Writeback validation | `task_preflight facade` | contracts and deterministic validators | Agent creativity |
@@ -26,7 +26,7 @@
 | `src/literary_engineering_studio/integrations` | 9 | External integrations | `integration-specific facades` | external SDKs and ports | literary policy |
 | `src/literary_engineering_studio/api` | 29 | HTTP/SSE adapters | `router factories` | application use cases | direct project mutation |
 | `src/literary_engineering_studio/advisor` | 11 | Read-only advisor | `advisor service` | read models and Runtime port | formal project writeback |
-| `workers/pi-worker/src` | 21 | Bounded Pi Worker | `main.ts / worker.ts` | Pi SDK and task contract | formal project access |
+| `workers/pi-worker/src` | 22 | Bounded Pi Worker | `main.ts / worker.ts` | Pi SDK and task contract | formal project access |
 | `desktop/src-tauri/src` | 1 | Desktop host | `main.rs` | Tauri commands and sidecar protocol | literary logic |
 
 ## Vue Feature 所有权
