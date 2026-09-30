@@ -61,6 +61,28 @@ _SCENE_ASSET_STAGES = (
     ((".*.",), "scene.entry"),
 )
 
+_V2_SCENE_STAGES = {
+    "scene.v2.creator.identity": "scene.entry",
+    "scene.v2.creator.protocol": "scene.entry",
+    "scene.v2.creator.bootstrap": "scene.entry",
+    "scene.v2.creator.archive": "scene.entry",
+    "scene.v2.creator.sandbox": "scene.entry",
+    "scene.v2.creator.delegation": "scene.selection",
+    "scene.v2.creator.actor-card": "scene.actor",
+    "scene.v2.creator.selection": "scene.selection",
+    "scene.v2.creator.create": "scene.prose",
+    "scene.v2.creator.revise": "scene.revision",
+    "scene.v2.review": "scene.review",
+    "scene.v2.review.protocol": "scene.review",
+    "scene.v2.material.shared.protocol": "scene.observation",
+    "scene.v2.material.output.protocol": "scene.observation",
+    "scene.v2.material.actor": "scene.actor",
+    "scene.v2.material.environment": "scene.environment",
+    "scene.v2.material.character-description": "scene.character",
+    "scene.v2.material.event-narration": "scene.event",
+    "scene.v2.material.scene-description": "scene.frame",
+}
+
 
 def arrange_prompt_catalog(layers: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Place every active layer once; missing mappings fail loudly during catalog load."""
@@ -118,6 +140,8 @@ def stage_for_prompt(row: dict[str, Any]) -> str:
 
 
 def _scene_stage(layer_id: str) -> str:
+    if layer_id in _V2_SCENE_STAGES:
+        return _V2_SCENE_STAGES[layer_id]
     if layer_id.startswith("scene.describer.character"):
         return "scene.character"
     if layer_id.startswith("scene.describer.event"):
