@@ -106,6 +106,21 @@ from ..literary.scene.roleplay.interaction import (
     render_actor_interaction_prompt,
     render_interaction_materials,
 )
+from ..literary.scene.roleplay.creator_v2 import (
+    ArchiveAttachmentRefV1,
+    CreatorMaterialPlanV1,
+    SceneMaterialRequestV3,
+    assert_required_material_calls,
+    parse_creator_material_plan,
+    parse_scene_material_requests_v3,
+)
+from ..literary.scene.roleplay.character_card import (
+    ACTOR_CARD_SCHEMA,
+    ACTOR_CARD_SECTIONS,
+    ActorCharacterCardV1,
+    parse_actor_character_card,
+    render_actor_character_card,
+)
 from ..literary.scene.roleplay.relay_plan import parse_relay_plan, render_relay_plan_prompt
 from ..literary.scene.roleplay.relay_scene_check import parse_relay_scene_check, render_relay_scene_check_prompt
 from ..literary.scene.roleplay.relay_materials import render_relay_materials
@@ -202,6 +217,17 @@ from ..literary.style.version import (
 )
 
 __all__ = sorted([
+    "ACTOR_CARD_SCHEMA",
+    "ACTOR_CARD_SECTIONS",
+    "ActorCharacterCardV1",
+    "ArchiveAttachmentRefV1",
+    "CreatorMaterialPlanV1",
+    "SceneMaterialRequestV3",
+    "assert_required_material_calls",
+    "parse_actor_character_card",
+    "parse_creator_material_plan",
+    "parse_scene_material_requests_v3",
+    "render_actor_character_card",
     "PLAN_SCHEMA",
     "ASSET_CANDIDATE_DIRS",
     "ASSET_SCHEMA_NAMES",

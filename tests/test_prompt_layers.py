@@ -10,7 +10,7 @@ from literary_engineering_studio_engine.public.prompting import (
 class PromptLayerTests(unittest.TestCase):
     def test_project_override_beats_global_and_manifest_records_digest(self):
         spec = prompt_layer_spec("scene.creator.identity")
-        self.assertEqual(resolve_prompt_layer(spec).version, "2")
+        self.assertEqual(resolve_prompt_layer(spec).version, "3")
         global_edit = PromptLayerOverride(spec.layer_id, "global", 3, "全局主创")
         project_edit = PromptLayerOverride(spec.layer_id, "project", 2, "本作主创")
         effective = resolve_prompt_layer(spec, global_override=global_edit, project_override=project_edit)
