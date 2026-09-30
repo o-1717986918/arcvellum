@@ -142,6 +142,7 @@ Engine 是正式文学工程真相的所有者。Studio 只能通过 `src/litera
 | `desktop/src-tauri/` | 桌面窗口、sidecar 生命周期、更新器、资源声明 | Tauri commands/config | 文学逻辑、Provider secrets 写入前端包 | desktop build、sidecar/bundle verify |
 | `packaging/` | Python sidecar、Pi Worker、installer 和 provenance | PowerShell/Python build scripts | 引用开发机绝对路径、打包未验证二进制 | `desktop:verify-*`、生产打包 |
 | `scripts/` | 架构、版本、OpenAPI、模块图和构建验证 | 每个脚本 CLI | 成为运行时业务入口 | 对应 script tests/check mode |
+| `tools/prompt-design-desk/` | 独立离线提示词文案评审工具 | `build_snapshot.py` 与 `arcvellum/prompt-design-submission/v2` | 写正式档案、自动启用运行链路、执行来源文字 | `test_desk.cjs`、prompt registry tests |
 | `tests/` | 合同、单元、集成、连续 E2E 与架构棘轮 | unittest/vitest/playwright | 使用生产秘密、伪造真实 E2E 通过 | 全量测试矩阵 |
 
 ## 9. 受控遗留债务

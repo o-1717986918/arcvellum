@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>场景主创 · 提示词设计台</title>
+  <style>__DESK_CSS__</style>
+</head>
+<body>
+  <main class="shell">
+    <header class="masthead">
+      <div>
+        <p class="eyebrow">Scene creator / prompt folio</p>
+        <h1>场景主创 · 提示词设计台</h1>
+        <p class="lede">20 位 v2 初稿与 6 位旧版顶层提示词。对照全文，修改或直接通过，再导出给我整理装载。</p>
+      </div>
+      <div class="header-actions">
+        <button class="button quiet" type="button" id="importButton">导入上次的 JSON</button>
+        <button class="button quiet" type="button" id="undoImportButton" hidden>撤销导入</button>
+        <button class="button" type="button" id="copyButton">复制结构化文本</button>
+        <button class="button primary" type="button" id="downloadButton">导出 JSON</button>
+        <input type="file" id="importFile" accept=".json,application/json" hidden>
+      </div>
+    </header>
+
+    <div class="layout">
+      <aside class="rail" aria-label="提示词位目录">
+        <div class="rail-top">
+          <p class="section-label">评审进度</p>
+          <div class="progress-line"><strong id="progressCount">0 / 26</strong><span id="readyCount">0 项通过</span></div>
+          <div class="meter" aria-hidden="true"><span id="meterFill"></span></div>
+          <input class="search" id="searchSlots" type="search" placeholder="搜索名称或提示词 ID" aria-label="搜索提示词位">
+        </div>
+        <nav class="slot-nav" id="slotNav" aria-label="选择提示词位"></nav>
+      </aside>
+
+      <div>
+        <section class="editor" aria-labelledby="slotTitle">
+          <div class="editor-head">
+            <div class="editor-topline">
+              <span class="number" id="slotNumber">01 / 26</span>
+              <span class="pill" id="slotGroup">顶层人格</span>
+              <span class="pill" id="slotKind">文学设计位</span>
+            </div>
+            <h2 id="slotTitle">生成主创人格</h2>
+            <p class="purpose" id="slotPurpose"></p>
+            <div class="idline"><code id="slotId"></code><button type="button" class="copy-id" id="copyIdButton">复制 ID</button></div>
+          </div>
+          <div class="editor-body">
+            <p class="rule-note" id="ruleNote"></p>
+            <div class="folio">
+              <section class="source-pane" aria-label="提示词来源全文">
+                <p class="section-label">对照原稿</p>
+                <label for="sourceSelect">选择内置初稿或关联旧稿</label>
+                <select id="sourceSelect"></select>
+                <p class="source-meta" id="sourceMeta"></p>
+                <textarea id="sourceText" readonly aria-label="选中来源的完整提示词" spellcheck="false"></textarea>
+                <div class="review-actions">
+                  <button class="button quiet" type="button" id="copySourceButton">采用此稿，继续修改</button>
+                  <button class="button" type="button" id="adoptSourceButton">采用此旧稿并通过</button>
+                </div>
+                <details id="legacyCombination">
+                  <summary>组合关联旧稿</summary>
+                  <div id="legacyChecks"></div>
+                  <button class="button quiet" type="button" id="adoptManyButton">采用所选旧稿并通过</button>
+                  <p class="field-meta">按列表顺序拼接原文，导出保留每份来源。</p>
+                </details>
+              </section>
+              <section class="draft-pane" aria-label="当前填写稿">
+                <div class="field-head"><label for="promptText">当前填写稿</label><span class="field-meta" id="charCount">0 字符</span></div>
+                <textarea id="promptText" spellcheck="false" placeholder="写入完整设计稿；空白位可先从左侧采用内置初稿或旧稿，再修改评审。"></textarea>
+                <p id="reviewState" class="review-state" role="status"></p>
+                <p id="draftOrigin" class="field-meta"></p>
+                <div class="review-actions">
+                  <button class="button primary" type="button" id="approveButton">通过当前填写</button>
+                  <button class="button quiet" type="button" id="revokeButton">撤销通过</button>
+                  <button class="button quiet" type="button" id="undoButton">撤销上次采用</button>
+                </div>
+              </section>
+            </div>
+            <div class="secondary-grid">
+              <div>
+                <label for="designNote">设计备注（不装载为提示词）</label>
+                <textarea id="designNote" placeholder="写下待讨论的问题、取舍依据或与其他位的衔接。"></textarea>
+              </div>
+              <div class="review-help">修改正文后会取消通过状态。通过记录在导出中，运行链路仍待装载与场景验收。</div>
+            </div>
+            <div class="legacy">
+              <h3>关联旧提示词位</h3>
+              <div class="legacy-list" id="legacyList"></div>
+            </div>
+          </div>
+          <div class="editor-footer">
+            <span class="save-state" id="saveState">自动保存到当前浏览器</span>
+            <div class="step-actions">
+              <button type="button" id="prevButton">← 上一位</button>
+              <button type="button" id="nextButton">下一位 →</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="export-panel" aria-labelledby="exportTitle">
+          <h2 id="exportTitle">导出前的说明</h2>
+          <p>导出全部 26 位，包含正文、备注、通过决定和旧稿来源版本。页面展示项目内置稿快照；已有浏览器填写稿会保留。全局／作品自定义稿可导入或粘贴。</p>
+          <div class="export-grid">
+            <div><label for="projectTitle">作品或方案名称</label><input class="text-input" id="projectTitle" type="text" placeholder="可选，例如《雨中的信》"></div>
+            <div><label for="generalNotes">整体设计说明（不装载为提示词）</label><textarea id="generalNotes" placeholder="例如：主创的叙述倾向、五类 Agent 的共同文风要求、尚未确定的问题。"></textarea></div>
+          </div>
+          <div class="export-foot">
+            <p>本页离线运行；换浏览器或设备前请先导出 JSON。</p>
+            <button class="button primary" type="button" id="downloadBottom">导出 JSON</button>
+          </div>
+        </section>
+      </div>
+    </div>
+  </main>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <dialog id="manualDialog" aria-labelledby="manualTitle">
+    <h2 id="manualTitle">结构化文本已生成</h2>
+    <p>浏览器未开放剪贴板权限。选中文本后手动复制即可。</p>
+    <textarea id="manualCopy" readonly></textarea>
+    <button class="button primary" type="button" id="closeDialog">关闭</button>
+  </dialog>
+
+  <script id="promptLibrary" type="application/json">__PROMPT_LIBRARY__</script>
+<script>__DESK_STATE__</script>
+<script>__DESK_REVIEW__</script>
+<script>__DESK_FILES__</script>
+</body>
+</html>
