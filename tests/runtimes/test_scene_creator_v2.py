@@ -173,10 +173,23 @@ class SceneCreatorV2Tests(unittest.TestCase):
         runtime = PiSceneTransactionRuntime(
             {"application": {"scene_creator_v2": {"enabled": True}}},
             project_root=self.project, data_root=self.studio,
+            prompt_snapshot_provider=lambda ids, root: {
+                "texts": {"scene.v2.creator.identity": "[PENDING_PROMPT_DESIGN: identity]"},
+                "digest": "pending-test",
+            },
         )
         with self.assertRaisesRegex(RuntimeError, "prompt design is incomplete"):
             runtime.create_scene("tx-pending", brief)
         self.assertFalse((self.studio / "scene-transactions/tx-pending/scene_creator_v2_mode.json").exists())
+
+    def test_complete_drafts_do_not_enable_v2_by_default(self) -> None:
+        from literary_engineering_studio_engine.public.prompting import list_prompt_layer_specs
+        layers = {spec.layer_id: spec.default_text for spec in list_prompt_layer_specs()
+                  if spec.layer_id.startswith("scene.v2.") or spec.layer_id == "project_agent.creator_persona.v2"}
+        self.assertEqual(len(layers), 20)
+        assert_v2_prompts_ready(layers)
+        runtime = PiSceneTransactionRuntime({}, project_root=self.project, data_root=self.studio)
+        self.assertFalse(runtime._uses_creator_v2("tx-default"))
 
     def test_opted_in_transaction_uses_agent_before_prose(self) -> None:
         CreatorPersonaStore(self.studio).save(
