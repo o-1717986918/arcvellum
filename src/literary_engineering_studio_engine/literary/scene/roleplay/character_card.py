@@ -39,15 +39,19 @@ def parse_actor_character_card(payload: Any, target: str) -> ActorCharacterCardV
     if payload.get("target") != target:
         raise ValueError("character_card target must match its actor request")
     sections = _parse_sections(payload.get("sections"))
-    refs = payload.get("source_refs")
+    refs = _parse_source_refs(payload.get("source_refs"))
+    notes = payload.get("design_notes", "")
+    if not isinstance(notes, str) or len(notes) > 2000:
+        raise ValueError("character_card design_notes exceeds its limit")
+    return ActorCharacterCardV1(target, sections, refs, notes.strip())
+
+
+def _parse_source_refs(refs: Any) -> tuple[str, ...]:
     if not isinstance(refs, list) or not 1 <= len(refs) <= 32:
         raise ValueError("character_card needs one to thirty-two source_refs")
     if any(not isinstance(ref, str) or not ref.strip() or len(ref) > 500 for ref in refs):
         raise ValueError("character_card source_refs must be bounded strings")
-    notes = payload.get("design_notes", "")
-    if not isinstance(notes, str) or len(notes) > 2000:
-        raise ValueError("character_card design_notes exceeds its limit")
-    return ActorCharacterCardV1(target, sections, tuple(ref.strip() for ref in refs), notes.strip())
+    return tuple(ref.strip() for ref in refs)
 
 
 def _parse_sections(raw: Any) -> tuple[tuple[str, str], ...]:
