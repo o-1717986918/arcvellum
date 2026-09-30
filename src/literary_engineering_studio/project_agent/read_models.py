@@ -28,6 +28,7 @@ def dependencies_from_read_models(
     owner_style_read: Any | None = None,
     style_versions: Any | None = None,
     style_version_detail: Any | None = None,
+    creator_persona: Any | None = None,
 ) -> ProjectAgentDependencies:
     def catalog(_root: Path, arguments: Mapping[str, Any]) -> Mapping[str, Any]:
         if project_catalog is None:
@@ -193,6 +194,7 @@ def dependencies_from_read_models(
         archive_read,
         (lambda root, _arguments: owner_style_read(root)) if owner_style_read is not None else None,
         read_style_versions if style_versions is not None else None,
+        creator_persona,
     )
 
 

@@ -212,6 +212,7 @@ class ProjectAgentDependencies:
     archive_read: ProjectReadModel | None = None
     owner_style_read: ProjectReadModel | None = None
     style_versions: ProjectReadModel | None = None
+    creator_persona: ProjectReadModel | None = None
 
 
 @dataclass(frozen=True)
@@ -234,3 +235,4 @@ class ProjectAgentActionDependencies:
     owner_style_write: ProjectAction | None = None
     reconcile_assets: ProjectAction | None = None
     prepare_plan: ProjectAction | None = None
+    update_creator_persona: ProjectAction | None = None

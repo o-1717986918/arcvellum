@@ -3,11 +3,27 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from pathlib import Path
+from typing import Any, Callable
 
 from literary_engineering_studio_engine.public.prompting import prompt_layer_spec, render_prompt_template
 
 from .delegated_goal import goal_snapshot
+
+
+def creator_persona_guidance(
+    config: dict[str, Any], resolver: Callable[[str, Path | None], str] | None, root: Path,
+) -> str:
+    application = config.get("application")
+    settings = application.get("scene_creator_v2") if isinstance(application, dict) else None
+    if not isinstance(settings, dict) or settings.get("enabled") is not True or not (root / "project.yaml").is_file():
+        return ""
+    if resolver is None:
+        raise RuntimeError("scene creator v2 needs a top-agent prompt resolver")
+    guidance = resolver("project_agent.creator_persona.v2", root)
+    if not guidance.strip() or "[PENDING_PROMPT_DESIGN:" in guidance:
+        raise RuntimeError("scene creator v2 persona prompt design is incomplete")
+    return guidance
 
 
 def turn_prompt(message: str, session: dict[str, Any]) -> str:
@@ -27,11 +43,13 @@ def turn_prompt(message: str, session: dict[str, Any]) -> str:
 
 def system_prompt(
     persona: dict[str, str], *, write_enabled: bool = False, literary_guidance: str = "",
+    creator_persona_guidance: str = "",
 ) -> str:
     name = str(persona.get("name") or "严谨总编")
     direction = literary_guidance.strip() or prompt_layer_spec("project_agent.creative_direction").default_text
     template = "project_agent.system.write.protocol" if write_enabled else "project_agent.system.read.protocol"
-    return render_prompt_template(template, (name, str(persona.get("prompt") or "").strip(), direction))
+    base = render_prompt_template(template, (name, str(persona.get("prompt") or "").strip(), direction))
+    return base + ("\n\n" + creator_persona_guidance if creator_persona_guidance else "")
 
 
 def delegated_goal_followup_prompt(
@@ -56,4 +74,5 @@ def delegated_scene_checkpoint_prompt(user_message: str, run: dict[str, Any], wo
     ))
 
 
-__all__ = ["delegated_goal_followup_prompt", "delegated_scene_checkpoint_prompt", "system_prompt", "turn_prompt"]
+__all__ = ["creator_persona_guidance", "delegated_goal_followup_prompt",
+           "delegated_scene_checkpoint_prompt", "system_prompt", "turn_prompt"]

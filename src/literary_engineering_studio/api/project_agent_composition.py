@@ -18,6 +18,7 @@ from ..project_agent.read_models import dependencies_from_read_models
 from ..application.style.owner_directive import read_owner_style_directive, write_owner_style_directive
 from ..application.style import StyleApplicationService
 from ..application.lean_chapter_extension import extend_lean_chapter
+from ..application.creator_persona import CreatorPersonaStore
 from ..application.lean_future_replan import replan_lean_future
 from ..application.lean_longform_planning import LeanLongformPlanningService
 from ..application.lean_assets import ensure_lean_planning_assets, lean_asset_alignment
@@ -46,6 +47,7 @@ def build_project_agent_service(
     prompts: Any = None,
 ) -> ProjectAgentService:
     jobs, style_catalog = lifecycle.persistence.worker, StyleApplicationService()
+    creator_personas = CreatorPersonaStore(Path(str(config.get("application", {}).get("data_root") or ".")))
 
     return ProjectAgentService(
         config,
@@ -65,6 +67,7 @@ def build_project_agent_service(
             archive_read=archive_read_action(archive_dependencies),
             owner_style_read=read_owner_style_directive, style_versions=lambda root: style_catalog.version_catalog(project_root=root),
             style_version_detail=style_catalog.version_detail,
+            creator_persona=lambda root, _arguments: creator_personas.read_current(root),
         ),
         actions=dependencies_from_actions(
             record_direction=record_direction,
@@ -97,6 +100,7 @@ def build_project_agent_service(
             write_owner_style=write_owner_style_directive,
             reconcile_assets=lambda root, **values: _reconcile_lean_assets(config, root, **values),
             prepare_plan=lambda root: _prepare_lean_plan(config, root),
+            save_creator_persona=creator_personas.save,
         ),
         persona_loader=lambda root: active_persona(
             Path(str(config.get("application", {}).get("data_root") or ".")), root,

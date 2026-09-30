@@ -42,6 +42,8 @@ const PROJECT_PLANNING_PREPARE_TOOL = "project_planning_prepare";
 const PROJECT_OWNER_STYLE_READ_TOOL = "project_owner_style_read";
 const PROJECT_OWNER_STYLE_WRITE_TOOL = "project_owner_style_write";
 const PROJECT_STYLE_VERSIONS_TOOL = "project_style_versions";
+const PROJECT_CREATOR_PERSONA_READ_TOOL = "project_creator_persona_read";
+const PROJECT_CREATOR_PERSONA_UPDATE_TOOL = "project_creator_persona_update";
 const SUPPORTED_TOOLS = new Set([
 	WORKSPACE_CATALOG_TOOL,
 	PROJECT_OVERVIEW_TOOL,
@@ -69,6 +71,8 @@ const SUPPORTED_TOOLS = new Set([
 	PROJECT_OWNER_STYLE_READ_TOOL,
 	PROJECT_OWNER_STYLE_WRITE_TOOL,
 	PROJECT_STYLE_VERSIONS_TOOL,
+	PROJECT_CREATOR_PERSONA_READ_TOOL,
+	PROJECT_CREATOR_PERSONA_UPDATE_TOOL,
 ]);
 
 export interface ProjectAgentStart {
@@ -299,6 +303,20 @@ function projectToolDefinition(name: string): {
 		parameters: Type.Object({
 			work_id: workId(),
 			character_id: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+		}),
+	};
+	if (name === PROJECT_CREATOR_PERSONA_READ_TOOL) return {
+		label: "Read Scene Creator Persona",
+		description: "Read the versioned work-level scene creator persona and its source revision. This is creative direction, not Canon.",
+		parameters: Type.Object({ work_id: workId() }),
+	};
+	if (name === PROJECT_CREATOR_PERSONA_UPDATE_TOOL) return {
+		label: "Update Scene Creator Persona",
+		description: "Save a new work-level scene creator persona only when the user's recorded direction or project brief has changed. It affects future scene transactions.",
+		parameters: Type.Object({
+			work_id: workId(),
+			persona_text: Type.String({ minLength: 20, maxLength: 4000 }),
+			reason: Type.String({ minLength: 6, maxLength: 1000 }),
 		}),
 	};
 	if (name === PROJECT_ARCHIVE_READ_TOOL) return {

@@ -58,7 +58,7 @@ module_change_packet:
 
 ## 提示词待设计清单
 
-所有具体文案均待后续统一设计；本轮不得把占位文字作为正式创作指令激活。
+初次重组的具体文案均为占位；后续角色系统卡及主创填写任务已提供草稿，见 16-actor-character-card.md。其他文案仍待设计，不得把占位文字作为正式创作指令激活。
 
 激活入口为 `application.scene_creator_v2.enabled`。顶层人格模板和所有 `scene.v2.*` 层完成前，顶层或场景入口会明确拒绝 v2 运行；旧交易继续使用原提示词快照。档案初始化、场景审查、提交与 SceneDelta 写回仍由原有正式流程负责。
 
@@ -67,3 +67,23 @@ module_change_packet:
 - 五类：角色、环境、人物描写、事件叙述、场面描写各自的身份、当轮任务和输出；审查 `scene.actor.*`、`scene.environment.*`、`scene.describer.*`、`scene.description.turn`。
 - 共同边界：档案状态、角色可知与仅供参考、候选事实边界；审查 `scene.protocol`、`scene.fallbacks.protocol`、`scene.quantitative_detail.protocol`、`scene.ownership.action-audit.protocol`、`scene.review*` 及渲染器内置短句。
 - `scene.performance.plan*` 退出独立创作规划；其仍需在旧交易中保留兼容。
+
+## Packet D：作品级主创人格的顶层初始化
+
+~~~yaml
+module_change_packet:
+  objective: "顶层 Agent 按用户意图生成并维护版本化主创人格"
+  primary_module: "Studio project_agent"
+  public_entry: "creator_persona_read/update 与 CreatorPersonaStore"
+  variation_point: "用户明确改变作品创作意图"
+  inputs: ["作品作用域", "用户方向", "人格生成模板"]
+  outputs: ["人格版本", "方向摘要", "主创初始化输入"]
+  invariants: ["无新用户方向不重写人格", "未完成文案时不启用 v2", "不直接写正文或 Canon"]
+  allowed_dependencies: ["application CreatorPersonaStore", "Engine public prompting", "Pi Project Agent 工具 adapter"]
+  forbidden_dependencies: ["Engine internal", "正式写回 Gate 副本"]
+  tests: ["人格版本及用户方向门禁", "Project Agent 工具与只读权限", "Pi 工具合同"]
+  rollback_unit: "顶层主创人格初始化"
+  documentation: ["本记录", "16-actor-character-card.md"]
+~~~
+
+当前验证：Project Agent 的 73 项 Python 测试通过。人格写入沿用现有顶层写权限，具体生成模板仍占位。

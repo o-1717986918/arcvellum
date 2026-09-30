@@ -13,6 +13,7 @@ from .archive_actions import archive_change_action
 from .asset_reconcile_actions import asset_reconcile_action
 from .contracts import ProjectAgentActionDependencies
 from .chapter_actions import chapter_extension_action
+from .creator_persona_actions import creator_persona_update_action
 from .future_plan_actions import future_replan_action
 from .formal_output_state import has_unmigrated_formal_work
 from .goal_resume import current_goal_run, resume_managed_goal
@@ -44,6 +45,7 @@ def dependencies_from_actions(
     write_owner_style: Callable[..., dict[str, Any]] | None = None,
     reconcile_assets: Callable[..., dict[str, Any]] | None = None,
     prepare_plan: Callable[[Path], dict[str, Any]] | None = None,
+    save_creator_persona: Callable[..., dict[str, Any]] | None = None,
 ) -> ProjectAgentActionDependencies:
     settings = config or {}
     def save_direction(root: Path, arguments: Mapping[str, Any]) -> Mapping[str, Any]:
@@ -225,6 +227,7 @@ def dependencies_from_actions(
         owner_style_write_action(write_owner_style, invalidate_project) if write_owner_style is not None else None,
         asset_reconcile_action(reconcile_assets, invalidate_project) if reconcile_assets is not None else None,
         planning_prepare_action(prepare_plan, autopilot, invalidate_project) if prepare_plan is not None else None,
+        creator_persona_update_action(save_creator_persona) if save_creator_persona is not None else None,
     )
 
 

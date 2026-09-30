@@ -18,7 +18,10 @@ from .contracts import (
 )
 from .factory import build_project_agent_runtime
 from .delegated_goal import DelegatedGoal, DelegatedGoalObserver, goal_snapshot
-from .prompt_policy import delegated_goal_followup_prompt, delegated_scene_checkpoint_prompt, system_prompt, turn_prompt
+from .prompt_policy import (
+    creator_persona_guidance, delegated_goal_followup_prompt, delegated_scene_checkpoint_prompt,
+    system_prompt, turn_prompt,
+)
 from .runtime import ProjectAgentRuntime
 from .session_state import active_turn_payload, turn_reference
 from .tools import ProjectAgentToolDispatcher, available_action_tools, available_read_tools
@@ -322,6 +325,7 @@ class ProjectAgentService:
                 literary_guidance=self.prompt_resolver(
                     "project_agent.creative_direction", root if (root / "project.yaml").is_file() else None,
                 ) if self.prompt_resolver is not None else "",
+                creator_persona_guidance=creator_persona_guidance(self.config, self.prompt_resolver, root),
             ),
             allowed_tools=allowed_tools,
         )

@@ -25,6 +25,7 @@ READ_TOOLS = (
     "project_archive_read",
     "project_owner_style_read",
     "project_style_versions",
+    "project_creator_persona_read",
 )
 ACTION_TOOLS = (
     "project_record_direction",
@@ -42,6 +43,7 @@ ACTION_TOOLS = (
     "project_owner_style_write",
     "project_assets_reconcile",
     "project_planning_prepare",
+    "project_creator_persona_update",
 )
 TOOL_RISKS = {
     **{name: ToolRisk.READ for name in READ_TOOLS},
@@ -71,6 +73,7 @@ def available_read_tools(dependencies: ProjectAgentDependencies) -> tuple[str, .
             ("project_archive_read", dependencies.archive_read),
             ("project_owner_style_read", dependencies.owner_style_read),
             ("project_style_versions", dependencies.style_versions),
+            ("project_creator_persona_read", dependencies.creator_persona),
         )
         if handler is not None
     )
@@ -96,6 +99,7 @@ def available_action_tools(actions: ProjectAgentActionDependencies | None) -> tu
             ("project_owner_style_write", actions.owner_style_write),
             ("project_assets_reconcile", actions.reconcile_assets),
             ("project_planning_prepare", actions.prepare_plan),
+            ("project_creator_persona_update", actions.update_creator_persona),
         )
         if handler is not None
     )
@@ -139,6 +143,7 @@ class ProjectAgentToolDispatcher:
             "project_archive_read": self.dependencies.archive_read,
             "project_owner_style_read": self.dependencies.owner_style_read,
             "project_style_versions": self.dependencies.style_versions,
+            "project_creator_persona_read": self.dependencies.creator_persona,
         }
         handler = read_handlers.get(call.name)
         if risk is ToolRisk.READ:
@@ -165,6 +170,7 @@ class ProjectAgentToolDispatcher:
             "project_owner_style_write": self.actions.owner_style_write,
             "project_assets_reconcile": self.actions.reconcile_assets,
             "project_planning_prepare": self.actions.prepare_plan,
+            "project_creator_persona_update": self.actions.update_creator_persona,
         }
         handler = action_handlers.get(call.name)
         if handler is None:
