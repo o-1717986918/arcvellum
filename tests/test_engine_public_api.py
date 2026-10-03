@@ -104,6 +104,7 @@ EXPECTED_SYMBOLS = {
         "prompt_assembly_manifest",
         "prompt_layer_spec",
         "render_prompt_template",
+        "render_prompt_text",
         "scene_prompt_fallback",
         "resolve_prompt_layer",
         "validate_payload",
