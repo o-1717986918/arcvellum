@@ -30,6 +30,7 @@ _FLOW = (
         ("scene.prose", "正文成稿"),
         ("scene.review", "文学审读"),
         ("scene.revision", "修订与交接"),
+        ("scene.transport", "自然文本后置整理"),
     )),
     ("audit", "05 · 状态与审计", (
         ("audit.continuity", "连续性与 Canon"),
@@ -62,6 +63,7 @@ _SCENE_ASSET_STAGES = (
 )
 
 _V2_SCENE_STAGES = {
+    "scene.v2.transport.extractor": "scene.transport",
     "scene.v2.creator.identity": "scene.entry",
     "scene.v2.creator.protocol": "scene.entry",
     "scene.v2.creator.bootstrap": "scene.entry",

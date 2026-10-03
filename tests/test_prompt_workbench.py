@@ -81,6 +81,13 @@ class PromptWorkbenchTests(unittest.TestCase):
             catalog_ids = {layer["layer_id"] for layer in catalog.json()["layers"]}
             self.assertIn("formal.asset.route.longform-planning.reader-experience.v1", catalog_ids)
             self.assertIn("scene.describer.event", catalog_ids)
+            extractor = next(layer for layer in catalog.json()["layers"]
+                             if layer["layer_id"] == "scene.v2.transport.extractor")
+            self.assertEqual(extractor["flow_stage"], "scene.transport")
+            self.assertEqual(extractor["usage_status"], "opt-in")
+            self.assertEqual(next(layer for layer in catalog.json()["layers"]
+                                 if layer["layer_id"] == "scene.v2.material.shared.protocol")["usage_status"],
+                             "historical")
             self.assertNotIn("scene.describer.object", catalog_ids)
             leaves = {leaf["layer_id"] for group in catalog.json()["flow_tree"]
                       for stage in group["children"] for leaf in stage["children"]}

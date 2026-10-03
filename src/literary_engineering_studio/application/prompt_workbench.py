@@ -38,7 +38,7 @@ class PromptWorkbenchService:
             layers.append({**resolved.manifest(), "editable": spec.editable,
                            "default_text": spec.default_text,
                            "effective_text": resolved.text, "owner": spec.owner,
-                           "usage_status": "active"})
+                           "usage_status": _usage_status(spec.layer_id)})
         assets = [_formal_asset_row(asset, self.resolve(_formal_layer_id(asset), project_root))
                   for asset in _formal_assets()]
         layers.extend(assets)
@@ -88,6 +88,14 @@ class PromptWorkbenchService:
                 "texts": {layer.layer_id: layer.text for layer in layers},
                 "assembled_template": assembled,
                 "assembly_kind": "template-with-runtime-slots" if assembled is not None else "layers-only"}
+
+
+def _usage_status(layer_id: str) -> str:
+    if layer_id in {"scene.v2.material.shared.protocol", "scene.v2.material.output.protocol"}:
+        return "historical"
+    if layer_id.startswith(("scene.v2.", "project_agent.v2.")) or layer_id == "project_agent.creator_persona.v2":
+        return "opt-in"
+    return "active"
 
 
 def _editable_spec(layer_id: str) -> None:
