@@ -323,6 +323,7 @@ function actionMessage(cause: unknown, fallback: string): string {
         <p>作者修改、候选晋升与版本证据在同一条受控链路中完成。</p>
       </div>
       <div class="archive-header-actions">
+        <RouterLink :to="{ path: '/character-chat', query: { target: archive.selectedAsset?.asset_type === 'character' ? archive.selectedAsset.title : '' } }">与角色交谈</RouterLink>
         <RouterLink to="/library"><BookOpenText :size="15" />回到亲用户浏览</RouterLink>
         <button title="查看本页引导" @click="replayTour"><Compass :size="15" /></button>
         <button :disabled="archive.busy" title="重新读取作品资产" @click="reloadWorkspace"><RefreshCw :size="15" /></button>
