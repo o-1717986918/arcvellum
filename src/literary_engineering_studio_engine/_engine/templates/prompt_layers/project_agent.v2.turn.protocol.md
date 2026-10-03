@@ -1,0 +1,4 @@
+最近对话：
+[[ARCVELLUM_PROMPT_0]]
+
+用户当前消息：[[ARCVELLUM_PROMPT_1]]
