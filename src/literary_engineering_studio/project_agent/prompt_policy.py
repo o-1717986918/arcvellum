@@ -35,6 +35,12 @@ def project_prompt_id(layer_id: str, natural: bool) -> str:
     return layer_id.replace("project_agent.", "project_agent.v2.", 1) if natural else layer_id
 
 
+def project_prompt_options(config: dict[str, Any], resolver, root: Path) -> dict[str, Any]:
+    scope = root if (root / "project.yaml").is_file() else None
+    reader = (lambda layer_id: resolver(layer_id, scope)) if resolver else None
+    return {"natural": natural_prompts_enabled(config), "prompt_reader": reader}
+
+
 def _render_project(layer_id: str, values: tuple[object, ...], natural: bool, prompt_reader=None) -> str:
     if natural:
         identifier = project_prompt_id(layer_id, True)
@@ -65,7 +71,9 @@ def system_prompt(
     prompt_reader=None,
 ) -> str:
     name = str(persona.get("name") or "严谨总编")
-    direction = literary_guidance.strip() or prompt_layer_spec(project_prompt_id("project_agent.creative_direction", natural)).default_text
+    identifier = project_prompt_id("project_agent.creative_direction", natural)
+    direction = literary_guidance.strip() or (prompt_reader(identifier) if prompt_reader
+        else prompt_layer_spec(identifier).default_text)
     template = "project_agent.system.write.protocol" if write_enabled else "project_agent.system.read.protocol"
     base = _render_project(template, (name, str(persona.get("prompt") or "").strip(), direction), natural, prompt_reader)
     return base + ("\n\n" + creator_persona_guidance if creator_persona_guidance else "")

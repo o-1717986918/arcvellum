@@ -29,6 +29,6 @@ class NaturalTopPromptTests(unittest.TestCase):
             delegated_scene_checkpoint_prompt("继续", {}, "雨信", **options),
         ):
             self.assertIn("作者定稿：沿水声组织交流。", text)
-        self.assertEqual(seen, ["project_agent.v2.system.write.protocol", "project_agent.v2.turn.protocol",
+        self.assertEqual(seen, ["project_agent.v2.creative_direction", "project_agent.v2.system.write.protocol", "project_agent.v2.turn.protocol",
             "project_agent.v2.goal_followup.protocol", "project_agent.v2.scene_checkpoint.protocol"])
 
