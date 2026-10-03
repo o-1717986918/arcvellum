@@ -102,6 +102,7 @@
 - objective: 观察、修改、评审新旧文案并导出装载资料。
 - public_entry: build_snapshot.py / prompt-design-submission/v2。
 - variation_point: 内置及历史来源快照。
+- migration: 自动刷新来源摘要和正文均匹配旧内置稿的未修改、未批注、未通过初稿；用户修改、采用、批注、通过或主动导入的稿件保留。
 - inputs / outputs: 注册文案、用户填写 / 自包含 HTML、JSON、ZIP。
 - invariants: 来源仅作文字展示，已有草稿保留，运行开关由项目配置控制。
 - allowed_dependencies: Engine public.prompting、标准库。
