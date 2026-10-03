@@ -37,11 +37,12 @@ class SceneMaterialRequestV3:
     beat_id: str = ""
     scene_change: str = ""
     character_card: ActorCharacterCardV1 | None = None
+    style_direction: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         result = {"kind": self.kind, "target": self.target, "purpose": self.purpose,
                 "scene_moment": self.scene_moment, "cue": self.cue,
-                "author_prompt": self.author_prompt,
+                "author_prompt": self.author_prompt, "style_direction": self.style_direction,
                 "archive_attachments": [item.to_dict() for item in self.archive_attachments],
                 "beat_id": self.beat_id, "scene_change": self.scene_change}
         if self.character_card is not None:
@@ -86,7 +87,7 @@ def _parse_request(raw: Any, participants: set[str]) -> SceneMaterialRequestV3:
     if not isinstance(raw, Mapping):
         raise ValueError("material request must be an object")
     fields = {key: str(raw.get(key) or "").strip() for key in (
-        "kind", "target", "purpose", "scene_moment", "cue", "author_prompt", "beat_id", "scene_change",
+        "kind", "target", "purpose", "scene_moment", "cue", "author_prompt", "beat_id", "scene_change", "style_direction",
     )}
     kind, target = fields["kind"], fields["target"]
     _validate_common_request(fields)
@@ -98,7 +99,7 @@ def _parse_request(raw: Any, participants: set[str]) -> SceneMaterialRequestV3:
     return SceneMaterialRequestV3(
         kind, target, fields["purpose"], fields["scene_moment"], fields["cue"], fields["author_prompt"],
         tuple(_parse_attachment(item, kind) for item in attachments),
-        fields["beat_id"], fields["scene_change"], card,
+        fields["beat_id"], fields["scene_change"], card, fields["style_direction"],
     )
 
 
@@ -117,7 +118,7 @@ def _validate_common_request(fields: Mapping[str, str]) -> None:
     if any(not fields[key] for key in ("purpose", "scene_moment", "cue", "author_prompt")):
         raise ValueError("material request needs purpose, moment, cue, and author_prompt")
     limits = {"target": 120, "purpose": 500, "scene_moment": 300, "cue": 1200,
-              "author_prompt": 6000, "scene_change": 800}
+              "author_prompt": 6000, "scene_change": 800, "style_direction": 8000}
     if any(len(fields[key]) > limit for key, limit in limits.items()):
         raise ValueError("material request exceeds a field limit")
 
