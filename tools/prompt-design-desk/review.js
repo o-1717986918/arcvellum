@@ -227,4 +227,8 @@
     importPayload: (payload) => model.importPayload(payload, state)
   };
   select(selected);
+  if (state.builtinUpdates) {
+    persist();
+    toast("已更新 " + state.builtinUpdates + " 份未修改的内置初稿；你的修改与评审决定已保留。");
+  }
 })();

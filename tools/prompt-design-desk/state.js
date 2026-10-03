@@ -63,6 +63,21 @@
     }
   }
 
+  function refreshBuiltinDrafts(state) {
+    state.builtinUpdates = 0;
+    slots.filter((slot) => !slot.retired).forEach((slot) => {
+      const row = state.slots[slot.id];
+      if (row.origin.type !== "builtin_draft" || row.status !== "draft" ||
+          row.review_decision || row.undo || row.note.trim()) return;
+      const previous = sources[slot.id + "@2026-10-03"];
+      if (!previous || row.content !== previous.text || row.content === sources[slot.id].text ||
+          !row.origin.sources.some((item) => item.sha256 === previous.sha256)) return;
+      row.content = sources[slot.id].text;
+      row.origin.sources = [provenance(slot.id)];
+      state.builtinUpdates++;
+    });
+  }
+
   function restore(raw) {
     const state = seed();
     if (!raw || !raw.slots || Array.isArray(raw.slots)) return state;
@@ -74,6 +89,7 @@
       }
     });
     removeRetiredActorIntro(state);
+    refreshBuiltinDrafts(state);
     return state;
   }
 
@@ -125,6 +141,7 @@
     payload.slots.forEach((row) => {
       if (!row || !Object.hasOwn(next.slots, row.id)) return;
       next.slots[row.id] = normalize(row);
+      if (next.slots[row.id].origin.type === "builtin_draft") next.slots[row.id].origin.type = "imported";
       matched++;
     });
     if (!matched) throw new Error("文件没有本设计台可识别的提示词 ID。");

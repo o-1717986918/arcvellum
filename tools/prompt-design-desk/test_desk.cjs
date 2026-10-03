@@ -157,7 +157,30 @@ const importedCard = api.importPayload({
 assert.ok(importedCard.slots["scene.v2.material.actor"].content.startsWith("【PERSONA_LOAD】"));
 assert.equal(importedCard.slots["scene.v2.material.actor"].note, "导入备注");
 
-// 26-slot DOM is accessible and navigable; this is not a rendered layout test.
+// Unedited builtin drafts refresh; actual human decisions and notes survive.
+const oldSource = model.sources["scene.v2.creator.identity@2026-10-03"];
+const oldRecord = { content: oldSource.text, note: "", status: "draft",
+  origin: { type: "builtin_draft", sources: [{ id: "scene.v2.creator.identity", sha256: oldSource.sha256 }] } };
+const refreshed = open({ slots: { "scene.v2.creator.identity": oldRecord } });
+assert.equal(refreshed.window.PromptDesk.getState().slots["scene.v2.creator.identity"].content,
+  model.sources["scene.v2.creator.identity"].text);
+refreshed.window.close();
+const deliberateImport = api.importPayload({ schema: "arcvellum/prompt-design-submission/v2",
+  slots: [{ id: "scene.v2.creator.identity", ...oldRecord }] });
+const importReload = open(deliberateImport);
+assert.equal(importReload.window.PromptDesk.getState().slots["scene.v2.creator.identity"].content, oldSource.text);
+importReload.window.close();
+for (const override of [
+  { note: "我在评审这份旧稿" },
+  { status: "ready", review_decision: { decision: "approved", approved_content: oldSource.text } },
+  { content: "我自己的文字" },
+]) {
+  const kept = open({ slots: { "scene.v2.creator.identity": { ...oldRecord, ...override } } });
+  assert.equal(kept.window.PromptDesk.getState().slots["scene.v2.creator.identity"].content,
+    override.content || oldSource.text);
+  kept.window.close();
+}
+// 33-slot DOM is accessible and navigable; this is not a rendered layout test.
 assert.equal(d.querySelectorAll(".slot-button").length, 33);
 api.select(model.slots[0].id);
 assert.equal(d.getElementById("prevButton").disabled, true);
