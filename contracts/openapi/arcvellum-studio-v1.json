@@ -540,6 +540,97 @@
         "title": "AutopilotStartRequest",
         "type": "object"
       },
+      "CharacterChatCardRequest": {
+        "properties": {
+          "attachments": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Attachments",
+            "type": "array"
+          },
+          "context": {
+            "default": "",
+            "title": "Context",
+            "type": "string"
+          },
+          "project_root": {
+            "title": "Project Root",
+            "type": "string"
+          },
+          "target": {
+            "title": "Target",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_root",
+          "target"
+        ],
+        "title": "CharacterChatCardRequest",
+        "type": "object"
+      },
+      "CharacterChatCreateRequest": {
+        "properties": {
+          "attachments": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Attachments",
+            "type": "array"
+          },
+          "card": {
+            "additionalProperties": true,
+            "title": "Card",
+            "type": "object"
+          },
+          "context": {
+            "default": "",
+            "title": "Context",
+            "type": "string"
+          },
+          "project_root": {
+            "title": "Project Root",
+            "type": "string"
+          },
+          "target": {
+            "title": "Target",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_root",
+          "target",
+          "card"
+        ],
+        "title": "CharacterChatCreateRequest",
+        "type": "object"
+      },
+      "CharacterChatMessageRequest": {
+        "properties": {
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "project_root": {
+            "title": "Project Root",
+            "type": "string"
+          },
+          "timeout": {
+            "default": 300,
+            "title": "Timeout",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "project_root",
+          "message"
+        ],
+        "title": "CharacterChatMessageRequest",
+        "type": "object"
+      },
       "CreativeQualityPreviewRequest": {
         "properties": {
           "profile": {
@@ -3676,6 +3767,321 @@
           }
         },
         "summary": "Autopilot Status"
+      }
+    },
+    "/character-chat/archive": {
+      "get": {
+        "operationId": "archive_character_chat_archive_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "prefix",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Prefix",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "Cursor",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Archive"
+      }
+    },
+    "/character-chat/archive/read": {
+      "get": {
+        "operationId": "archive_read_character_chat_archive_read_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "title": "Path",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Archive Read"
+      }
+    },
+    "/character-chat/cards/draft": {
+      "post": {
+        "operationId": "draft_card_character_chat_cards_draft_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CharacterChatCardRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Draft Card"
+      }
+    },
+    "/character-chat/sessions": {
+      "post": {
+        "operationId": "create_character_chat_sessions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CharacterChatCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create"
+      }
+    },
+    "/character-chat/sessions/{session_id}": {
+      "get": {
+        "operationId": "read_character_chat_sessions__session_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read"
+      }
+    },
+    "/character-chat/sessions/{session_id}/ask": {
+      "post": {
+        "operationId": "ask_character_chat_sessions__session_id__ask_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CharacterChatMessageRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Ask"
+      }
+    },
+    "/character-chat/setup": {
+      "get": {
+        "operationId": "setup_character_chat_setup_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Setup"
       }
     },
     "/creative-live": {

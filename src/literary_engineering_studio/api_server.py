@@ -30,6 +30,7 @@ from .api.routers.archaeology import build_archaeology_router
 from .api.routers.runners import RunnerRouterDependencies, build_runner_router
 from .api.routers.pi_worker import build_pi_worker_router
 from .api.routers.prompts import build_prompts_router
+from .api.routers.character_chat import build_character_chat_router
 from .api.routers.projects import ProjectRouterDependencies, build_project_router
 from .api.routers.advisor import AdvisorRouterDependencies, build_advisor_router
 from .api.routers.automation import AutomationRouterDependencies, build_automation_router
@@ -89,6 +90,8 @@ def _register_model_workbench_routers(app, config, container: ApplicationContain
     app.include_router(build_pi_worker_router(config))
     if container.services.prompts is not None:
         app.include_router(build_prompts_router(container.services.prompts))
+    if container.services.character_chat is not None:
+        app.include_router(build_character_chat_router(container.services.character_chat))
 
 
 def _advisor_persona_operation(operation, prompts, *args, **kwargs):
