@@ -14,17 +14,17 @@
 | `src/literary_engineering_studio_engine/orchestration` | 6 | Read-only orchestration catalog | `orchestration/__init__.py` | task and Gate catalogs | Planner execution |
 | `src/literary_engineering_studio_engine/projections` | 17 | Engine read projections | `projection facades` | formal project facts | promotion/writeback |
 | `src/literary_engineering_studio_engine/command_line` | 25 | Engine CLI adapter | `command_line/main.py` | Engine public services | literary business rules |
-| `src/literary_engineering_studio/application` | 68 | Studio use cases | `application services` | ports and Engine contracts | API/framework adapters |
+| `src/literary_engineering_studio/application` | 70 | Studio use cases | `application services` | ports and Engine contracts | API/framework adapters |
 | `src/literary_engineering_studio/automation` | 22 | Campaign control | `automation/controller.py` | application/runtime ports | Engine route implementations |
 | `src/literary_engineering_studio/orchestration` | 51 | Adaptive plan domain | `orchestration services` | Engine catalog and ports | API or task lifecycle |
 | `src/literary_engineering_studio/runtime` | 98 | Controlled execution | `runtime worker/bundle ports` | contracts and infrastructure ports | literary route policy |
-| `src/literary_engineering_studio/runtimes` | 31 | Agent adapters | `runtimes registry` | Runtime SPI and external SDKs | Engine route implementations |
-| `src/literary_engineering_studio/persistence` | 29 | Durable adapters | `repository facades` | SQLite and file storage | literary decisions |
+| `src/literary_engineering_studio/runtimes` | 33 | Agent adapters | `runtimes registry` | Runtime SPI and external SDKs | Engine route implementations |
+| `src/literary_engineering_studio/persistence` | 30 | Durable adapters | `repository facades` | SQLite and file storage | literary decisions |
 | `src/literary_engineering_studio/projections` | 36 | Studio read models | `projection services` | read ports and Engine facts | promotion/writeback |
 | `src/literary_engineering_studio/preflight` | 31 | Writeback validation | `task_preflight facade` | contracts and deterministic validators | Agent creativity |
 | `src/literary_engineering_studio/observability` | 39 | Events and telemetry | `observability projections` | event contracts | task mutation |
 | `src/literary_engineering_studio/integrations` | 9 | External integrations | `integration-specific facades` | external SDKs and ports | literary policy |
-| `src/literary_engineering_studio/api` | 29 | HTTP/SSE adapters | `router factories` | application use cases | direct project mutation |
+| `src/literary_engineering_studio/api` | 30 | HTTP/SSE adapters | `router factories` | application use cases | direct project mutation |
 | `src/literary_engineering_studio/advisor` | 11 | Read-only advisor | `advisor service` | read models and Runtime port | formal project writeback |
 | `workers/pi-worker/src` | 23 | Bounded Pi Worker | `main.ts / worker.ts` | Pi SDK and task contract | formal project access |
 | `desktop/src-tauri/src` | 1 | Desktop host | `main.rs` | Tauri commands and sidecar protocol | literary logic |
@@ -35,6 +35,7 @@
 |---|---:|---|
 | `archaeology` | 14 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `archive` | 24 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
+| `character-chat` | 6 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `creative-live` | 25 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `delivery` | 5 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `details` | 2 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
