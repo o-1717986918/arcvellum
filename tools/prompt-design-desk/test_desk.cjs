@@ -27,10 +27,10 @@ const input = d.getElementById("promptText");
 const click = (id) => d.getElementById(id).click();
 const json = (value) => JSON.parse(JSON.stringify(value));
 assert.equal(errors.length, 0, errors.map((error) => error.message).join("\n"));
-assert.equal(api.exportPayload().slot_count, 26);
+assert.equal(api.exportPayload().slot_count, 33);
 assert.equal(api.exportPayload().approved_count, 0);
-assert.equal(api.exportPayload().slots.filter((slot) => slot.scope === "v2").length, 20);
-assert.equal(Object.keys(model.sources).length, 64);
+assert.equal(api.exportPayload().slots.filter((slot) => slot.scope === "v2").length, 27);
+assert.equal(Object.keys(model.sources).length, 97);
 assert.equal(d.getElementById("sourceText").value, model.sources[model.slots[0].refs[0]].text);
 assert.equal(d.getElementById("sourceHeading").textContent, "旧提示词全文");
 click("showCurrentButton");
@@ -132,7 +132,7 @@ const upgraded = open(stored);
 assert.equal(upgraded.window.PromptDesk.getState().slots["scene.v2.creator.identity"].content, "用户自己的未导出文字");
 assert.equal(upgraded.window.PromptDesk.getState().slots["scene.v2.creator.create"].content, "");
 assert.equal(upgraded.window.PromptDesk.exportPayload().approved_count, 0);
-assert.equal(upgraded.window.PromptDesk.exportPayload().slot_count, 26);
+assert.equal(upgraded.window.PromptDesk.exportPayload().slot_count, 33);
 upgraded.window.close();
 
 // Delete only the exact retired introduction, including in already saved/imported cards.
@@ -158,7 +158,7 @@ assert.ok(importedCard.slots["scene.v2.material.actor"].content.startsWith("【P
 assert.equal(importedCard.slots["scene.v2.material.actor"].note, "导入备注");
 
 // 26-slot DOM is accessible and navigable; this is not a rendered layout test.
-assert.equal(d.querySelectorAll(".slot-button").length, 26);
+assert.equal(d.querySelectorAll(".slot-button").length, 33);
 api.select(model.slots[0].id);
 assert.equal(d.getElementById("prevButton").disabled, true);
 api.select(model.slots.at(-1).id);

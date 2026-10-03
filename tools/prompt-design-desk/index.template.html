@@ -13,7 +13,7 @@
       <div>
         <p class="eyebrow">Scene creator / prompt folio</p>
         <h1>场景主创 · 提示词设计台</h1>
-        <p class="lede">20 位 v2 初稿与 6 位旧版顶层提示词。对照全文，修改或直接通过，再导出给我整理装载。</p>
+        <p class="lede">正向文学初始化与自然交付的新稿。角色卡保留，旧文案全文可对照；共同层已退出，技术整理单列。修改或通过后，一键导出。</p>
       </div>
       <div class="header-actions">
         <button class="button quiet" type="button" id="importButton">导入上次的 JSON</button>
@@ -28,7 +28,7 @@
       <aside class="rail" aria-label="提示词位目录">
         <div class="rail-top">
           <p class="section-label">评审进度</p>
-          <div class="progress-line"><strong id="progressCount">0 / 26</strong><span id="readyCount">0 项通过</span></div>
+          <div class="progress-line"><strong id="progressCount">0 / 33</strong><span id="readyCount">新链路 0/25 通过</span></div>
           <div class="meter" aria-hidden="true"><span id="meterFill"></span></div>
           <input class="search" id="searchSlots" type="search" placeholder="搜索名称或提示词 ID" aria-label="搜索提示词位">
         </div>
@@ -39,7 +39,7 @@
         <section class="editor" aria-labelledby="slotTitle">
           <div class="editor-head">
             <div class="editor-topline">
-              <span class="number" id="slotNumber">01 / 26</span>
+              <span class="number" id="slotNumber">01 / 33</span>
               <span class="pill" id="slotGroup">顶层人格</span>
               <span class="pill" id="slotKind">文学设计位</span>
             </div>
@@ -54,7 +54,7 @@
                 <p class="section-label" id="sourceHeading">旧提示词全文</p>
                 <div class="review-actions source-switch">
                   <button class="button quiet" type="button" id="showLegacyButton">查看旧提示词</button>
-                  <button class="button quiet" type="button" id="showCurrentButton">查看 v2 初稿</button>
+                  <button class="button quiet" type="button" id="showCurrentButton">查看本次新稿</button>
                 </div>
                 <label for="sourceSelect">选择要查看的提示词全文</label>
                 <select id="sourceSelect"></select>
@@ -106,7 +106,7 @@
 
         <section class="export-panel" aria-labelledby="exportTitle">
           <h2 id="exportTitle">导出前的说明</h2>
-          <p>导出全部 26 位，包含正文、备注、通过决定和旧稿来源版本。页面展示项目内置稿快照；已有浏览器填写稿会保留。全局／作品自定义稿可导入或粘贴。</p>
+          <p>导出全部 33 位，包含正文、备注、通过决定和旧稿来源版本。25 位为新链路设计，8 位为历史对照。已有浏览器填写稿会保留；全局／作品自定义稿可导入或粘贴。</p>
           <div class="export-grid">
             <div><label for="projectTitle">作品或方案名称</label><input class="text-input" id="projectTitle" type="text" placeholder="可选，例如《雨中的信》"></div>
             <div><label for="generalNotes">整体设计说明（不装载为提示词）</label><textarea id="generalNotes" placeholder="例如：主创的叙述倾向、五类 Agent 的共同文风要求、尚未确定的问题。"></textarea></div>

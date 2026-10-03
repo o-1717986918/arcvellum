@@ -138,7 +138,8 @@
       const pass = approved(record);
       return {
         id: slot.id, group: slot.group, title: slot.title, scope: slot.scope,
-        slot_type: slot.fixed ? "fixed_protocol" : "literary_design",
+        slot_type: slot.retired ? "retired" : slot.id.includes("transport.") ? "transport" : slot.fixed ? "fixed_protocol" : "literary_design",
+        runtime_loading: slot.retired ? "retired" : "proposed",
         status: record.content.trim() ? (pass ? "ready" : "draft") : "empty",
         content: record.content, design_note: record.note,
         legacy_references: slot.refs.slice(), origin: clone(record.origin),

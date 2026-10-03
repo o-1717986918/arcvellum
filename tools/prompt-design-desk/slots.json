@@ -5,8 +5,9 @@
     "title": "生成主创人格",
     "fixed": false,
     "purpose": "依据用户对整部作品的要求，生成作品级主创人格；只在用户明确改变创作意图时更新。",
-    "note": "写清人格的来源、稳定部分、更新触发条件及顶层与主创的职责边界。",
+    "note": "按作品意图组织本环节；旧稿与此次重写前的版本可在左侧全文对照。",
     "refs": [
+      "project_agent.creator_persona.v2@2026-10-03",
       "project_agent.creative_direction",
       "project_agent.system.write.protocol",
       "project_agent.turn.protocol"
@@ -19,8 +20,9 @@
     "title": "主创身份与文学职责",
     "fixed": false,
     "purpose": "让场景主创承接作品人格，并独立承担场景构思、正文和 SceneDelta。",
-    "note": "保留作品意图与跨场景连续性；主创可调度素材，但正文只能由主创写。",
+    "note": "正向引导，自然文学交付。创作身份中的唯一文风栏由主创自由填写。",
     "refs": [
+      "scene.v2.creator.identity@2026-10-03",
       "scene.creator.identity"
     ],
     "scope": "v2"
@@ -28,11 +30,12 @@
   {
     "id": "scene.v2.creator.protocol",
     "group": "场景主创",
-    "title": "主创权限与交付协议",
-    "fixed": true,
-    "purpose": "约束主创的档案读权、沙盒边界、材料委托与结构化输出。",
-    "note": "固定边界：只读正式档案；沙盒不自动成为 Canon；先完成必用 Agent 调用再成稿。",
+    "title": "主创自然交流",
+    "fixed": false,
+    "purpose": "邀请主创自然构思、委托与交稿。",
+    "note": "系统记录交给后置整理步骤。",
     "refs": [
+      "scene.v2.creator.protocol@2026-10-03",
       "scene.protocol",
       "scene.creator.create.protocol",
       "scene.creator.revise.protocol"
@@ -45,8 +48,9 @@
     "title": "开场必达信息",
     "fixed": false,
     "purpose": "规定主创如何理解 SceneBrief、作品方向、上一场交接、连续性、文风与缺失来源。",
-    "note": "信息包由系统生成；这里设计主创的阅读、核查与补查方法。",
+    "note": "按作品意图组织本环节；旧稿与此次重写前的版本可在左侧全文对照。",
     "refs": [
+      "scene.v2.creator.bootstrap@2026-10-03",
       "scene.creator.create",
       "scene.creator.material-request.protocol"
     ],
@@ -58,8 +62,9 @@
     "title": "首轮构思与成稿",
     "fixed": false,
     "purpose": "从用户意图和场景任务出发，先定取材目标，取得必要候选后独立组织正文。",
-    "note": "主创首轮选定至少一类必用 Agent；不得在请求尚未返回时交付正文。",
+    "note": "按作品意图组织本环节；旧稿与此次重写前的版本可在左侧全文对照。",
     "refs": [
+      "scene.v2.creator.create@2026-10-03",
       "scene.creator.create",
       "scene.creator.material-final-pass.protocol"
     ],
@@ -71,8 +76,9 @@
     "title": "审读后的修订",
     "fixed": false,
     "purpose": "让主创根据审读证据修订正文，必要时重新读取档案或再次取材。",
-    "note": "保留审读修订与作品意图连续性；说明如何处理冲突意见。",
+    "note": "按作品意图组织本环节；旧稿与此次重写前的版本可在左侧全文对照。",
     "refs": [
+      "scene.v2.creator.revise@2026-10-03",
       "scene.creator.revise",
       "scene.creator.revision-request.protocol"
     ],
@@ -84,8 +90,9 @@
     "title": "编写五类委托",
     "fixed": false,
     "purpose": "指导主创按每次创作目的，自写交给五类 Agent 的委托正文。",
-    "note": "委托保留 kind、target、purpose、scene_moment、cue、author_prompt；调用目的由主创决定。",
+    "note": "按作品意图组织本环节；旧稿与此次重写前的版本可在左侧全文对照。",
     "refs": [
+      "scene.v2.creator.delegation@2026-10-03",
       "scene.creator.material-request.protocol",
       "scene.creator.revision-request.protocol"
     ],
@@ -97,8 +104,9 @@
     "title": "填写角色卡",
     "fixed": false,
     "purpose": "按示例的强度，以鲜明风格主轴贯穿声线、联想、动作与关系反应，填写 16 个角色卡区块。",
-    "note": "允许主动设计有个性的演绎表达；首轮附 character_card，同场冻结。事实与角色知识依据来源。",
+    "note": "按作品意图组织本环节；旧稿与此次重写前的版本可在左侧全文对照。",
     "refs": [
+      "scene.v2.creator.actor-card@2026-10-03",
       "scene.actor.identity",
       "scene.actor.scene.protocol",
       "scene.performance.plan"
@@ -111,8 +119,9 @@
     "title": "档案读取与逐次挂载",
     "fixed": false,
     "purpose": "指导主创自由补查作品档案，并为每次调用分别选择整条或片段。",
-    "note": "超预算时缩小选择；辨认 Canon、已提交内容、人物转述和待确认提案。",
+    "note": "按作品意图组织本环节；旧稿与此次重写前的版本可在左侧全文对照。",
     "refs": [
+      "scene.v2.creator.archive@2026-10-03",
       "scene.creator.material-request.protocol",
       "scene.quantitative_detail.protocol"
     ],
@@ -124,8 +133,9 @@
     "title": "持久沙盒使用",
     "fixed": false,
     "purpose": "说明如何用专属文件区记录构思、比较候选和保存跨场景工作笔记。",
-    "note": "沙盒可自由列出、读、写、移动、删除；笔记不自动成为正式作品内容。",
+    "note": "按作品意图组织本环节；旧稿与此次重写前的版本可在左侧全文对照。",
     "refs": [
+      "scene.v2.creator.sandbox@2026-10-03",
       "scene.creator.identity"
     ],
     "scope": "v2"
@@ -136,8 +146,9 @@
     "title": "候选取舍与正文重组",
     "fixed": false,
     "purpose": "指导主创选择、改写或舍弃五类候选，并说明其文学理由。",
-    "note": "候选是素材，不直接等于正文；保留候选 ID 与取舍记录。",
+    "note": "按作品意图组织本环节；旧稿与此次重写前的版本可在左侧全文对照。",
     "refs": [
+      "scene.v2.creator.selection@2026-10-03",
       "scene.material.selection",
       "scene.creator.material-selection-repair.protocol"
     ],
@@ -149,8 +160,9 @@
     "title": "文学审读方法",
     "fixed": false,
     "purpose": "检查人声、细节、节奏、信息控制、连续性和素材是否被主创有效转化。",
-    "note": "审读应给出具体证据和可执行修订意见。",
+    "note": "正向引导，自然文学交付。创作身份中的唯一文风栏由主创自由填写。",
     "refs": [
+      "scene.v2.review@2026-10-03",
       "scene.review",
       "scene.review.convergence.normal.protocol",
       "scene.review.convergence.strict.protocol"
@@ -160,11 +172,12 @@
   {
     "id": "scene.v2.review.protocol",
     "group": "独立审读",
-    "title": "审读结果协议",
-    "fixed": true,
-    "purpose": "规定审读的证据、判定、修订指令和结构化交付。",
-    "note": "固定边界：审读不能代写正文，也不能绕过原有正式 Gate。",
+    "title": "自然审读信",
+    "fixed": false,
+    "purpose": "以具体阅读证据交付文学编辑意见。",
+    "note": "自然评审文字由后续程序整理。",
     "refs": [
+      "scene.v2.review.protocol@2026-10-03",
       "scene.review.protocol",
       "scene.ownership.action-audit.protocol"
     ],
@@ -172,17 +185,19 @@
   },
   {
     "id": "scene.v2.material.shared.protocol",
-    "group": "五类取材 Agent",
-    "title": "共同事实与权限边界",
+    "group": "历史退出层",
+    "title": "已退出 · 共同事实与权限边界",
     "fixed": true,
-    "purpose": "五类 Agent 仅接收当次委托和冻结挂载；处理来源状态及角色知识分区。",
-    "note": "五类均无档案库检索工具；仅供扮演参考的资料不得成为角色已知事实。",
+    "purpose": "历史拼装资料，当前自然文本链路不加载。",
+    "note": "自然创作链路已退出此层；保留原文供追溯。",
     "refs": [
+      "scene.v2.material.shared.protocol@2026-10-03",
       "scene.protocol",
       "scene.fallbacks.protocol",
       "scene.actor.immersion.protocol"
     ],
-    "scope": "v2"
+    "scope": "v2",
+    "retired": true
   },
   {
     "id": "scene.v2.material.actor",
@@ -190,8 +205,9 @@
     "title": "角色卡系统模板",
     "fixed": false,
     "purpose": "装入主创填写的 16 个角色卡区块，使人物从自身处境和逐轮经历自主回应。",
-    "note": "保留每个区块占位符各一次；交付台词、第一人称动作与内在冲动候选，参考资料不成为角色知识。",
+    "note": "按作品意图组织本环节；旧稿与此次重写前的版本可在左侧全文对照。",
     "refs": [
+      "scene.v2.material.actor@2026-10-03",
       "scene.actor.identity",
       "scene.actor.turn",
       "scene.actor.interaction.protocol",
@@ -205,8 +221,9 @@
     "title": "环境观察器",
     "fixed": false,
     "purpose": "观察环境的感官、空间与节奏，提供能进入文学叙述的候选素材。",
-    "note": "让环境作用于当下场景，而不凭空推动人物或改写设定。",
+    "note": "正向引导，自然文学交付。创作身份中的唯一文风栏由主创自由填写。",
     "refs": [
+      "scene.v2.material.environment@2026-10-03",
       "scene.environment.identity",
       "scene.environment.turn",
       "scene.environment.turn.protocol"
@@ -219,8 +236,9 @@
     "title": "人物可见描写器",
     "fixed": false,
     "purpose": "提供可观察的人物姿态、动作、表情和细节候选。",
-    "note": "控制视角和信息范围，不擅自宣告不可见的内心或未证实事实。",
+    "note": "正向引导，自然文学交付。创作身份中的唯一文风栏由主创自由填写。",
     "refs": [
+      "scene.v2.material.character-description@2026-10-03",
       "scene.describer.character",
       "scene.describer.character.protocol",
       "scene.description.turn"
@@ -233,8 +251,9 @@
     "title": "事件与设定叙述器",
     "fixed": false,
     "purpose": "叙述场外事件或设定揭示，同时保留来源与事实状态。",
-    "note": "候选须清楚区分 confirmed、attributed、proposed。",
+    "note": "正向引导，自然文学交付。创作身份中的唯一文风栏由主创自由填写。",
     "refs": [
+      "scene.v2.material.event-narration@2026-10-03",
       "scene.describer.event",
       "scene.describer.event.protocol",
       "scene.description.turn"
@@ -247,8 +266,9 @@
     "title": "场面描写器",
     "fixed": false,
     "purpose": "把已发生的言行组织为空间关系、镜头距离与场面构图素材。",
-    "note": "只能描写已发生的行动，不能替人物新增决定或情节。",
+    "note": "正向引导，自然文学交付。创作身份中的唯一文风栏由主创自由填写。",
     "refs": [
+      "scene.v2.material.scene-description@2026-10-03",
       "scene.describer.scene",
       "scene.describer.scene.protocol",
       "scene.description.turn"
@@ -257,76 +277,184 @@
   },
   {
     "id": "scene.v2.material.output.protocol",
-    "group": "五类取材 Agent",
-    "title": "五类候选输出协议",
+    "group": "历史退出层",
+    "title": "已退出 · 五类候选输出协议",
     "fixed": true,
-    "purpose": "规定候选数量、文本范围、来源状态和结构化交付。",
-    "note": "固定边界：素材只供主创处理；事件候选保留事实状态。",
+    "purpose": "历史拼装资料，当前自然文本链路不加载。",
+    "note": "自然创作链路已退出此层；保留原文供追溯。",
     "refs": [
+      "scene.v2.material.output.protocol@2026-10-03",
       "scene.describer.turn.protocol",
       "scene.actor.turn-repair.protocol",
       "scene.environment.initialization.example"
     ],
-    "scope": "v2"
+    "scope": "v2",
+    "retired": true
   },
   {
     "id": "project_agent.creative_direction",
-    "group": "旧版顶层复审",
+    "group": "历史顶层",
     "title": "作品方向",
     "fixed": false,
     "purpose": "检查现有顶层文案与作品人格、场景交接的衔接；可直接通过或修改。",
-    "note": "此位仍属旧版职责；通过记录文案选择，不自动改变运行配置。",
-    "refs": [],
-    "scope": "legacy_review"
+    "note": "保留旧版顶层运行文案；新版链路使用独立版本位。",
+    "refs": [
+      "project_agent.creative_direction@2026-10-03"
+    ],
+    "scope": "legacy_review",
+    "retired": true
   },
   {
     "id": "project_agent.system.read.protocol",
-    "group": "旧版顶层复审",
+    "group": "历史顶层",
     "title": "顶层只读协议",
     "fixed": true,
     "purpose": "检查现有顶层文案与作品人格、场景交接的衔接；可直接通过或修改。",
-    "note": "此位仍属旧版职责；通过记录文案选择，不自动改变运行配置。",
-    "refs": [],
-    "scope": "legacy_review"
+    "note": "保留旧版顶层运行文案；新版链路使用独立版本位。",
+    "refs": [
+      "project_agent.system.read.protocol@2026-10-03"
+    ],
+    "scope": "legacy_review",
+    "retired": true
   },
   {
     "id": "project_agent.system.write.protocol",
-    "group": "旧版顶层复审",
+    "group": "历史顶层",
     "title": "顶层写入协议",
     "fixed": true,
     "purpose": "检查现有顶层文案与作品人格、场景交接的衔接；可直接通过或修改。",
-    "note": "此位仍属旧版职责；通过记录文案选择，不自动改变运行配置。",
-    "refs": [],
-    "scope": "legacy_review"
+    "note": "保留旧版顶层运行文案；新版链路使用独立版本位。",
+    "refs": [
+      "project_agent.system.write.protocol@2026-10-03"
+    ],
+    "scope": "legacy_review",
+    "retired": true
   },
   {
     "id": "project_agent.turn.protocol",
-    "group": "旧版顶层复审",
+    "group": "历史顶层",
     "title": "顶层每轮推进",
     "fixed": true,
     "purpose": "检查现有顶层文案与作品人格、场景交接的衔接；可直接通过或修改。",
-    "note": "此位仍属旧版职责；通过记录文案选择，不自动改变运行配置。",
-    "refs": [],
-    "scope": "legacy_review"
+    "note": "保留旧版顶层运行文案；新版链路使用独立版本位。",
+    "refs": [
+      "project_agent.turn.protocol@2026-10-03"
+    ],
+    "scope": "legacy_review",
+    "retired": true
   },
   {
     "id": "project_agent.scene_checkpoint.protocol",
-    "group": "旧版顶层复审",
+    "group": "历史顶层",
     "title": "场景检查点",
     "fixed": true,
     "purpose": "检查现有顶层文案与作品人格、场景交接的衔接；可直接通过或修改。",
-    "note": "此位仍属旧版职责；通过记录文案选择，不自动改变运行配置。",
-    "refs": [],
-    "scope": "legacy_review"
+    "note": "保留旧版顶层运行文案；新版链路使用独立版本位。",
+    "refs": [
+      "project_agent.scene_checkpoint.protocol@2026-10-03"
+    ],
+    "scope": "legacy_review",
+    "retired": true
   },
   {
     "id": "project_agent.goal_followup.protocol",
-    "group": "旧版顶层复审",
+    "group": "历史顶层",
     "title": "长期目标后续",
     "fixed": true,
     "purpose": "检查现有顶层文案与作品人格、场景交接的衔接；可直接通过或修改。",
-    "note": "此位仍属旧版职责；通过记录文案选择，不自动改变运行配置。",
-    "refs": [],
-    "scope": "legacy_review"
+    "note": "保留旧版顶层运行文案；新版链路使用独立版本位。",
+    "refs": [
+      "project_agent.goal_followup.protocol@2026-10-03"
+    ],
+    "scope": "legacy_review",
+    "retired": true
+  },
+  {
+    "id": "scene.v2.transport.extractor",
+    "group": "技术整理",
+    "title": "自然文字后置整理",
+    "scope": "v2",
+    "fixed": false,
+    "purpose": "将创作者已经写出的自然文字转为系统合同，正文按原文提取。",
+    "note": "技术整理步骤；JSON 要求只在此步骤使用。",
+    "refs": []
+  },
+  {
+    "id": "project_agent.v2.creative_direction",
+    "title": "作品总管 · creative_direction",
+    "group": "作品总管",
+    "fixed": false,
+    "purpose": "正向作品管理与自然创作交流。",
+    "note": "新链路启用时使用；对照旧全文并评审。",
+    "scope": "v2",
+    "refs": [
+      "project_agent.creative_direction",
+      "project_agent.creative_direction@2026-10-03"
+    ]
+  },
+  {
+    "id": "project_agent.v2.system.read.protocol",
+    "title": "作品总管 · system.read.protocol",
+    "group": "作品总管",
+    "fixed": false,
+    "purpose": "正向作品管理与自然创作交流。",
+    "note": "新链路启用时使用；对照旧全文并评审。",
+    "scope": "v2",
+    "refs": [
+      "project_agent.system.read.protocol",
+      "project_agent.system.read.protocol@2026-10-03"
+    ]
+  },
+  {
+    "id": "project_agent.v2.system.write.protocol",
+    "title": "作品总管 · system.write.protocol",
+    "group": "作品总管",
+    "fixed": false,
+    "purpose": "正向作品管理与自然创作交流。",
+    "note": "新链路启用时使用；对照旧全文并评审。",
+    "scope": "v2",
+    "refs": [
+      "project_agent.system.write.protocol",
+      "project_agent.system.write.protocol@2026-10-03"
+    ]
+  },
+  {
+    "id": "project_agent.v2.turn.protocol",
+    "title": "作品总管 · turn.protocol",
+    "group": "作品总管",
+    "fixed": false,
+    "purpose": "正向作品管理与自然创作交流。",
+    "note": "新链路启用时使用；对照旧全文并评审。",
+    "scope": "v2",
+    "refs": [
+      "project_agent.turn.protocol",
+      "project_agent.turn.protocol@2026-10-03"
+    ]
+  },
+  {
+    "id": "project_agent.v2.scene_checkpoint.protocol",
+    "title": "作品总管 · scene_checkpoint.protocol",
+    "group": "作品总管",
+    "fixed": false,
+    "purpose": "正向作品管理与自然创作交流。",
+    "note": "新链路启用时使用；对照旧全文并评审。",
+    "scope": "v2",
+    "refs": [
+      "project_agent.scene_checkpoint.protocol",
+      "project_agent.scene_checkpoint.protocol@2026-10-03"
+    ]
+  },
+  {
+    "id": "project_agent.v2.goal_followup.protocol",
+    "title": "作品总管 · goal_followup.protocol",
+    "group": "作品总管",
+    "fixed": false,
+    "purpose": "正向作品管理与自然创作交流。",
+    "note": "新链路启用时使用；对照旧全文并评审。",
+    "scope": "v2",
+    "refs": [
+      "project_agent.goal_followup.protocol",
+      "project_agent.goal_followup.protocol@2026-10-03"
+    ]
   }
 ]

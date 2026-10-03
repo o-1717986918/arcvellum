@@ -11,7 +11,7 @@ from build_snapshot import read_library, render_html
 class SnapshotTests(unittest.TestCase):
     def test_all_references_have_full_text_and_traceable_versions(self):
         library = read_library()
-        self.assertEqual(len(library["slots"]), 26)
+        self.assertEqual(len(library["slots"]), 33)
         for source in library["sources"].values():
             self.assertTrue(source["text"])
             self.assertEqual(source["sha256"], sha256(source["text"].encode("utf-8")).hexdigest())

@@ -33,10 +33,10 @@ def include_actor_history(slots: list, sources: dict) -> str:
 def read_library() -> dict:
     slots = json.loads((TOOL / "slots.json").read_text(encoding="utf-8"))
     expected = {spec.layer_id for spec in list_prompt_layer_specs()
-                if spec.layer_id.startswith("scene.v2.") or spec.layer_id == "project_agent.creator_persona.v2"}
+                if spec.layer_id.startswith(("scene.v2.", "project_agent.v2.")) or spec.layer_id == "project_agent.creator_persona.v2"}
     assert {slot["id"] for slot in slots if slot["scope"] == "v2"} == expected
-    assert len(expected) == 20 and len(slots) == 26
-    ids = dict.fromkeys(layer_id for slot in slots for layer_id in [slot["id"], *slot["refs"]])
+    ids = dict.fromkeys(layer_id for slot in slots for layer_id in [slot["id"], *slot["refs"]]
+                        if "@2026-10-03" not in layer_id)
     sources = {}
     for layer_id in ids:
         spec = prompt_layer_spec(layer_id)
@@ -46,6 +46,7 @@ def read_library() -> dict:
             "purpose": spec.purpose, "editable": spec.editable, "owner": spec.owner,
         }
     assert all("[PENDING_PROMPT_DESIGN:" not in sources[layer_id]["text"] for layer_id in expected)
+    include_rebuild_history(slots, sources)
     retired_intro = include_actor_history(slots, sources)
     return {
         "slots": slots, "sources": sources,
@@ -57,6 +58,20 @@ def read_library() -> dict:
                         for source in sources.values()],
         },
     }
+
+
+def include_rebuild_history(slots: list, sources: dict) -> None:
+    manifest = json.loads((TOOL / "history/2026-10-03/manifest.json").read_text(encoding="utf-8"))
+    for slot in slots:
+        path = TOOL / "history/2026-10-03" / (slot["id"] + ".md")
+        if not path.is_file():
+            continue
+        source_id = slot["id"] + "@2026-10-03"
+        text = path.read_text(encoding="utf-8").strip()
+        sources[source_id] = {"id": source_id, "text": text,
+            "package_version": manifest["layers"][slot["id"]]["package_version"],
+            "sha256": sha256(text.encode("utf-8")).hexdigest(), "purpose": "此次重写前的完整文案",
+            "editable": False, "owner": "Historical builtin snapshot " + manifest["commit"]}
 
 
 def render_html(library: dict) -> str:
@@ -80,7 +95,8 @@ def draft_submission(library: dict) -> dict:
         source = library["sources"][slot["id"]]
         rows.append({
             "id": slot["id"], "group": slot["group"], "title": slot["title"], "scope": slot["scope"],
-            "slot_type": "fixed_protocol" if slot["fixed"] else "literary_design",
+            "slot_type": "retired" if slot.get("retired") else "transport" if "transport." in slot["id"] else "fixed_protocol" if slot["fixed"] else "literary_design",
+            "runtime_loading": "retired" if slot.get("retired") else "proposed",
             "status": "draft", "content": source["text"], "design_note": "",
             "legacy_references": slot["refs"],
             "origin": {"type": "builtin_draft", "sources": [
@@ -90,8 +106,8 @@ def draft_submission(library: dict) -> dict:
     return {
         "schema": "arcvellum/prompt-design-submission/v2",
         "exported_at": library["manifest"]["built_at"], "project_title": "场景主创 v2 提示词初稿",
-        "general_notes": "20 位 v2 草稿与 6 位旧版顶层复审；尚无人审通过，不自动启用运行链路。",
-        "slot_count": 26, "filled_count": 26, "approved_count": 0,
+        "general_notes": "正向文学初始化与自然交付；两位共同层已退出，技术整理单列；尚待人审与文学场景验收。",
+        "slot_count": len(rows), "filled_count": len(rows), "approved_count": 0,
         "source_snapshot": library["manifest"], "runtime_activation": "unchanged", "slots": rows,
     }
 
@@ -121,7 +137,8 @@ def build(output: Path) -> dict:
             if path.is_file():
                 bundle.write(path, arcname=path.name)
     return {"desk": str(desk), "package": str(package), "zip": str(archive),
-            "v2_draft_count": 20, "legacy_review_count": 6, "source_count": len(library["sources"])}
+            "v2_draft_count": sum(slot["scope"] == "v2" and not slot.get("retired") for slot in library["slots"]),
+            "source_count": len(library["sources"])}
 
 
 def main() -> None:

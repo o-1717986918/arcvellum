@@ -1,0 +1,109 @@
+{
+  "commit": "b8009a0",
+  "layers": {
+    "project_agent.creative_direction": {
+      "package_version": 1,
+      "purpose": "作品总编的文学方向判断"
+    },
+    "project_agent.creator_persona.v2": {
+      "package_version": 2,
+      "purpose": "顶层生成或更新主创人格"
+    },
+    "project_agent.goal_followup.protocol": {
+      "package_version": 1,
+      "purpose": "长期目标终态交接"
+    },
+    "project_agent.scene_checkpoint.protocol": {
+      "package_version": 1,
+      "purpose": "场间检查点交接"
+    },
+    "project_agent.system.read.protocol": {
+      "package_version": 1,
+      "purpose": "项目总编只读权限与事实边界"
+    },
+    "project_agent.system.write.protocol": {
+      "package_version": 1,
+      "purpose": "项目总编写权限、工具与事实边界"
+    },
+    "project_agent.turn.protocol": {
+      "package_version": 1,
+      "purpose": "项目总编对话交接"
+    },
+    "scene.v2.creator.actor-card": {
+      "package_version": 2,
+      "purpose": "主创填写强风格化角色系统卡"
+    },
+    "scene.v2.creator.archive": {
+      "package_version": 2,
+      "purpose": "作品档案读取与挂载"
+    },
+    "scene.v2.creator.bootstrap": {
+      "package_version": 2,
+      "purpose": "必达信息包与来源使用"
+    },
+    "scene.v2.creator.create": {
+      "package_version": 2,
+      "purpose": "场景成稿与自主取材"
+    },
+    "scene.v2.creator.delegation": {
+      "package_version": 2,
+      "purpose": "主创编写五类委托"
+    },
+    "scene.v2.creator.identity": {
+      "package_version": 2,
+      "purpose": "作品级主创人格承接"
+    },
+    "scene.v2.creator.protocol": {
+      "package_version": 2,
+      "purpose": "主创固定权限与 JSON 交付合同"
+    },
+    "scene.v2.creator.revise": {
+      "package_version": 2,
+      "purpose": "场景修订与再取材"
+    },
+    "scene.v2.creator.sandbox": {
+      "package_version": 2,
+      "purpose": "持久沙盒工作方式"
+    },
+    "scene.v2.creator.selection": {
+      "package_version": 2,
+      "purpose": "候选取舍与正文重组"
+    },
+    "scene.v2.material.actor": {
+      "package_version": 3,
+      "purpose": "角色卡系统提示词模板"
+    },
+    "scene.v2.material.character-description": {
+      "package_version": 2,
+      "purpose": "人物描写委托模板"
+    },
+    "scene.v2.material.environment": {
+      "package_version": 2,
+      "purpose": "环境观察委托模板"
+    },
+    "scene.v2.material.event-narration": {
+      "package_version": 2,
+      "purpose": "事件叙述委托模板"
+    },
+    "scene.v2.material.output.protocol": {
+      "package_version": 2,
+      "purpose": "五类取材候选输出合同"
+    },
+    "scene.v2.material.scene-description": {
+      "package_version": 2,
+      "purpose": "场面描写委托模板"
+    },
+    "scene.v2.material.shared.protocol": {
+      "package_version": 2,
+      "purpose": "取材 Agent 固定权限与来源边界"
+    },
+    "scene.v2.review": {
+      "package_version": 2,
+      "purpose": "新版场景独立审读"
+    },
+    "scene.v2.review.protocol": {
+      "package_version": 2,
+      "purpose": "新版审读证据与交付合同"
+    }
+  }
+}

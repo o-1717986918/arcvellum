@@ -33,8 +33,9 @@
   function renderProgress() {
     const count = slots.filter((slot) => model.approved(state.slots[slot.id])).length;
     dom.progressCount.textContent = count + " / " + slots.length;
-    const v2 = slots.filter((slot) => slot.scope === "v2" && model.approved(state.slots[slot.id])).length;
-    dom.readyCount.textContent = "v2 " + v2 + "/20 通过";
+    const active = slots.filter((slot) => slot.scope === "v2" && !slot.retired);
+    const passed = active.filter((slot) => model.approved(state.slots[slot.id])).length;
+    dom.readyCount.textContent = "新链路 " + passed + "/" + active.length + " 通过";
     dom.meterFill.style.width = (count / slots.length * 100) + "%";
   }
 
@@ -96,8 +97,8 @@
     dom.sourceText.value = source.text;
     dom.sourceMeta.textContent = "内置快照 · v" + source.package_version + " · " +
       source.text.length + " 字符\nSHA-256 " + source.sha256;
-    const legacy = id !== selected || byId[selected].scope === "legacy_review";
-    document.getElementById("sourceHeading").textContent = legacy ? "旧提示词全文" : "当前 v2 初稿全文";
+    const legacy = id !== selected || byId[selected].retired;
+    document.getElementById("sourceHeading").textContent = legacy ? "旧提示词全文" : "当前设计初稿全文";
     document.getElementById("showLegacyButton").setAttribute("aria-pressed", String(legacy));
     document.getElementById("showCurrentButton").setAttribute("aria-pressed", String(!legacy));
     document.getElementById("adoptSourceButton").disabled = !legacy || !model.usable(source.text);
@@ -113,11 +114,11 @@
     [slot.id, ...slot.refs].forEach((id) => {
       const option = document.createElement("option");
       option.value = id;
-      option.textContent = (id === slot.id ? (slot.scope === "v2" ? "当前 v2 初稿 · " : "现有旧稿 · ") : "旧稿 · ") + id;
+      option.textContent = (id === slot.id ? "当前初稿 · " : "旧稿 · ") + id;
       dom.sourceSelect.append(option);
     });
     dom.sourceSelect.value = slot.refs[0] || slot.id;
-    document.getElementById("showCurrentButton").hidden = slot.scope !== "v2";
+    document.getElementById("showCurrentButton").hidden = !!slot.retired;
     dom.legacyChecks.replaceChildren();
     slot.refs.forEach((id) => {
       const label = document.createElement("label");
@@ -153,7 +154,7 @@
     document.getElementById("slotNumber").textContent = String(index + 1).padStart(2, "0") + " / " + slots.length;
     document.getElementById("slotGroup").textContent = slot.group;
     const kind = document.getElementById("slotKind");
-    kind.textContent = slot.fixed ? "固定合同 · 可评审文案" : "文学设计位";
+    kind.textContent = slot.retired ? "已退出运行拼装" : slot.id.includes("transport.") ? "技术整理位" : slot.fixed ? "固定合同 · 可评审文案" : "文学设计位";
     kind.className = "pill" + (slot.fixed ? " fixed" : "");
     document.getElementById("slotTitle").textContent = slot.title;
     document.getElementById("slotPurpose").textContent = slot.purpose;
