@@ -51,8 +51,12 @@
             <p class="rule-note" id="ruleNote"></p>
             <div class="folio">
               <section class="source-pane" aria-label="提示词来源全文">
-                <p class="section-label">对照原稿</p>
-                <label for="sourceSelect">选择内置初稿或关联旧稿</label>
+                <p class="section-label" id="sourceHeading">旧提示词全文</p>
+                <div class="review-actions source-switch">
+                  <button class="button quiet" type="button" id="showLegacyButton">查看旧提示词</button>
+                  <button class="button quiet" type="button" id="showCurrentButton">查看 v2 初稿</button>
+                </div>
+                <label for="sourceSelect">选择要查看的提示词全文</label>
                 <select id="sourceSelect"></select>
                 <p class="source-meta" id="sourceMeta"></p>
                 <textarea id="sourceText" readonly aria-label="选中来源的完整提示词" spellcheck="false"></textarea>
@@ -87,7 +91,7 @@
               <div class="review-help">修改正文后会取消通过状态。通过记录在导出中，运行链路仍待装载与场景验收。</div>
             </div>
             <div class="legacy">
-              <h3>关联旧提示词位</h3>
+              <h3>关联旧提示词（点击查看全文）</h3>
               <div class="legacy-list" id="legacyList"></div>
             </div>
           </div>

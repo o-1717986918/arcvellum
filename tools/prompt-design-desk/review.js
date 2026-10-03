@@ -97,7 +97,15 @@
     dom.sourceMeta.textContent = "内置快照 · v" + source.package_version + " · " +
       source.text.length + " 字符\nSHA-256 " + source.sha256;
     const legacy = id !== selected || byId[selected].scope === "legacy_review";
+    document.getElementById("sourceHeading").textContent = legacy ? "旧提示词全文" : "当前 v2 初稿全文";
+    document.getElementById("showLegacyButton").setAttribute("aria-pressed", String(legacy));
+    document.getElementById("showCurrentButton").setAttribute("aria-pressed", String(!legacy));
     document.getElementById("adoptSourceButton").disabled = !legacy || !model.usable(source.text);
+  }
+
+  function showSource(id) {
+    dom.sourceSelect.value = id;
+    renderSource();
   }
 
   function renderSources(slot) {
@@ -108,6 +116,8 @@
       option.textContent = (id === slot.id ? (slot.scope === "v2" ? "当前 v2 初稿 · " : "现有旧稿 · ") : "旧稿 · ") + id;
       dom.sourceSelect.append(option);
     });
+    dom.sourceSelect.value = slot.refs[0] || slot.id;
+    document.getElementById("showCurrentButton").hidden = slot.scope !== "v2";
     dom.legacyChecks.replaceChildren();
     slot.refs.forEach((id) => {
       const label = document.createElement("label");
@@ -121,9 +131,15 @@
     const refs = document.getElementById("legacyList");
     refs.replaceChildren();
     slot.refs.forEach((id) => {
-      const code = document.createElement("code");
-      code.textContent = id;
-      refs.append(code);
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = id;
+      button.title = model.sources[id].purpose;
+      button.addEventListener("click", () => {
+        showSource(id);
+        dom.sourceText.focus();
+      });
+      refs.append(button);
     });
     if (!slot.refs.length) refs.textContent = "此位直接评审现有顶层提示词。";
     renderSource();
@@ -177,6 +193,9 @@
   });
   dom.designNote.addEventListener("input", () => { record().note = dom.designNote.value; persist(); });
   dom.sourceSelect.addEventListener("change", renderSource);
+  document.getElementById("showLegacyButton").addEventListener("click", () =>
+    showSource(byId[selected].refs[0] || selected));
+  document.getElementById("showCurrentButton").addEventListener("click", () => showSource(selected));
   dom.searchSlots.addEventListener("input", renderNav);
   document.getElementById("copySourceButton").addEventListener("click", () => adopt([dom.sourceSelect.value], false));
   document.getElementById("adoptSourceButton").addEventListener("click", () => adopt([dom.sourceSelect.value], true));

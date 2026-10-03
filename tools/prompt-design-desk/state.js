@@ -49,6 +49,20 @@
     return record;
   }
 
+  function removeRetiredActorIntro(state) {
+    const record = state.slots["scene.v2.material.actor"];
+    const intro = library.migrations?.retired_actor_intro;
+    if (!intro) return;
+    for (const row of [record, record.undo].filter(Boolean)) {
+      const prefix = [intro, intro.replaceAll("\n", "\r\n")].find((text) => row.content.startsWith(text));
+      if (!prefix) continue;
+      row.content = row.content.slice(prefix.length);
+      row.origin.type = "edited";
+      row.review_decision = null;
+      row.status = "draft";
+    }
+  }
+
   function restore(raw) {
     const state = seed();
     if (!raw || !raw.slots || Array.isArray(raw.slots)) return state;
@@ -59,6 +73,7 @@
         state.slots[slot.id] = normalize(raw.slots[slot.id]);
       }
     });
+    removeRetiredActorIntro(state);
     return state;
   }
 
@@ -113,6 +128,7 @@
       matched++;
     });
     if (!matched) throw new Error("文件没有本设计台可识别的提示词 ID。");
+    removeRetiredActorIntro(next);
     return next;
   }
 

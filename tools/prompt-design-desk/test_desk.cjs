@@ -30,14 +30,24 @@ assert.equal(errors.length, 0, errors.map((error) => error.message).join("\n"));
 assert.equal(api.exportPayload().slot_count, 26);
 assert.equal(api.exportPayload().approved_count, 0);
 assert.equal(api.exportPayload().slots.filter((slot) => slot.scope === "v2").length, 20);
-assert.equal(Object.keys(model.sources).length, 63);
+assert.equal(Object.keys(model.sources).length, 64);
+assert.equal(d.getElementById("sourceText").value, model.sources[model.slots[0].refs[0]].text);
+assert.equal(d.getElementById("sourceHeading").textContent, "旧提示词全文");
+click("showCurrentButton");
 assert.equal(d.getElementById("sourceText").value, model.sources[model.slots[0].id].text);
+click("showLegacyButton");
+assert.equal(d.getElementById("sourceText").value, model.sources[model.slots[0].refs[0]].text);
 
 api.select("scene.v2.creator.create");
 const before = json(api.getState().slots["scene.v2.creator.create"]);
 sourceSelect.value = "scene.creator.create";
 sourceSelect.dispatchEvent(new w.Event("change"));
 assert.equal(d.getElementById("sourceText").value, model.sources["scene.creator.create"].text);
+const otherLegacy = d.querySelectorAll("#legacyList button")[1];
+otherLegacy.click();
+assert.equal(d.getElementById("sourceText").value, model.sources[otherLegacy.textContent].text);
+sourceSelect.value = "scene.creator.create";
+sourceSelect.dispatchEvent(new w.Event("change"));
 assert.match(d.getElementById("sourceMeta").textContent, /SHA-256/);
 click("adoptSourceButton");
 let current = api.getState().slots["scene.v2.creator.create"];
@@ -124,6 +134,28 @@ assert.equal(upgraded.window.PromptDesk.getState().slots["scene.v2.creator.creat
 assert.equal(upgraded.window.PromptDesk.exportPayload().approved_count, 0);
 assert.equal(upgraded.window.PromptDesk.exportPayload().slot_count, 26);
 upgraded.window.close();
+
+// Delete only the exact retired introduction, including in already saved/imported cards.
+const history = model.sources["scene.v2.material.actor@package-v2"].text;
+const cardWithEdits = history.replace("{{CORE_IDENTITY}}", "用户自己修改的身份区块");
+const migrated = open({
+  slots: { "scene.v2.material.actor": {
+    content: cardWithEdits, note: "保留我的备注", status: "ready",
+    review_decision: { decision: "approved", approved_content: cardWithEdits }
+  } }
+});
+const cardRecord = migrated.window.PromptDesk.getState().slots["scene.v2.material.actor"];
+assert.ok(cardRecord.content.startsWith("【PERSONA_LOAD】"));
+assert.ok(cardRecord.content.includes("用户自己修改的身份区块"));
+assert.equal(cardRecord.note, "保留我的备注");
+assert.equal(cardRecord.review_decision, null);
+migrated.window.close();
+const importedCard = api.importPayload({
+  schema: "arcvellum/prompt-design-submission/v2",
+  slots: [{ id: "scene.v2.material.actor", content: cardWithEdits, design_note: "导入备注" }]
+});
+assert.ok(importedCard.slots["scene.v2.material.actor"].content.startsWith("【PERSONA_LOAD】"));
+assert.equal(importedCard.slots["scene.v2.material.actor"].note, "导入备注");
 
 // 26-slot DOM is accessible and navigable; this is not a rendered layout test.
 assert.equal(d.querySelectorAll(".slot-button").length, 26);

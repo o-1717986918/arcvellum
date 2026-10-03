@@ -16,6 +16,20 @@ from literary_engineering_studio_engine.public.prompting import list_prompt_laye
 TOOL = Path(__file__).resolve().parent
 
 
+def include_actor_history(slots: list, sources: dict) -> str:
+    """Keep the previous template readable and identify its exact retired prefix."""
+    source_id = "scene.v2.material.actor@package-v2"
+    text = (TOOL / "history/scene.v2.material.actor.v2.md").read_text(encoding="utf-8").strip()
+    sources[source_id] = {
+        "id": source_id, "text": text, "package_version": 2,
+        "sha256": sha256(text.encode("utf-8")).hexdigest(),
+        "purpose": "历史 v2 角色卡（含已删除的前置说明）",
+        "editable": False, "owner": "Historical builtin snapshot",
+    }
+    next(slot for slot in slots if slot["id"] == "scene.v2.material.actor")["refs"].append(source_id)
+    return text[:text.index("【PERSONA_LOAD】")]
+
+
 def read_library() -> dict:
     slots = json.loads((TOOL / "slots.json").read_text(encoding="utf-8"))
     expected = {spec.layer_id for spec in list_prompt_layer_specs()
@@ -32,10 +46,12 @@ def read_library() -> dict:
             "purpose": spec.purpose, "editable": spec.editable, "owner": spec.owner,
         }
     assert all("[PENDING_PROMPT_DESIGN:" not in sources[layer_id]["text"] for layer_id in expected)
+    retired_intro = include_actor_history(slots, sources)
     return {
         "slots": slots, "sources": sources,
+        "migrations": {"retired_actor_intro": retired_intro},
         "manifest": {
-            "schema": "arcvellum/prompt-library-snapshot/v1", "scope": "registered_builtin_assets",
+            "schema": "arcvellum/prompt-library-snapshot/v1", "scope": "builtin_assets_with_history",
             "built_at": datetime.now(timezone.utc).isoformat(),
             "sources": [{key: source[key] for key in ("id", "package_version", "sha256")}
                         for source in sources.values()],

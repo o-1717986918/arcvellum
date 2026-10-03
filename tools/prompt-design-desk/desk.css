@@ -194,7 +194,8 @@
     .legacy { margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--line); }
     .legacy h3 { margin: 0 0 10px; font-size: 12px; color: var(--muted); }
     .legacy-list { display: flex; flex-wrap: wrap; gap: 6px; }
-    .legacy-list code { padding: 5px 7px; border: 1px solid #cbd9db; border-radius: 3px; background: #f3f7f7; font-size: 11px; }
+    .legacy-list button { padding: 5px 7px; border: 1px solid #cbd9db; border-radius: 3px; background: #f3f7f7; font: 11px Consolas, monospace; color: var(--teal); overflow-wrap: anywhere; text-align: left; }
+    .source-switch [aria-pressed="true"] { background: var(--teal-soft); border-color: var(--teal); }
     .editor-footer {
       display: flex;
       flex-wrap: wrap;
