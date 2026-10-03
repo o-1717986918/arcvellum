@@ -60,7 +60,7 @@ def _style_payload(root: Path, style_sources: list[str]) -> dict[str, Any]:
     owner_style = read_owner_style_directive(root)
     return {
         "mounted": {"status": "mounted" if mounted_style else "missing",
-                    "content": mounted_style[:4500], "complete": len(mounted_style) <= 4500,
+                    "content": mounted_style, "complete": True,
                     "source_paths": style_sources},
         "author_directive": {"status": "active" if owner_style["active"] else "missing",
                              "content": str(owner_style["content"]),

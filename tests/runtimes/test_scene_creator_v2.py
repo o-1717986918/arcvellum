@@ -186,12 +186,12 @@ class SceneCreatorV2Tests(unittest.TestCase):
         from literary_engineering_studio_engine.public.prompting import list_prompt_layer_specs
         layers = {spec.layer_id: spec.default_text for spec in list_prompt_layer_specs()
                   if spec.layer_id.startswith("scene.v2.") or spec.layer_id == "project_agent.creator_persona.v2"}
-        self.assertEqual(len(layers), 20)
+        self.assertEqual(len(layers), 21)
         assert_v2_prompts_ready(layers)
         runtime = PiSceneTransactionRuntime({}, project_root=self.project, data_root=self.studio)
         self.assertFalse(runtime._uses_creator_v2("tx-default"))
 
-    def test_opted_in_transaction_uses_agent_before_prose(self) -> None:
+    def test_frozen_legacy_v2_transaction_uses_agent_before_prose(self) -> None:
         CreatorPersonaStore(self.studio).save(
             self.project, "保持误会的张力，让对话和环境共同承接前一场的疑问。", reason="作品初始创作意图")
         brief = SceneBrief("s1", "寻找信", "误会尚未解开", ("阿青",), (), (), (),
@@ -240,6 +240,14 @@ class SceneCreatorV2Tests(unittest.TestCase):
                 "layers": [], "texts": {key: "designed" for key in ids},
             },
         )
+        # A pre-rebuild transaction retains its JSON contract and frozen text.
+        frozen_path = self.studio / "scene-transactions/tx-live/prompt_assembly_v2.json"
+        frozen_path.parent.mkdir(parents=True)
+        from literary_engineering_studio_engine.public.prompting import list_prompt_layer_specs
+        frozen_path.write_text(json.dumps({"schema": "arcvellum/prompt-assembly/v1", "digest": "old-v2",
+            "texts": {spec.layer_id: "designed" for spec in list_prompt_layer_specs()
+                      if (spec.layer_id.startswith("scene.v2.") and spec.layer_id != "scene.v2.transport.extractor")
+                      or spec.layer_id == "project_agent.creator_persona.v2"}}, ensure_ascii=False), encoding="utf-8")
         result = runtime.create_scene("tx-live", brief)
         self.assertIn("空信封", result.prose)
         self.assertEqual((gateway.creator_calls, gateway.material_calls), (2, 1))

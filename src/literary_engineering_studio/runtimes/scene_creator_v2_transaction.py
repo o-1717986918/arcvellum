@@ -26,9 +26,11 @@ from .scene_creator_v2_materials import (
 )
 from .scene_creator_workspace import SceneCreatorWorkspace
 from .scene_material_library import SceneMaterialLibrary
+from .scene_creator_natural import NaturalCreatorMixin
+from .scene_natural_output import NATURAL_RESPONSE_MODE, creator_style, render_style
 
 
-class SceneCreatorV2Mixin:
+class SceneCreatorV2Mixin(NaturalCreatorMixin):
     """Keep the versioned opt-in path separate from the committed scene pipeline."""
 
 
@@ -47,13 +49,15 @@ class SceneCreatorV2Mixin:
         if saved is not None:
             return saved
         ids = tuple(spec.layer_id for spec in list_prompt_layer_specs()
-                    if spec.layer_id.startswith("scene.v2.")) + ("project_agent.creator_persona.v2",)
+                    if spec.layer_id.startswith("scene.v2.") and spec.layer_id not in {
+                        "scene.v2.material.shared.protocol", "scene.v2.material.output.protocol"}) + ("project_agent.creator_persona.v2",)
         if self._prompt_snapshot_provider is not None:
             snapshot = self._prompt_snapshot_provider(ids, self._project_root)
         else:
             layers = [resolve_prompt_layer(prompt_layer_spec(layer_id)) for layer_id in ids]
             snapshot = {**prompt_assembly_manifest(layers),
                         "texts": {layer.layer_id: layer.text for layer in layers}}
+        snapshot["response_mode"] = NATURAL_RESPONSE_MODE
         _atomic_json(path, snapshot)
         return snapshot
 
@@ -120,8 +124,11 @@ class SceneCreatorV2Mixin:
             "creative_intent": self._creator_memory(transaction_id, brief).render_context(),
             "material_index": index,
         }, ensure_ascii=False)
-        review = review_result_from_payload(_answer_payload(
-            self._run(prompt, role="reviewer", transaction_id=transaction_id)))
+        if snapshot.get("response_mode") == NATURAL_RESPONSE_MODE:
+            review = self._review_natural(transaction_id, snapshot["texts"], _briefing, brief, result, verification, index)
+        else:
+            review = review_result_from_payload(_answer_payload(
+                self._run(prompt, role="reviewer", transaction_id=transaction_id)))
         _atomic_json(cache, {"decision": review.decision.value, "summary": review.summary,
                              "revision_instructions": list(review.revision_instructions),
                              "evidence": list(review.evidence)})
@@ -154,6 +161,9 @@ class SceneCreatorV2Mixin:
         coordinator: SceneCreatorV2MaterialCoordinator, *, mode: str,
         revision_context: dict[str, Any] | None = None,
     ) -> CreativeResult:
+        if "scene.v2.transport.extractor" in layers:
+            return self._ask_natural_creator(transaction_id, brief, layers, briefing, workspace,
+                coordinator, mode=mode, revision_context=revision_context)
         memory_path = self._cache_path(transaction_id, "scene_creator_memory.json")
         memory = SceneCreatorMemoryV1.load(memory_path, brief.scene_id, request_limit_chars=160_000)
         for _ in range(16):
@@ -213,9 +223,12 @@ class SceneCreatorV2Mixin:
         briefing: dict[str, Any], workspace: SceneCreatorWorkspace,
         coordinator: SceneCreatorV2MaterialCoordinator,
     ) -> str:
+        literary_identity = layers["scene.v2.creator.identity"]
+        if "scene.v2.transport.extractor" in layers:
+            literary_identity = render_style(literary_identity, creator_style(briefing))
         identity = "\n\n".join((
             layers["scene.v2.creator.protocol"],
-            layers["scene.v2.creator.identity"], briefing["creator_persona"]["text"],
+            literary_identity, briefing["creator_persona"]["text"],
         ))
         envelope = json.dumps({
             "schema": "arcvellum/scene-creator/v2", "system_prompt": identity,
@@ -228,6 +241,22 @@ class SceneCreatorV2Mixin:
                            transaction_id, envelope, "worker")
 
     def _invoke_v2_material(self, call: MaterialInvocationV2, transaction_id: str) -> dict[str, Any]:
+        answer, initialized = self._material_original(call, transaction_id)
+        if call.response_mode == NATURAL_RESPONSE_MODE:
+            layers = self._v2_prompt_snapshot(transaction_id)["texts"]
+            payload = self._natural_processor(transaction_id, layers).process(answer, kind="material",
+                context={"role": call.role, "invitation": call.prompt, "attachment_manifest": call.attachment_manifest})
+        else:
+            payload = _answer_payload(answer)
+        return {**payload, "__answer": answer,
+                "__initialization_answer": initialized}
+
+    def _material_original(self, call: MaterialInvocationV2, transaction_id: str) -> tuple[str, str]:
+        path = self._cache_path(transaction_id, f"v2/material-originals/{call.request_id}.json")
+        saved = _read_json(path) if call.response_mode == NATURAL_RESPONSE_MODE else None
+        if saved is not None:
+            self._cache_hits += 1
+            return saved["answer"], saved["initialized"]
         if call.role == "character-actor":
             answer, initialized = self._run_actor_turn(
                 call.initialization, call.initialization_answer, call.history,
@@ -238,8 +267,9 @@ class SceneCreatorV2Mixin:
                 call.role, call.initialization, call.history, call.prompt,
                 transaction_id=transaction_id,
             )
-        return {**_answer_payload(answer), "__answer": answer,
-                "__initialization_answer": initialized}
+        if call.response_mode == NATURAL_RESPONSE_MODE:
+            _atomic_json(path, {"answer": answer, "initialized": initialized})
+        return answer, initialized
 
 def _read_json(path: Path) -> dict[str, Any] | None:
     if not path.is_file():

@@ -14,6 +14,7 @@ from literary_engineering_studio_engine.public.literary import (
 )
 
 from .scene_creator_workspace import SceneCreatorWorkspace
+from .scene_natural_output import NATURAL_RESPONSE_MODE, render_style
 
 
 _KIND_ROLE = {
@@ -36,6 +37,7 @@ class MaterialInvocationV2:
     history: tuple[tuple[str, str], ...] = ()
     initialization_answer: str = ""
     character_card_digest: str = ""
+    response_mode: str = ""
 
 
 def assert_v2_prompts_ready(layers: Mapping[str, str]) -> None:
@@ -49,6 +51,9 @@ def assert_v2_prompts_ready(layers: Mapping[str, str]) -> None:
         *(f"scene.v2.material.{kind}" for kind in _KIND_ROLE),
         "project_agent.creator_persona.v2",
     )
+    if "scene.v2.transport.extractor" in layers:
+        required = tuple(key for key in required if key not in {
+            "scene.v2.material.shared.protocol", "scene.v2.material.output.protocol"}) + ("scene.v2.transport.extractor",)
     pending = [key for key in required if not str(layers.get(key) or "").strip()
                or _PENDING in str(layers[key])]
     if pending:
@@ -64,15 +69,8 @@ def render_material_invocation(
     known = [entry for entry in attachments if entry.get("knowledge") == "known"]
     reference = [entry for entry in attachments if entry.get("knowledge") == "reference"]
     general = [entry for entry in attachments if not entry.get("knowledge")]
-    material_template = str(layers[f"scene.v2.material.{request.kind}"])
-    shared = str(layers["scene.v2.material.shared.protocol"])
-    output = str(layers["scene.v2.material.output.protocol"])
-    card_digest = ""
-    if request.kind == "actor":
-        if request.character_card is None:
-            raise ValueError("actor request needs a creator-authored character_card")
-        material_template = render_actor_character_card(material_template, request.character_card)
-        card_digest = _card_digest(request.character_card)
+    natural = "scene.v2.transport.extractor" in layers
+    system, card_digest = _material_system(request, layers, natural)
     task = {
         "schema": "arcvellum/material-invocation/v2",
         "scene_id": scene_id,
@@ -92,10 +90,27 @@ def render_material_invocation(
         "path", "line_range", "status", "knowledge", "file_sha256", "content_sha256",
     )} for entry in attachments)
     return MaterialInvocationV2(
-        _KIND_ROLE[request.kind], shared + "\n\n" + material_template + "\n\n" + output,
-        json.dumps(task, ensure_ascii=False), request_id, manifest,
+        _KIND_ROLE[request.kind], system,
+        _natural_invitation(task) if natural else json.dumps(task, ensure_ascii=False), request_id, manifest,
         character_card_digest=card_digest,
+        response_mode=NATURAL_RESPONSE_MODE if natural else "",
     )
+
+
+def _material_system(request, layers, natural):
+    template = str(layers[f"scene.v2.material.{request.kind}"])
+    digest = ""
+    if request.kind == "actor":
+        if request.character_card is None:
+            raise ValueError("actor request needs a creator-authored character_card")
+        template = render_actor_character_card(template, request.character_card)
+        digest = _card_digest(request.character_card)
+    elif natural:
+        template = render_style(template, request.style_direction)
+    if natural:
+        return template, digest
+    return "\n\n".join((layers["scene.v2.material.shared.protocol"], template,
+                         layers["scene.v2.material.output.protocol"])), digest
 
 
 class SceneCreatorV2MaterialCoordinator:
@@ -167,7 +182,14 @@ class SceneCreatorV2MaterialCoordinator:
         if request.character_card is None:
             raise ValueError("first actor request needs a creator-authored character_card")
         self._write(path, request.character_card.to_dict())
+        self._publish_actor_card(request.character_card)
         return request.character_card
+
+    def _publish_actor_card(self, card: ActorCharacterCardV1) -> None:
+        work_id = self.workspace.scratch_root.name
+        data_root = self.workspace.scratch_root.parent.parent
+        self._write(data_root / "character-card-library" / work_id / (_card_digest(card) + ".json"),
+            {"card": card.to_dict(), "scene_id": self.scene_id, "digest": _card_digest(card)})
 
     def creator_card_context(self) -> dict[str, Any]:
         cards = []
@@ -271,6 +293,12 @@ def _parse_candidates(response: Mapping[str, Any], request: SceneMaterialRequest
 
 def _card_digest(card: ActorCharacterCardV1) -> str:
     return sha256(json.dumps(card.to_dict(), ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
+
+
+def _natural_invitation(task: Mapping[str, Any]) -> str:
+    return (str(task["author_prompt"]) + "\n\n本次创作资料：\n"
+            + json.dumps({key: value for key, value in task.items() if key != "author_prompt"}, ensure_ascii=False)
+            + "\n\n请以自然的文学文字回应这次委托。")
 
 
 def _candidate_text_focus(item: Mapping[str, Any], actor_fields: Mapping[str, str]) -> tuple[str, str]:

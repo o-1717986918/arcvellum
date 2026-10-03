@@ -2,6 +2,7 @@
 
 import json
 import unittest
+from pathlib import Path
 
 from literary_engineering_studio_engine.public.literary import (
     CreativeIntentV1, parse_creator_material_plan, parse_scene_material_requests_v3,
@@ -14,7 +15,9 @@ from literary_engineering_studio.runtimes.scene_creator_material_policy import m
 
 
 def json_examples(layer_id):
-    return [json.loads(line) for line in prompt_layer_spec(layer_id).default_text.splitlines()
+    # These JSON examples belong to frozen pre-rebuild transactions.
+    path = Path(__file__).resolve().parents[2] / "tools/prompt-design-desk/history/2026-10-03" / (layer_id + ".md")
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()
             if line.startswith("{")]
 
 
