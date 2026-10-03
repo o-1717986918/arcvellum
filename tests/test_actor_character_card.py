@@ -21,7 +21,7 @@ class ActorCharacterCardTests(unittest.TestCase):
         self.assertEqual(card.to_dict(), self.payload)
         rendered = render_actor_character_card(self.template, card)
         self.assertIn("目标角色：阿青", rendered)
-        self.assertIn("director_reference_archive", rendered)
+        self.assertTrue(rendered.startswith("【PERSONA_LOAD】"))
         self.assertNotIn("{{", rendered)
         self.assertNotIn("DIRECTOR_ONLY", rendered)
         self.assertNotIn("characters/阿青.yaml:1", rendered)

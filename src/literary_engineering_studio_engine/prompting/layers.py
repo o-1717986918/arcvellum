@@ -77,7 +77,7 @@ _LAYER_METADATA = (
     ("scene.v2.review", "stage", "新版场景独立审读", True, "Studio", 2),
     ("scene.v2.review.protocol", "protocol", "新版审读证据与交付合同", False, "Studio", 2),
     ("scene.v2.material.shared.protocol", "protocol", "取材 Agent 固定权限与来源边界", False, "Engine literary", 2),
-    ("scene.v2.material.actor", "identity", "角色卡系统提示词模板", True, "Engine literary", 2),
+    ("scene.v2.material.actor", "identity", "角色卡系统提示词模板", True, "Engine literary", 3),
     ("scene.v2.material.environment", "stage", "环境观察委托模板", True, "Engine literary", 2),
     ("scene.v2.material.character-description", "stage", "人物描写委托模板", True, "Engine literary", 2),
     ("scene.v2.material.event-narration", "stage", "事件叙述委托模板", True, "Engine literary", 2),
