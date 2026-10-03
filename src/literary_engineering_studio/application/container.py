@@ -15,6 +15,7 @@ from .prompt_workbench import PromptWorkbenchService
 from .style.mount_service import StyleMountApplicationService
 from ..observability.agent_session_tracking import AgentSessionEventProjector
 from ..persistence.scene_transactions import SceneTransactionRepository
+from .character_chat import CharacterChatService
 
 
 @dataclass(frozen=True)
@@ -26,6 +27,7 @@ class ApplicationServices:
     style_mounts: StyleMountApplicationService
     session_events: AgentSessionEventProjector
     prompts: PromptWorkbenchService | None = None
+    character_chat: CharacterChatService | None = None
 
 
 @dataclass(frozen=True)
@@ -84,6 +86,11 @@ def build_application_container(
         prompt_resolver=(lambda layer_id, root: prompts.resolve(layer_id, root).text)
         if prompts is not None else None,
     )
+    character_chat = None
+    if ports.character_chats and ports.character_conversation and ports.character_chat_archive:
+        character_chat = CharacterChatService(ports.character_chats, ports.character_conversation,
+            ports.character_chat_archive, prompt_resolver=(lambda key, root: prompts.resolve(key, root).text)
+            if prompts is not None else None)
     return ApplicationContainer(
         config=config,
         ports=ports,
@@ -95,6 +102,7 @@ def build_application_container(
             style_mounts=style_mounts,
             session_events=session_events,
             prompts=prompts,
+            character_chat=character_chat,
         ),
     )
 

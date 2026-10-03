@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Protocol
 
 from .persistence_ports import PersistencePorts
+from .character_chat_ports import CharacterChatArchivePort, CharacterChatRepositoryPort, CharacterConversationPort
 
 
 class LiveEventPublisherPort(Protocol):
@@ -87,6 +88,9 @@ class ApplicationPorts:
     runtime_ids: tuple[str, ...]
     runner_status_loader: RunnerStatusLoader
     model_connection_status_loader: ModelConnectionStatusLoader
+    character_chats: CharacterChatRepositoryPort | None = None
+    character_conversation: CharacterConversationPort | None = None
+    character_chat_archive: CharacterChatArchivePort | None = None
 
     @property
     def store(self) -> Any:
