@@ -42,11 +42,13 @@ class SceneMaterialRequestV3:
     def to_dict(self) -> dict[str, Any]:
         result = {"kind": self.kind, "target": self.target, "purpose": self.purpose,
                 "scene_moment": self.scene_moment, "cue": self.cue,
-                "author_prompt": self.author_prompt, "style_direction": self.style_direction,
+                "author_prompt": self.author_prompt,
                 "archive_attachments": [item.to_dict() for item in self.archive_attachments],
                 "beat_id": self.beat_id, "scene_change": self.scene_change}
         if self.character_card is not None:
             result["character_card"] = self.character_card.to_dict()
+        if self.style_direction:
+            result["style_direction"] = self.style_direction
         return result
 
 
