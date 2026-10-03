@@ -20,7 +20,7 @@ from .factory import build_project_agent_runtime
 from .delegated_goal import DelegatedGoal, DelegatedGoalObserver, goal_snapshot
 from .prompt_policy import (
     creator_persona_guidance, delegated_goal_followup_prompt, delegated_scene_checkpoint_prompt,
-    system_prompt, turn_prompt,
+    system_prompt, turn_prompt, natural_prompts_enabled, project_prompt_id,
 )
 from .runtime import ProjectAgentRuntime
 from .session_state import active_turn_payload, turn_reference
@@ -309,6 +309,8 @@ class ProjectAgentService:
         message: str,
         session: dict[str, Any],
     ) -> ProjectAgentTurnRequest:
+        natural = natural_prompts_enabled(self.config)
+        prompt_reader = self._prompt_reader(root)
         allowed_tools = (*available_read_tools(self.dependencies), *available_action_tools(self.actions))
         persona = (
             self.persona_loader(root)
@@ -319,16 +321,22 @@ class ProjectAgentService:
         return ProjectAgentTurnRequest(
             session_id=session_id,
             turn_id=turn_id,
-            prompt=turn_prompt(message, session),
+            prompt=turn_prompt(message, session, natural=natural, prompt_reader=prompt_reader),
             system_prompt=system_prompt(
                 persona, write_enabled=self.actions is not None,
-                literary_guidance=self.prompt_resolver(
-                    "project_agent.creative_direction", root if (root / "project.yaml").is_file() else None,
-                ) if self.prompt_resolver is not None else "",
+                natural=natural, prompt_reader=prompt_reader,
+                literary_guidance=prompt_reader(project_prompt_id("project_agent.creative_direction", natural))
+                if prompt_reader is not None else "",
                 creator_persona_guidance=creator_persona_guidance(self.config, self.prompt_resolver, root),
             ),
             allowed_tools=allowed_tools,
         )
+
+    def _prompt_reader(self, root: Path):
+        if self.prompt_resolver is None:
+            return None
+        scope = root if (root / "project.yaml").is_file() else None
+        return lambda layer_id: self.prompt_resolver(layer_id, scope)
 
     def _run_runtime(
         self,
@@ -369,6 +377,8 @@ class ProjectAgentService:
         cancel_event: threading.Event | None,
         emit: EventSink,
     ) -> ProjectAgentTurnResult:
+        natural = natural_prompts_enabled(self.config)
+        prompt_reader = self._prompt_reader(root)
         while delegated_goal[0] is not None and delegated_goal[0].needs_observation:
             if self.goal_observer is None:
                 raise RuntimeError("Project Agent goal observer is unavailable")
@@ -405,8 +415,10 @@ class ProjectAgentService:
                 session_id=request.session_id,
                 turn_id=request.turn_id,
                 prompt=(
-                    delegated_scene_checkpoint_prompt(message, terminal_run, current_goal.work_id)
-                    if checkpoint else delegated_goal_followup_prompt(message, result.answer, terminal_run)
+                    delegated_scene_checkpoint_prompt(message, terminal_run, current_goal.work_id,
+                        natural=natural, prompt_reader=prompt_reader)
+                    if checkpoint else delegated_goal_followup_prompt(message, result.answer, terminal_run,
+                        natural=natural, prompt_reader=prompt_reader)
                 ),
                 system_prompt=request.system_prompt,
                 allowed_tools=request.allowed_tools,
