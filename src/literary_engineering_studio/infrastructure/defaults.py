@@ -19,6 +19,9 @@ from ..runtime.process_manager import ProcessManager
 from ..runtime.runtime_pool import NullRuntimePool
 from ..runtime.supervisor import WorkerSupervisor
 from ..runtimes import DEFAULT_RUNTIME_REGISTRY, agent_runner_status
+from ..persistence.character_chats import FileCharacterChatRepository
+from ..runtime.role_conversation import RoleConversationGateway
+from .character_chat import CharacterChatArchiveAdapter, CharacterChatRuntimeAdapter
 
 
 def build_default_application_ports(config: dict[str, Any]) -> ApplicationPorts:
@@ -56,6 +59,10 @@ def build_default_application_ports(config: dict[str, Any]) -> ApplicationPorts:
         runtime_ids=DEFAULT_RUNTIME_REGISTRY.ids(),
         runner_status_loader=agent_runner_status,
         model_connection_status_loader=model_connection_status,
+        character_chats=FileCharacterChatRepository(data_root),
+        character_conversation=CharacterChatRuntimeAdapter(RoleConversationGateway(
+            config, data_root=data_root / "character-chat-runs")),
+        character_chat_archive=CharacterChatArchiveAdapter(data_root),
     )
 
 
