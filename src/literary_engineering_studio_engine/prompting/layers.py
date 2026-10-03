@@ -238,6 +238,11 @@ def render_prompt_template(layer_id: str, values: tuple[object, ...]) -> str:
     if spec.responsibility != "protocol" or spec.editable:
         raise ValueError("prompt template must be a fixed protocol layer")
     template = engine_path("templates", "prompt_layers", f"{layer_id}.md").read_text(encoding="utf-8")
+    return render_prompt_text(template, values)
+
+
+def render_prompt_text(template: str, values: tuple[object, ...]) -> str:
+    """Fill validated slots in editable prose without recursively interpreting data."""
     indexes = {int(match.group(1)) for match in _TEMPLATE_SLOT.finditer(template)}
     if indexes != set(range(len(values))):
         raise ValueError("prompt template slots do not match supplied values")
