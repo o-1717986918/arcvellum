@@ -153,6 +153,12 @@ def _conversation_prompt(role: str, prompt: str) -> tuple[str, bool]:
     scene_creator = role == "worker" and _scene_creator_envelope(prompt)
     if scene_creator or role in _INITIALIZED_ROLES:
         return prompt, scene_creator
+    try:
+        envelope = json.loads(prompt)
+    except json.JSONDecodeError:
+        envelope = None
+    if isinstance(envelope, dict) and envelope.get("schema") == "arcvellum/default-conversation/v1":
+        return prompt, False
     return json.dumps({
         "schema": "arcvellum/default-conversation/v1",
         "system_prompt": prompt_layer_spec("pi.conversation.system").default_text,
