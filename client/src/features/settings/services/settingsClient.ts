@@ -8,10 +8,15 @@ export interface ThinkingPreferences { creative: ThinkingLevel; project: Thinkin
 interface ThinkingResponse { ok: boolean; preferences: ThinkingPreferences }
 export interface ScenePerformancePreferences { enabled: boolean; max_actor_calls: number }
 interface ScenePerformanceResponse { ok: boolean; preferences: ScenePerformancePreferences }
+export interface ToneExperimentPreferences {
+  enabled: boolean; rule_count: number; rule_source: string; source_commit: string;
+  prompt_layer_id: string; audit_directory: string;
+}
+interface ToneExperimentResponse { ok: boolean; preferences: ToneExperimentPreferences }
 export interface PromptLayerSummary {
   layer_id: string; responsibility: string; purpose: string; source: string; version: string;
   digest: string; editable: boolean; default_text: string; effective_text: string; owner: string;
-  usage_status: "active" | "formal-route"; flow_stage: string;
+  usage_status: "active" | "formal-route" | "opt-in" | "historical" | "experimental"; flow_stage: string;
 }
 export interface PromptFlowNode { id: string; label: string; count?: number; layer_id?: string; children?: PromptFlowNode[] }
 export interface PromptCatalog { schema: string; layers: PromptLayerSummary[];
@@ -52,6 +57,10 @@ export function createSettingsClient(
       { method: "PUT", body: JSON.stringify({ role, level }) },
     ),
     scenePerformancePreferences: () => transport.request<ScenePerformanceResponse>("/model-connections/pi-worker/scene-performance"),
+    toneExperimentPreferences: () => transport.request<ToneExperimentResponse>("/experiments/less-ai-tone"),
+    saveToneExperimentPreferences: (enabled: boolean) => transport.request<ToneExperimentResponse>(
+      "/experiments/less-ai-tone", { method: "PUT", body: JSON.stringify({ enabled }) },
+    ),
     saveScenePerformancePreferences: (preferences: ScenePerformancePreferences) => transport.request<ScenePerformanceResponse>(
       "/model-connections/pi-worker/scene-performance",
       { method: "PUT", body: JSON.stringify(preferences) },

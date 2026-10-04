@@ -4,6 +4,7 @@ import { Bot, Check, CloudCog, Download, FileJson, FolderCog, Gauge, Info, KeyRo
 import { projectsClient } from "@/features/projects/services/projectsClient";
 import { settingsClient, type ScenePerformancePreferences, type ThinkingLevel, type ThinkingRole } from "@/features/settings/services/settingsClient";
 import PromptWorkbench from "@/features/settings/PromptWorkbench.vue";
+import LessAiToneExperiment from "@/features/settings/LessAiToneExperiment.vue";
 import { defaultConnectionPresets } from "@/features/settings/settingsDefaults";
 import { DesktopBridge } from "@/services/desktopBridge";
 import { formatCount } from "@/services/presentation";
@@ -386,6 +387,8 @@ function pathValue(key: string): string {
         </label>
       </div>
     </section>
+
+    <LessAiToneExperiment />
 
     <section class="bootstrap-status-panel">
       <header><div><span class="eyebrow">启动与恢复</span><h2>这次启动发生了什么</h2></div><span>{{ store.bootstrap?.phase === 'ready' ? '全部就绪' : '可降级运行' }}</span></header>

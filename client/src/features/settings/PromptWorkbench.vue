@@ -186,7 +186,7 @@ async function previewAssembly(): Promise<void> {
       </nav>
       <div v-if="selectedLayer" class="prompt-workbench-detail">
         <div class="prompt-detail-heading"><div><h3>{{ selectedLayer.purpose }}</h3><p>{{ selectedLayer.layer_id }}</p></div><span>{{ selectedLayer.editable ? '可编辑提示词' : '固定结构模板 · 只读' }}</span></div>
-        <p class="prompt-layer-meta">当前采用 {{ selectedLayer.source }} 第 {{ selectedLayer.version }} 版 · {{ selectedLayer.owner }} · {{ selectedLayer.usage_status === 'formal-route' ? '正式任务' : '创作流程' }}</p>
+        <p class="prompt-layer-meta">当前采用 {{ selectedLayer.source }} 第 {{ selectedLayer.version }} 版 · {{ selectedLayer.owner }} · {{ { 'formal-route': '正式任务', 'active': '创作流程', 'opt-in': '待启用', 'historical': '历史留档', 'experimental': '实验开关控制' }[selectedLayer.usage_status] }}</p>
         <p class="prompt-layer-meta">{{ hasDiff ? '有效版本与随包默认不同' : '当前使用随包默认文本' }}</p>
         <div v-if="selectedLayer.editable" class="prompt-workbench-columns">
           <label class="field"><span>随包默认</span><textarea :value="selectedLayer.default_text" readonly rows="12" /></label>
