@@ -17,6 +17,24 @@ beforeEach(() => {
     unit: "han/sentence", group: "primary", observed: 12, available: true, floor: 1, ceiling: 500, suggested: { min: 5, max: 20 } }] });
 });
 describe("stylometry workbench", () => {
+  it("observation preview retains formal style while guided replacement uses the selected fragment", async () => {
+    mocks.workbench.mockResolvedValue({ ...workbench, versions: [{ version_id: "v1", title: "实验片段" }] });
+    mocks.version.mockResolvedValue({ version_id: "v1", profile_id: "p1", title: "实验片段", intent: "",
+      fragment_text: "自由片段", controls_json: JSON.stringify(controls), dependency_json: "", compiled_json: "{}" });
+    const wrapper = mount(StylometryWorkbench, { props: { projectRoot: "work-one" } });
+    await flushPromises();
+    await wrapper.findAll("button").find(item => item.text().startsWith("实验片段"))!.trigger("click");
+    await flushPromises();
+    const options = wrapper.findAll("select");
+    await options[0]!.setValue("replace"); await options[1]!.setValue("observe");
+    const preview = () => wrapper.find(".stylo-content > section:last-child pre").text();
+    expect(preview()).toContain("作者方向"); expect(preview()).toContain("正式文风");
+    expect(preview()).not.toContain("自由片段");
+    await options[1]!.setValue("guide");
+    expect(preview()).toContain("作者方向"); expect(preview()).toContain("自由片段");
+    expect(preview()).not.toContain("正式文风");
+    wrapper.unmount();
+  });
   it("matches partial version controls by metric ID and adds omitted axes explicitly", async () => {
     mocks.workbench.mockResolvedValue({ ...workbench, versions: [{ version_id: "partial", title: "部分指标" }] });
     const second = { id: "paragraph_length_han", label: "段落呼吸", unit: "han/paragraph", group: "primary",

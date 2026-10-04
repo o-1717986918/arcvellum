@@ -20,7 +20,7 @@ export function useStylometry(root: Ref<string>) {
     dependency.value !== selectedVersion.value.dependency_json ||
     JSON.stringify(controls.value) !== JSON.stringify(JSON.parse(selectedVersion.value.controls_json)))));
   const combined = computed(() => [workbench.value?.style_context.author_directive,
-    combine.value === "append" ? workbench.value?.style_context.formal : "",
+    usage.value === "guide" && combine.value === "replace" ? "" : workbench.value?.style_context.formal,
     usage.value === "guide" ? fragment.value : ""].filter(Boolean).join("\n\n"));
 
   async function run<T>(request: (project: string) => Promise<T>, apply: (result: T) => void): Promise<void> {
