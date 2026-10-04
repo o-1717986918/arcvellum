@@ -1,5 +1,7 @@
 import { mount, flushPromises } from "@vue/test-utils";
 import { describe, expect, it, vi, beforeEach } from "vitest";
+import { defineComponent, ref } from "vue";
+import { useStylometry } from "../stores/useStylometry";
 import StylometryWorkbench from "./StylometryWorkbench.vue";
 const mocks = vi.hoisted(() => ({ workbench: vi.fn(), jobs: vi.fn(), profile: vi.fn(), parameters: vi.fn(),
   compile: vi.fn(), save: vi.fn(), mount: vi.fn(), measure: vi.fn(), version: vi.fn() }));
@@ -17,6 +19,27 @@ beforeEach(() => {
     unit: "han/sentence", group: "primary", observed: 12, available: true, floor: 1, ceiling: 500, suggested: { min: 5, max: 20 } }] });
 });
 describe("stylometry workbench", () => {
+  it("clears measurements on version and body changes and discards replies for edited text", async () => {
+    let desk!: ReturnType<typeof useStylometry>;
+    const wrapper = mount(defineComponent({ setup() { desk = useStylometry(ref("work-one")); return () => null; } }));
+    await flushPromises();
+    mocks.version.mockResolvedValue({ version_id: "v1", profile_id: "p1", title: "第一版", intent: "",
+      fragment_text: "自由片段", controls_json: JSON.stringify(controls), dependency_json: "", compiled_json: "{}" });
+    await desk.selectVersion("v1");
+    desk.text.value = "旧正文";
+    mocks.measure.mockResolvedValue({ measurement: { axes: {} }, targets: [] });
+    await desk.measure(); expect(desk.report.value).not.toBeNull();
+    await desk.selectVersion("v1"); expect(desk.report.value).toBeNull();
+    await desk.measure(); desk.text.value = "新正文"; expect(desk.report.value).toBeNull();
+    let resolve!: (value: unknown) => void;
+    mocks.measure.mockReturnValueOnce(new Promise(done => { resolve = done; }));
+    const pending = desk.measure(); desk.text.value = "又一次修改";
+    resolve({ measurement: { axes: {} }, targets: [] }); await pending;
+    expect(desk.report.value).toBeNull();
+    await desk.measure(); expect(desk.report.value).not.toBeNull();
+    await desk.selectProfile("p1"); expect(desk.report.value).toBeNull();
+    wrapper.unmount();
+  });
   it("observation preview retains formal style while guided replacement uses the selected fragment", async () => {
     mocks.workbench.mockResolvedValue({ ...workbench, versions: [{ version_id: "v1", title: "实验片段" }] });
     mocks.version.mockResolvedValue({ version_id: "v1", profile_id: "p1", title: "实验片段", intent: "",

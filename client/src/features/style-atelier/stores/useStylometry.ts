@@ -46,7 +46,7 @@ export function useStylometry(root: Ref<string>) {
     return run(async project => ({ profile: await client.profile(project, id), parameters: await client.parameters(project, id) }), result => {
       profile.value = result.profile; metrics.value = result.parameters.metrics; controls.value = result.parameters.controls;
       title.value = result.profile.title; dependency.value = ""; fragment.value = "";
-      selectedVersion.value = null; compiled.value = null; tab.value = "parameters";
+      selectedVersion.value = null; compiled.value = null; report.value = null; tab.value = "parameters";
     });
   }
   function selectVersion(id: string): Promise<void> {
@@ -58,7 +58,7 @@ export function useStylometry(root: Ref<string>) {
       selectedVersion.value = result.version; profile.value = result.profile; metrics.value = result.parameters.metrics;
       controls.value = JSON.parse(result.version.controls_json); dependency.value = result.version.dependency_json;
       title.value = result.version.title; intent.value = result.version.intent; fragment.value = result.version.fragment_text;
-      compiled.value = JSON.parse(result.version.compiled_json); tab.value = "mount";
+      compiled.value = JSON.parse(result.version.compiled_json); report.value = null; tab.value = "mount";
     });
   }
   function request(project: string) {
@@ -75,7 +75,8 @@ export function useStylometry(root: Ref<string>) {
     return run(async project => ({ version: await client.save({ ...request(project), fragment_override: fragment.value || null }),
       workbench: await client.workbench(project) }), result => {
       selectedVersion.value = result.version; workbench.value = result.workbench; fragment.value = result.version.fragment_text;
-      compiled.value = JSON.parse(result.version.compiled_json); notice.value = "已保存新版本。选择使用方式并挂载到后续场景。";
+      compiled.value = JSON.parse(result.version.compiled_json); report.value = null;
+      notice.value = "已保存新版本。选择使用方式并挂载到后续场景。";
     });
   }
   function mount(enabled: boolean): Promise<void> {
@@ -86,8 +87,14 @@ export function useStylometry(root: Ref<string>) {
     }, result => { workbench.value = result; notice.value = enabled ? "已挂载，后续新场景生效。" : "已卸载，后续新场景生效。"; });
   }
   function measure(): Promise<void> {
-    return run(project => client.measure(project, text.value, selectedVersion.value?.version_id, candidateTree.value),
-      result => { report.value = result; notice.value = "测量完成；短文本或未提供树的指标显示缺测。"; });
+    const body = text.value, tree = candidateTree.value, version = selectedVersion.value?.version_id;
+    const profileId = profile.value?.profile_id;
+    report.value = null;
+    return run(project => client.measure(project, body, version, tree), result => {
+      if (body !== text.value || tree !== candidateTree.value || version !== selectedVersion.value?.version_id ||
+        profileId !== profile.value?.profile_id) return;
+      report.value = result; notice.value = "测量完成；短文本或未提供树的指标显示缺测。";
+    });
   }
   function launch(): Promise<void> {
     return run(project => client.launch(project, title.value, sources.value), result => {
@@ -129,6 +136,7 @@ export function useStylometry(root: Ref<string>) {
       else report.value = row.result.result;
     }
   }
+  watch([text, candidateTree], () => { report.value = null; }, { flush: "sync" });
   watch(root, () => {
     generation++; clearTimeout(timer); workbench.value = null; profile.value = null; selectedVersion.value = null;
     sources.value = []; metrics.value = []; controls.value = null; dependency.value = ""; candidateTree.value = "";
