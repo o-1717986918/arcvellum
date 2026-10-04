@@ -130,18 +130,17 @@ class ProcessManager:
         record.state = "stopping"
         record.updated_at = _now()
         if process.poll() is None:
-            if force:
-                process.kill()
-            else:
-                process.terminate()
+            _terminate_process(process, force=force)
+            if not force:
                 try:
                     process.wait(timeout=spec.graceful_timeout if spec else 8.0)
                 except subprocess.TimeoutExpired:
-                    process.kill()
+                    _terminate_process(process, force=True)
         try:
             process.wait(timeout=5)
         except subprocess.TimeoutExpired:
-            process.kill()
+            _terminate_process(process, force=True)
+            process.wait(timeout=5)
         with self._lock:
             record.state = "stopped"
             record.updated_at = _now()
@@ -221,3 +220,25 @@ class ProcessManager:
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _terminate_process(process: subprocess.Popen[str], *, force: bool) -> None:
+    if os.name == "nt":
+        # Windows terminate() is already forceful, but stops only the launcher.
+        # Its Python/Node children inherit the sidecar log and must exit too.
+        result = subprocess.run(
+            ("taskkill", "/PID", str(process.pid), "/T", "/F"),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            text=True,
+            errors="replace",
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            timeout=5,
+            check=False,
+        )
+        if result.returncode != 0 and process.poll() is None:
+            raise RuntimeError(f"managed process tree shutdown failed: {result.stderr.strip()}")
+    elif force:
+        process.kill()
+    else:
+        process.terminate()

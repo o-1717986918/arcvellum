@@ -196,6 +196,17 @@
 
 ## 验证记录
 
+### 补充变更合同：Windows sidecar 关闭
+
+- owner/public entry: runtime 的 ProcessManager.stop。
+- objective: 关闭受管理的 Python 启动器及其子进程，释放日志文件。
+- inputs/outputs: 当前存活的受管理 PID → 已退出进程树和关闭记录。
+- invariants: 只关闭当前 manager 持有的进程；POSIX 关闭合同和正式文学路线保留；关闭失败明示。
+- allowed dependencies: subprocess、操作系统自带 taskkill；不引入模型或项目写入。
+- evidence: Windows venv Python 在关闭父进程后仍占用日志，三个不同启动等待时间均复现。
+- tests: 子进程已启动的真实 Windows sidecar 关闭及日志重命名；生命周期测试、全量回归和架构棘轮。
+- rollback: 进程管理器及独立回归提交。
+
 - ArcVellum 全量 Python：1,749 项，1 项跳过；补充审读交接、角色知识与档案预检后的运行时专项 48 项通过。
 - 前端：全量 259 项通过；计量工作台组件专项 5 项通过，生产构建和桌面资源同步通过。
 - Pi Worker：13 文件、121 项通过。架构审计维持 16 文件／76 函数债务、0 cycle、0 Studio 内部 Engine 导入。
