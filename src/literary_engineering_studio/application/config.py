@@ -176,6 +176,7 @@ def default_config() -> dict[str, Any]:
             "max_workers": 2,
             "lease_seconds": 90,
             "scene_performance_agents": {"enabled": True, "max_actor_calls": 12},
+            "less_ai_tone_experiment": {"enabled": False},
         },
         "worker": _default_worker_config(),
         "orchestration": _default_orchestration_config(),

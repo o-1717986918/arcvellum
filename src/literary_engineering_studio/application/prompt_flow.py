@@ -117,6 +117,8 @@ def stage_for_prompt(row: dict[str, Any]) -> str:
         return _formal_stage(row)
     if layer_id.startswith("project_agent."):
         return "direction.project"
+    if layer_id.startswith("experiment.less_ai_tone."):
+        return "scene.revision"
     if layer_id.startswith(("advisor.", "steward.")):
         return "direction.advice"
     if layer_id.startswith("pi.conversation."):

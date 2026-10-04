@@ -91,6 +91,8 @@ class PromptWorkbenchService:
 
 
 def _usage_status(layer_id: str) -> str:
+    if layer_id.startswith("experiment."):
+        return "experimental"
     if layer_id in {"scene.v2.material.shared.protocol", "scene.v2.material.output.protocol"}:
         return "historical"
     if layer_id.startswith(("scene.v2.", "project_agent.v2.")) or layer_id == "project_agent.creator_persona.v2":
