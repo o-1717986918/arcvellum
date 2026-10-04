@@ -24,6 +24,53 @@ from tests.runtimes.test_scene_natural_output import NaturalGateway, REQUEST, PR
 
 
 class DeliveryRecoveryTests(unittest.TestCase):
+    def test_unreadable_or_oversized_archives_do_not_freeze_plan_or_create_pending_calls(self):
+        for problem in ("missing", "budget"):
+            with self.subTest(problem=problem), TemporaryDirectory() as tmp:
+                runtime, brief, data = setup_runtime(tmp, NaturalGateway())
+                project = Path(tmp) / "work"
+                if problem == "budget":
+                    (project / "large.md").write_text("雨" * 24_001, encoding="utf-8")
+                coordinator = SceneCreatorV2MaterialCoordinator(data / "v2",
+                    SceneCreatorWorkspace(project, data), {}, scene_id=brief.scene_id)
+                memory = SceneCreatorMemoryV1(brief.scene_id)
+                before = memory.to_dict()
+                payload = {"material_plan": {"required_kinds": ["environment"], "reason": "听雨"},
+                    "material_requests": [{**REQUEST, "archive_attachments": [{"path": "project.yaml"}]},
+                        {**REQUEST, "archive_attachments": [{"path": "large.md" if problem == "budget" else "missing.md"}]}]}
+                with self.assertRaisesRegex(ValueError, "context budget" if problem == "budget" else "missing.md"):
+                    runtime._accept_natural_turn(payload, brief, coordinator, memory)
+                self.assertIsNone(coordinator.plan_context())
+                self.assertEqual(memory.to_dict(), before)
+                self.assertFalse(list((coordinator.root / "calls").glob("*.json")))
+
+    def test_actor_partition_fields_are_retried_against_same_original_before_creator_memory(self):
+        source = REQUEST["author_prompt"] + "\n" + REQUEST["style_direction"] + "\n角色可知区：characters/a-qing.yaml"
+        prompts = []
+        with TemporaryDirectory() as tmp:
+            def extract(_system, prompt):
+                prompts.append(json.loads(prompt))
+                request = {**REQUEST, "kind": "actor", "target": "阿青", "archive_attachments": [
+                    {"path": "characters/a-qing.yaml", "knowledge": "known" if len(prompts) == 2 else ""}]}
+                return json.dumps({"material_requests": [request]}, ensure_ascii=False)
+            processor = NaturalOutputProcessor(Path(tmp), "整理", extract)
+            result = processor.process(source, kind="creator", context={"briefing": {
+                "scene_brief": {"participants": ["阿青"]}}})
+            self.assertEqual(result["material_requests"][0]["archive_attachments"][0]["knowledge"], "known")
+            self.assertEqual(prompts[0]["source_text"], prompts[1]["source_text"])
+            self.assertIn("known or reference", prompts[1]["transport_feedback"]["issue"])
+
+    def test_missing_actor_partition_is_retained_for_creator_correction(self):
+        source = REQUEST["author_prompt"] + "\n" + REQUEST["style_direction"]
+        request = {**REQUEST, "kind": "actor", "target": "阿青", "archive_attachments": [{"path": "characters/a-qing.yaml"}]}
+        with TemporaryDirectory() as tmp:
+            processor = NaturalOutputProcessor(Path(tmp), "整理", lambda *_: json.dumps(
+                {"material_requests": [request]}, ensure_ascii=False))
+            with self.assertRaisesRegex(ValueError, "known or reference"):
+                processor.process(source, kind="creator", context={"briefing": {"scene_brief": {"participants": ["阿青"]}}})
+            self.assertEqual(len(list(Path(tmp).rglob("*.failure.json"))), 2)
+            self.assertEqual(next(Path(tmp).rglob("original.md")).read_text(encoding="utf-8"), source)
+
     def test_next_natural_review_receives_previous_accepted_judgment_and_source(self):
         with TemporaryDirectory() as tmp:
             gateway = NaturalGateway()

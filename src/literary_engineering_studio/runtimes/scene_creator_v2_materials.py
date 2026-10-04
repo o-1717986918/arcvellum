@@ -138,6 +138,14 @@ class SceneCreatorV2MaterialCoordinator:
         path = self.root / "material_plan.json"
         return json.loads(path.read_text(encoding="utf-8")) if path.is_file() else None
 
+    def validate_request_archives(self, requests) -> None:
+        for request in requests:
+            try:
+                self.workspace.freeze_attachments(
+                    [item.to_dict() for item in request.archive_attachments], kind=request.kind)
+            except OSError as error:
+                raise ValueError(f"material archive selection is unreadable: {error}") from error
+
     def execute(
         self, request: SceneMaterialRequestV3,
         invoke: Callable[[MaterialInvocationV2], Mapping[str, Any]],

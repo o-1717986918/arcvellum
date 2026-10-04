@@ -10,7 +10,7 @@ from .pi_scene_payload import _answer_payload
 from .commission_source_format import restore_commission_source
 from .creator_delivery_labels import resolve_creator_targets
 from .event_material_provenance import event_fields, recover_event_source_status
-from literary_engineering_studio_engine.public.literary import ACTOR_CARD_SECTIONS
+from literary_engineering_studio_engine.public.literary import ACTOR_CARD_SECTIONS, parse_scene_material_requests_v3
 
 NATURAL_RESPONSE_MODE = "natural-v1"
 STYLE_TOKEN = "{{STYLE_DIRECTION}}"
@@ -22,7 +22,8 @@ _CREATOR_CONTRACT = {
         "author_prompt": "verbatim contiguous creator invitation from source_text",
         "style_direction": "verbatim contiguous style from source_text, or empty when unstated",
         "archive_attachments": [{"path": "relative archive path", "start_line": None,
-                                "end_line": None, "knowledge": "known/reference for actor; empty otherwise"}],
+                                "end_line": None,
+                                "knowledge": "actor: known from role_known_archive/character_known/角色可知区; reference from director_reference_archive/creator_reference/主创参考区; empty otherwise"}],
         "character_card": "actor only: schema arcvellum/actor-character-card/v1, target, sections mapping from the supplied sixteen template keys, source_refs list, notes"}],
     "prose": "exact contiguous source text of completed body, or empty during preparation",
     "decision_summary": "creator's working intention and decisions",
@@ -109,6 +110,7 @@ class NaturalOutputProcessor:
                 "prepare": "原文明示等待新一轮取材时，提取当轮待调用邀请，prose 使用空值。",
                 "complete": "原文明示交付完成正文时，逐字提取正文；素材取舍、旧邀请和角色卡回顾留在工作记录，material_requests 使用空数组。",
                 "selection": "依据本次 source_text 的交付意图选择一个阶段；现有候选与冻结计划帮助识别回顾记录。"}
+            task["archive_partition_transport"] = "把原文明确选择的 role_known_archive 与 director_reference_archive 各路径逐条展开为 archive_attachments，逐条保留原分类。原文未明确分类时保留空值，由主创补充。"
         for attempt in range(2):
             if issue:
                 task["transport_feedback"] = {"issue": issue,
@@ -135,6 +137,9 @@ def _prepare_transport_payload(answer, payload, kind, context):
     if kind == "material" and context.get("role") == "event-narrator":
         payload = recover_event_source_status(answer, payload)
     validate_extracted_text(answer, payload, kind, context)
+    if kind == "creator" and "briefing" in context:
+        participants = (context["briefing"].get("scene_brief") or {}).get("participants") or []
+        parse_scene_material_requests_v3(payload, list(participants))
     return payload
 
 
