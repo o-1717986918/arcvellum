@@ -48,6 +48,21 @@
 
 ## 实施记录
 
+## Module Change Packet：计量工作台 HTTP
+
+- objective: 前端可经宿主接口统计、编辑、保存及挂载计量文风。
+- primary_module: api。
+- public_entry: /stylometry 版本化 endpoints。
+- variation_point: application service 注入。
+- inputs: 作品、文本来源、参数 JSON、文风片段、挂载修订。
+- outputs: 画像、版本、编译结果、测量与挂载快照。
+- invariants: API 只转译 HTTP；不直接计算或写正式内容。
+- allowed_dependencies: application service、Pydantic、HTTP helpers。
+- forbidden_dependencies: Lab 内部、Provider、Engine internal。
+- tests: fresh project health/projects/runtime/read model/SSE、统计至卸载、错误参数。
+- rollback_unit: API 与生成合同提交。
+- documentation: 本文件、OpenAPI。
+
 ## Module Change Packet：主创动态消费
 
 - objective: 项目所选计量文风经现有主创接口消费，场景交易冻结并记录输出统计。

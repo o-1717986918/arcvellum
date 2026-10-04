@@ -1509,6 +1509,273 @@
         "title": "StyleWorkCreateRequest",
         "type": "object"
       },
+      "StylometryAnalyzeRequest": {
+        "properties": {
+          "project_root": {
+            "title": "Project Root",
+            "type": "string"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/TextSourceRequest"
+            },
+            "maxItems": 64,
+            "minItems": 1,
+            "title": "Sources",
+            "type": "array"
+          },
+          "title": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_root",
+          "title",
+          "sources"
+        ],
+        "title": "StylometryAnalyzeRequest",
+        "type": "object"
+      },
+      "StylometryCompileRequest": {
+        "properties": {
+          "controls_json": {
+            "maxLength": 128000,
+            "title": "Controls Json",
+            "type": "string"
+          },
+          "dependency_json": {
+            "default": "",
+            "maxLength": 16000000,
+            "title": "Dependency Json",
+            "type": "string"
+          },
+          "intent": {
+            "default": "",
+            "maxLength": 8000,
+            "title": "Intent",
+            "type": "string"
+          },
+          "profile_id": {
+            "title": "Profile Id",
+            "type": "string"
+          },
+          "project_root": {
+            "title": "Project Root",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_root",
+          "profile_id",
+          "controls_json",
+          "title"
+        ],
+        "title": "StylometryCompileRequest",
+        "type": "object"
+      },
+      "StylometryMeasureRequest": {
+        "properties": {
+          "candidate_json": {
+            "default": "",
+            "maxLength": 16000000,
+            "title": "Candidate Json",
+            "type": "string"
+          },
+          "project_root": {
+            "title": "Project Root",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 2000000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          },
+          "version_id": {
+            "default": "",
+            "title": "Version Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_root",
+          "text"
+        ],
+        "title": "StylometryMeasureRequest",
+        "type": "object"
+      },
+      "StylometryMountRequest": {
+        "properties": {
+          "combine": {
+            "default": "append",
+            "title": "Combine",
+            "type": "string"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "expected_revision": {
+            "minimum": 0.0,
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "project_root": {
+            "title": "Project Root",
+            "type": "string"
+          },
+          "usage": {
+            "default": "guide",
+            "title": "Usage",
+            "type": "string"
+          },
+          "version_id": {
+            "default": "",
+            "title": "Version Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_root",
+          "enabled",
+          "expected_revision"
+        ],
+        "title": "StylometryMountRequest",
+        "type": "object"
+      },
+      "StylometryParametersRequest": {
+        "properties": {
+          "dependency_json": {
+            "default": "",
+            "maxLength": 16000000,
+            "title": "Dependency Json",
+            "type": "string"
+          },
+          "profile_id": {
+            "title": "Profile Id",
+            "type": "string"
+          },
+          "project_root": {
+            "title": "Project Root",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_root",
+          "profile_id"
+        ],
+        "title": "StylometryParametersRequest",
+        "type": "object"
+      },
+      "StylometrySaveRequest": {
+        "properties": {
+          "controls_json": {
+            "maxLength": 128000,
+            "title": "Controls Json",
+            "type": "string"
+          },
+          "dependency_json": {
+            "default": "",
+            "maxLength": 16000000,
+            "title": "Dependency Json",
+            "type": "string"
+          },
+          "fragment_override": {
+            "anyOf": [
+              {
+                "maxLength": 32000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fragment Override"
+          },
+          "intent": {
+            "default": "",
+            "maxLength": 8000,
+            "title": "Intent",
+            "type": "string"
+          },
+          "profile_id": {
+            "title": "Profile Id",
+            "type": "string"
+          },
+          "project_root": {
+            "title": "Project Root",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_root",
+          "profile_id",
+          "controls_json",
+          "title"
+        ],
+        "title": "StylometrySaveRequest",
+        "type": "object"
+      },
+      "TextSourceRequest": {
+        "properties": {
+          "genre": {
+            "default": "narrative",
+            "title": "Genre",
+            "type": "string"
+          },
+          "markdown": {
+            "default": false,
+            "title": "Markdown",
+            "type": "boolean"
+          },
+          "source_id": {
+            "title": "Source Id",
+            "type": "string"
+          },
+          "split": {
+            "default": "train",
+            "title": "Split",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 2000000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          },
+          "topic": {
+            "default": "unknown",
+            "title": "Topic",
+            "type": "string"
+          },
+          "work_id": {
+            "title": "Work Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_id",
+          "work_id",
+          "text"
+        ],
+        "title": "TextSourceRequest",
+        "type": "object"
+      },
       "ToneExperimentRequest": {
         "properties": {
           "enabled": {
@@ -8129,6 +8396,378 @@
           }
         },
         "summary": "Style Lab Create Work"
+      }
+    },
+    "/stylometry/analyze": {
+      "post": {
+        "operationId": "analyze_stylometry_analyze_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StylometryAnalyzeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Analyze",
+        "tags": [
+          "stylometry"
+        ]
+      }
+    },
+    "/stylometry/compile": {
+      "post": {
+        "operationId": "compile_fragment_stylometry_compile_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StylometryCompileRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Compile Fragment",
+        "tags": [
+          "stylometry"
+        ]
+      }
+    },
+    "/stylometry/measure": {
+      "post": {
+        "operationId": "measure_stylometry_measure_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StylometryMeasureRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Measure",
+        "tags": [
+          "stylometry"
+        ]
+      }
+    },
+    "/stylometry/mount": {
+      "post": {
+        "operationId": "mount_stylometry_mount_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StylometryMountRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Mount",
+        "tags": [
+          "stylometry"
+        ]
+      }
+    },
+    "/stylometry/parameters": {
+      "post": {
+        "operationId": "parameters_stylometry_parameters_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StylometryParametersRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Parameters",
+        "tags": [
+          "stylometry"
+        ]
+      }
+    },
+    "/stylometry/profiles/{profile_id}": {
+      "get": {
+        "operationId": "profile_stylometry_profiles__profile_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "profile_id",
+            "required": true,
+            "schema": {
+              "title": "Profile Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Profile",
+        "tags": [
+          "stylometry"
+        ]
+      }
+    },
+    "/stylometry/versions": {
+      "post": {
+        "operationId": "save_version_stylometry_versions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StylometrySaveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Version",
+        "tags": [
+          "stylometry"
+        ]
+      }
+    },
+    "/stylometry/versions/{version_id}": {
+      "get": {
+        "operationId": "version_stylometry_versions__version_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "version_id",
+            "required": true,
+            "schema": {
+              "title": "Version Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Version",
+        "tags": [
+          "stylometry"
+        ]
+      }
+    },
+    "/stylometry/workbench": {
+      "get": {
+        "operationId": "workbench_stylometry_workbench_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Workbench",
+        "tags": [
+          "stylometry"
+        ]
       }
     },
     "/ui/{path}": {
