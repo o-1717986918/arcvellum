@@ -21,6 +21,37 @@ from tests.runtimes.test_scene_natural_output import NaturalGateway, REQUEST, PR
 
 
 class DeliveryRecoveryTests(unittest.TestCase):
+    def test_mixed_creator_transport_retries_original_and_preserves_selected_phase(self):
+        source = "完整正文：\n" + PROSE + "\n委托回顾：\n" + REQUEST["author_prompt"] + "\n" + REQUEST["style_direction"]
+        for phase in ("prepare", "complete"):
+            prompts = []
+            with self.subTest(phase=phase), TemporaryDirectory() as tmp:
+                def extract(_system, prompt):
+                    prompts.append(json.loads(prompt))
+                    payload = {"prose": PROSE, "material_requests": [REQUEST]}
+                    if len(prompts) == 2:
+                        payload["prose"] = "" if phase == "prepare" else PROSE
+                        payload["material_requests"] = [REQUEST] if phase == "prepare" else []
+                    return json.dumps(payload, ensure_ascii=False)
+                processor = NaturalOutputProcessor(Path(tmp), "整理当轮交付", extract)
+                result = processor.process(source, kind="creator", context={})
+                self.assertEqual(result["prose"], "" if phase == "prepare" else PROSE)
+                self.assertEqual(result["material_requests"], [REQUEST] if phase == "prepare" else [])
+                self.assertEqual(prompts[0]["source_text"], prompts[1]["source_text"])
+                self.assertIn("delivery phase", prompts[1]["transport_feedback"]["issue"])
+                self.assertIn("complete", prompts[1]["delivery_modes"])
+                self.assertEqual(len(list(Path(tmp).rglob("*.failure.json"))), 1)
+
+    def test_persistently_mixed_transport_is_preserved_for_recovery(self):
+        source = PROSE + "\n" + REQUEST["author_prompt"] + "\n" + REQUEST["style_direction"]
+        with TemporaryDirectory() as tmp:
+            processor = NaturalOutputProcessor(Path(tmp), "整理", lambda *_: json.dumps(
+                {"prose": PROSE, "material_requests": [REQUEST]}, ensure_ascii=False))
+            with self.assertRaisesRegex(ValueError, "mixes completed prose"):
+                processor.process(source, kind="creator", context={})
+            self.assertEqual(next(Path(tmp).rglob("original.md")).read_text(encoding="utf-8"), source)
+            self.assertEqual(len(list(Path(tmp).rglob("*.failure.json"))), 2)
+
     def test_bad_transport_retries_same_original_with_specific_feedback(self):
         prompts = []
         with TemporaryDirectory() as tmp:

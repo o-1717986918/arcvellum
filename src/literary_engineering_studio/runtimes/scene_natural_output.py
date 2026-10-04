@@ -83,7 +83,7 @@ class NaturalOutputProcessor:
         directory.mkdir(parents=True, exist_ok=True)
         (directory / "original.md").write_text(answer, encoding="utf-8")
         context = {key: value for key, value in context.items() if key != "delivery_feedback"}
-        fingerprint = sha256(json.dumps(["verbatim-commission-v2", kind, context, self.system_prompt],
+        fingerprint = sha256(json.dumps(["verbatim-commission-v3", kind, context, self.system_prompt],
             ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
         cache = directory / (fingerprint + ".json")
         issue = ""
@@ -104,6 +104,11 @@ class NaturalOutputProcessor:
         task = {"operation": kind, "task_contract": CONTRACTS[kind], "source_text": answer, "context": context,
             "transport_limits": {"candidate_count": 3, "candidate_chars": 2400,
                 "requests": 8, "author_prompt_chars": 6000, "style_chars": 8000}}
+        if kind == "creator":
+            task["delivery_modes"] = {
+                "prepare": "原文明示等待新一轮取材时，提取当轮待调用邀请，prose 使用空值。",
+                "complete": "原文明示交付完成正文时，逐字提取正文；素材取舍、旧邀请和角色卡回顾留在工作记录，material_requests 使用空数组。",
+                "selection": "依据本次 source_text 的交付意图选择一个阶段；现有候选与冻结计划帮助识别回顾记录。"}
         for attempt in range(2):
             if issue:
                 task["transport_feedback"] = {"issue": issue,
@@ -147,6 +152,8 @@ def validate_extracted_text(answer: str, payload: Mapping[str, Any], kind: str,
         _validate_card_text(answer, payload.get("card") or {})
     if kind == "creator" and payload.get("prose"):
         _verbatim(answer, payload["prose"], "prose")
+        if payload.get("material_requests"):
+            raise ValueError("creator transport mixes completed prose and pending material requests; select the source delivery phase")
     if kind == "creator":
         _validate_requested_cards(answer, payload, context or {})
         _commission_provenance(answer, payload)
