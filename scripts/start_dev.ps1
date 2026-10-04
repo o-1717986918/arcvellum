@@ -4,7 +4,9 @@ param(
     [int]$ApiPort = 8791,
 
     [ValidateRange(1, 65535)]
-    [int]$ClientPort = 5173
+    [int]$ClientPort = 5173,
+
+    [string]$ConfigPath = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -35,12 +37,20 @@ Assert-PortAvailable -Port $ClientPort -Label "Client"
 $PreviousPythonPath = $env:PYTHONPATH
 $PreviousApiOrigin = $env:ARCVELLUM_API_ORIGIN
 $PreviousClientPort = $env:ARCVELLUM_CLIENT_PORT
+$PreviousConfigPath = $env:LES_CONFIG_PATH
 $ApiProcess = $null
 
 try {
     $env:PYTHONPATH = Join-Path $Repository "src"
     $env:ARCVELLUM_API_ORIGIN = "http://127.0.0.1:$ApiPort"
     $env:ARCVELLUM_CLIENT_PORT = "$ClientPort"
+    if ($ConfigPath) {
+        $ResolvedConfig = (Resolve-Path -LiteralPath $ConfigPath).Path
+        if (-not (Test-Path -LiteralPath $ResolvedConfig -PathType Leaf)) {
+            throw "The development configuration must be a file: $ResolvedConfig"
+        }
+        $env:LES_CONFIG_PATH = $ResolvedConfig
+    }
 
     & $Python (Join-Path $Repository "scripts\verify_checkout_import.py")
     if ($LASTEXITCODE -ne 0) {
@@ -105,4 +115,5 @@ try {
     $env:PYTHONPATH = $PreviousPythonPath
     $env:ARCVELLUM_API_ORIGIN = $PreviousApiOrigin
     $env:ARCVELLUM_CLIENT_PORT = $PreviousClientPort
+    $env:LES_CONFIG_PATH = $PreviousConfigPath
 }
