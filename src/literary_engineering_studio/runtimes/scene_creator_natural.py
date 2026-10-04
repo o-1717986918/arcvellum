@@ -14,6 +14,7 @@ from .scene_creator_material_policy import material_selection_error
 from .scene_material_library import SceneMaterialLibrary
 from .scene_natural_output import NaturalOutputProcessor, creator_style, render_style
 from .natural_turn_store import NaturalTurnStore
+from .scene_review_continuity import review_continuity
 
 
 class NaturalCreatorMixin:
@@ -84,11 +85,13 @@ class NaturalCreatorMixin:
         return ()
 
     def _review_natural(self, transaction_id, layers, briefing, brief, result, verification, index):
-        memory = SceneCreatorMemoryV1.load(self._cache_path(transaction_id, "scene_creator_memory.json"),
+        memory_path = self._cache_path(transaction_id, "scene_creator_memory.json")
+        memory = SceneCreatorMemoryV1.load(memory_path,
             brief.scene_id, request_limit_chars=160_000)
         context = {"briefing": briefing, "prose": result.prose,
                    "scene_delta": result.scene_delta.to_dict(), "verification": verification.to_dict(),
-                   "material_index": index, "creator_memory": memory.to_dict()}
+                   "material_index": index, "creator_memory": memory.to_dict(),
+                   "review_continuity": review_continuity(memory_path.parent, result.prose)}
         journal = NaturalTurnStore(self._cache_path(transaction_id, "v2/literary-originals"), "review")
         if journal.feedback():
             context["delivery_feedback"] = journal.feedback()

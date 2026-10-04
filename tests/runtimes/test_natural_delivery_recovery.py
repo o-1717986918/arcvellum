@@ -1,5 +1,6 @@
 """Commission provenance and correction of failed natural deliveries."""
 from copy import deepcopy
+from hashlib import sha256
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -16,11 +17,41 @@ from literary_engineering_studio.runtimes.creator_delivery_labels import resolve
 from literary_engineering_studio_engine.public.literary import (
     SceneBrief, RhythmDirective, LengthTarget, StyleMountRef, SceneRisk, SceneRiskLevel,
     CreatorMaterialPlanV1,
+    VerificationReport,
 )
+from literary_engineering_studio_engine.public.prompting import list_prompt_layer_specs
 from tests.runtimes.test_scene_natural_output import NaturalGateway, REQUEST, PROSE
 
 
 class DeliveryRecoveryTests(unittest.TestCase):
+    def test_next_natural_review_receives_previous_accepted_judgment_and_source(self):
+        with TemporaryDirectory() as tmp:
+            gateway = NaturalGateway()
+            runtime, brief, data = setup_runtime(tmp, gateway)
+            result = runtime.create_scene("review-history", brief)
+            root = data / "scene-transactions/review-history"
+            previous = {"decision": "revise", "summary": "水声与信封已成立，补足时间锚。",
+                "revision_instructions": ["明确她想起门房的时间。"], "evidence": ["信封压在碗底"]}
+            earlier = "review_result_v2_" + sha256("上一稿".encode()).hexdigest()[:16] + ".json"
+            (root / earlier).write_text(json.dumps(previous, ensure_ascii=False), encoding="utf-8")
+            current = "review_result_v2_" + sha256(result.prose.encode()).hexdigest()[:16] + ".json"
+            (root / current).write_text('{"decision":"pass","summary":"current cache"}', encoding="utf-8")
+            (root / "revision_result_v2_1.json").write_text('{}', encoding="utf-8")
+            invoke, contexts = gateway.run, []
+            def capture(project, prompt, **kwargs):
+                envelope = json.loads(prompt)
+                if envelope["schema"] == "arcvellum/default-conversation/v1" and "task_contract" not in envelope["prompt"]:
+                    contexts.append(json.loads(envelope["prompt"].split("\n\n", 1)[1]))
+                return invoke(project, prompt, **kwargs)
+            gateway.run = capture
+            layers = {spec.layer_id: spec.default_text for spec in list_prompt_layer_specs()}
+            runtime._review_natural("review-history", layers, {}, brief, result,
+                VerificationReport(brief.scene_id, len(PROSE)), "")
+            continuity = contexts[0]["review_continuity"]
+            self.assertEqual(continuity["previous"]["review"], previous)
+            self.assertEqual(continuity["previous"]["source"], earlier)
+            self.assertEqual((continuity["completed_reviews"], continuity["completed_revisions"]), (1, 1))
+
     def test_mixed_creator_transport_retries_original_and_preserves_selected_phase(self):
         source = "完整正文：\n" + PROSE + "\n委托回顾：\n" + REQUEST["author_prompt"] + "\n" + REQUEST["style_direction"]
         for phase in ("prepare", "complete"):
