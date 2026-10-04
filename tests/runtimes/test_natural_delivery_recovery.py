@@ -9,13 +9,71 @@ from literary_engineering_studio.application.creator_persona import CreatorPerso
 from literary_engineering_studio.runtime.role_conversation import RoleConversationResult
 from literary_engineering_studio.runtimes.pi_scene_transaction import PiSceneTransactionRuntime
 from literary_engineering_studio.runtimes.scene_natural_output import NaturalOutputProcessor, validate_extracted_text
+from literary_engineering_studio.runtimes.scene_creator_workspace import SceneCreatorWorkspace
+from literary_engineering_studio.runtimes.scene_creator_memory import SceneCreatorMemoryV1
+from literary_engineering_studio.runtimes.scene_creator_v2_materials import SceneCreatorV2MaterialCoordinator
+from literary_engineering_studio.runtimes.creator_delivery_labels import resolve_creator_targets
 from literary_engineering_studio_engine.public.literary import (
     SceneBrief, RhythmDirective, LengthTarget, StyleMountRef, SceneRisk, SceneRiskLevel,
+    CreatorMaterialPlanV1,
 )
 from tests.runtimes.test_scene_natural_output import NaturalGateway, REQUEST, PROSE
 
 
 class DeliveryRecoveryTests(unittest.TestCase):
+    def test_explicit_role_heading_resolves_only_to_a_current_participant(self):
+        payload = {"material_requests": [{"kind": "actor", "target": "角色扮演器（角色：阿青）"}]}
+        context = {"briefing": {"scene_brief": {"participants": ["阿青"]}}}
+        recovered = resolve_creator_targets(payload, context)
+        self.assertEqual(recovered["material_requests"][0]["target"], "阿青")
+        self.assertEqual(recovered["target_label_recovery"][0]["original"], "角色扮演器（角色：阿青）")
+        unknown = {"material_requests": [{"kind": "actor", "target": "角色扮演器（角色：门房）"}]}
+        self.assertEqual(resolve_creator_targets(unknown, context), unknown)
+
+    def test_invalid_invitation_does_not_freeze_plan_and_valid_retry_preserves_first_reason(self):
+        with TemporaryDirectory() as tmp:
+            runtime, brief, data = setup_runtime(tmp, NaturalGateway())
+            coordinator = SceneCreatorV2MaterialCoordinator(data / "v2", SceneCreatorWorkspace(Path(tmp) / "work", data),
+                {}, scene_id=brief.scene_id)
+            payload = {"material_plan": {"required_kinds": ["environment"], "reason": "观察雨滴"},
+                "material_requests": [{**REQUEST, "archive_attachments": [{"path": "canon/world.yaml", "start_line": 1}]}]}
+            memory = SceneCreatorMemoryV1(brief.scene_id)
+            with self.assertRaisesRegex(ValueError, "line endpoints"):
+                runtime._accept_natural_turn(payload, brief, coordinator, memory)
+            self.assertIsNone(coordinator.plan_context())
+            payload["material_requests"] = [REQUEST]
+            runtime._accept_natural_turn(payload, brief, coordinator, memory)
+            payload["material_plan"]["reason"] = "听取雨声所推动的等待"
+            runtime._accept_natural_turn(payload, brief, coordinator, memory)
+            self.assertEqual(coordinator.plan_context()["reason"], "观察雨滴")
+            with self.assertRaisesRegex(ValueError, "frozen"):
+                coordinator.save_plan(CreatorMaterialPlanV1(("actor",), "听人物回应"))
+
+    def test_quote_markers_restore_exact_source_while_word_changes_fail(self):
+        source = "> 请描写湿木。\n>\n> 把水声交给旧碗。"
+        invitation = "请描写湿木。\n\n把水声交给旧碗。"
+        with TemporaryDirectory() as tmp:
+            payload = {"material_requests": [{**REQUEST, "author_prompt": invitation, "style_direction": ""}]}
+            processor = NaturalOutputProcessor(Path(tmp), "原文整理", lambda *_: json.dumps(payload, ensure_ascii=False))
+            restored = processor.process(source, kind="creator", context={})
+            self.assertEqual(restored["material_requests"][0]["author_prompt"], source)
+            self.assertEqual(restored["commission_format_recovery"][0]["projection"], "blockquote-markers-only")
+            payload["material_requests"][0]["author_prompt"] = invitation.replace("湿木", "干木")
+            with self.assertRaisesRegex(ValueError, "author_prompt"):
+                processor.process(source + "\n新一轮", kind="creator", context={})
+
+    def test_wrapped_transport_delivery_is_unpacked_then_source_validated(self):
+        source = REQUEST["author_prompt"] + "\n" + REQUEST["style_direction"]
+        with TemporaryDirectory() as tmp:
+            wrapped = {"operation": "creator", "task_contract": {"material_requests": [REQUEST]}}
+            processor = NaturalOutputProcessor(Path(tmp), "整理原文", lambda *_: json.dumps(wrapped, ensure_ascii=False))
+            payload = processor.process(source, kind="creator", context={})
+            self.assertEqual(payload["material_requests"], [REQUEST])
+            self.assertIn("source_provenance", payload)
+            wrapped["task_contract"]["material_requests"] = [{**REQUEST, "author_prompt": "凭空添加的委托"}]
+            with self.assertRaisesRegex(ValueError, "author_prompt"):
+                processor.process(source + "新一轮", kind="creator", context={})
+
     def test_invented_commission_and_style_are_rejected(self):
         source = REQUEST["author_prompt"] + "\n" + REQUEST["style_direction"]
         for field in ("author_prompt", "style_direction"):

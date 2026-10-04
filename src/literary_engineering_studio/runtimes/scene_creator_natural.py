@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from typing import Any
 
 from literary_engineering_studio_engine.public.literary import (
@@ -48,8 +49,10 @@ class NaturalCreatorMixin:
                 self._run_v2_creator(prompt, transaction_id, layers, briefing, workspace, coordinator))
             try:
                 payload = processor.process(answer, kind="creator", context=context)
+                next_memory = deepcopy(memory)
+                next_memory.record_creator(payload, brief, prompt=prompt, request_limit_chars=160_000)
                 requests = self._accept_natural_turn(payload, brief, coordinator, memory)
-                memory.record_creator(payload, brief, prompt=prompt, request_limit_chars=160_000)
+                memory = next_memory
             except ValueError as error:
                 journal.reject(prompt, error)
                 failures += 1
@@ -63,12 +66,12 @@ class NaturalCreatorMixin:
         raise RuntimeError("natural scene creator exceeded its material turns")
 
     def _accept_natural_turn(self, payload, brief, coordinator, memory):
-        if payload.get("material_plan"):
-            coordinator.save_plan(parse_creator_material_plan(payload))
         requests = parse_scene_material_requests_v3(payload, list(brief.participants))
         if requests:
             if str(payload.get("prose") or "").strip():
                 raise ValueError("creator offered prose while requesting new materials")
+            if payload.get("material_plan"):
+                coordinator.save_plan(parse_creator_material_plan(payload))
             return requests
         if not str(payload.get("prose") or "").strip():
             raise ValueError("creator response needs actionable invitations or completed prose")
@@ -115,5 +118,6 @@ def _creator_context(memory, coordinator, briefing, revision_context) -> dict[st
     remembered.pop("public_stage", None)
     return {"briefing": briefing, "creator_memory": remembered,
             "material_index": SceneMaterialLibrary(coordinator.root / "materials").index_prompt(),
+            "frozen_material_plan": coordinator.plan_context(),
             "revision_context": revision_context, "actor_card_context": coordinator.creator_card_context()}
 

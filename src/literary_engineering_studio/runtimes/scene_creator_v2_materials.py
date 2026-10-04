@@ -128,10 +128,14 @@ class SceneCreatorV2MaterialCoordinator:
         path = self.root / "material_plan.json"
         if path.is_file():
             saved = json.loads(path.read_text(encoding="utf-8"))
-            if saved != plan.to_dict():
+            if set(saved["required_kinds"]) != set(plan.required_kinds):
                 raise ValueError("scene creator material plan is frozen for this transaction")
             return
         self._write(path, plan.to_dict())
+
+    def plan_context(self) -> dict[str, Any] | None:
+        path = self.root / "material_plan.json"
+        return json.loads(path.read_text(encoding="utf-8")) if path.is_file() else None
 
     def execute(
         self, request: SceneMaterialRequestV3,

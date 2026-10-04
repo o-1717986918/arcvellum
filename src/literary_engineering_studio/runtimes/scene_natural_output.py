@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 
 from .pi_scene_payload import _answer_payload
+from .commission_source_format import restore_commission_source
+from .creator_delivery_labels import resolve_creator_targets
 from literary_engineering_studio_engine.public.literary import ACTOR_CARD_SECTIONS
 
 NATURAL_RESPONSE_MODE = "natural-v1"
@@ -14,7 +16,8 @@ STYLE_TOKEN = "{{STYLE_DIRECTION}}"
 _CREATOR_CONTRACT = {
     "material_plan": {"required_kinds": ["one or more of the five kind IDs"], "reason": "creator reason"},
     "material_requests": [{"kind": "actor/environment/character-description/event-narration/scene-description",
-        "target": "target", "purpose": "purpose", "scene_moment": "moment", "cue": "stimulus",
+        "target": "actor/character-description: exact participant name from context.briefing.scene_brief.participants; other kinds: commission subject",
+        "purpose": "purpose", "scene_moment": "moment", "cue": "stimulus",
         "author_prompt": "verbatim contiguous creator invitation from source_text",
         "style_direction": "verbatim contiguous style from source_text, or empty when unstated",
         "archive_attachments": [{"path": "relative archive path", "start_line": None,
@@ -81,7 +84,7 @@ class NaturalOutputProcessor:
             ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
         cache = directory / (fingerprint + ".json")
         if cache.is_file():
-            payload = json.loads(cache.read_text(encoding="utf-8"))
+            payload = _transport_payload(json.loads(cache.read_text(encoding="utf-8")), kind)
         else:
             prompt = json.dumps({"operation": kind, "task_contract": CONTRACTS[kind],
                                  "transport_limits": {"candidate_count": 3, "candidate_chars": 2400,
@@ -89,14 +92,27 @@ class NaturalOutputProcessor:
                                  "source_text": answer, "context": context}, ensure_ascii=False)
             extracted = self.invoke(self.system_prompt, prompt)
             (directory / (fingerprint + ".extraction.md")).write_text(extracted, encoding="utf-8")
-            payload = _answer_payload(extracted)
+            payload = _transport_payload(_answer_payload(extracted), kind)
+            if kind == "creator":
+                payload = restore_commission_source(answer, payload)
             validate_extracted_text(answer, payload, kind, context)
             cache.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        if kind == "creator":
+            payload = restore_commission_source(answer, payload)
+            payload = resolve_creator_targets(payload, context)
         validate_extracted_text(answer, payload, kind, context)
         if kind == "creator":
             payload["source_provenance"] = _commission_provenance(answer, payload)
             cache.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         return payload
+
+
+def _transport_payload(payload, kind):
+    if payload.get("operation") == kind and isinstance(payload.get("task_contract"), dict):
+        delivered = payload["task_contract"]
+        if not any(key in payload for key in CONTRACTS[kind]):
+            return delivered
+    return payload
 
 
 def validate_extracted_text(answer: str, payload: Mapping[str, Any], kind: str,
