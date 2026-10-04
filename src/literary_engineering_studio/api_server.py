@@ -31,6 +31,7 @@ from .api.routers.runners import RunnerRouterDependencies, build_runner_router
 from .api.routers.pi_worker import build_pi_worker_router
 from .api.routers.prompts import build_prompts_router
 from .api.routers.character_chat import build_character_chat_router
+from .api.routers.tone_experiment import build_tone_experiment_router
 from .api.routers.projects import ProjectRouterDependencies, build_project_router
 from .api.routers.advisor import AdvisorRouterDependencies, build_advisor_router
 from .api.routers.automation import AutomationRouterDependencies, build_automation_router
@@ -85,9 +86,9 @@ from .projections.reader import build_reader_manifest, public_reader_manifest, r
 from .runtime.supervisor import project_lock_key
 from .runtime.worker import AgentWorker
 from literary_engineering_studio_engine.public.literary import load_creative_quality_profile
-
 def _register_model_workbench_routers(app, config, container: ApplicationContainer) -> None:
     app.include_router(build_pi_worker_router(config))
+    app.include_router(build_tone_experiment_router(config))
     if container.services.prompts is not None:
         app.include_router(build_prompts_router(container.services.prompts))
     if container.services.character_chat is not None:

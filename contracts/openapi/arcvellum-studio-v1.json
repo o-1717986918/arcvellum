@@ -1509,6 +1509,19 @@
         "title": "StyleWorkCreateRequest",
         "type": "object"
       },
+      "ToneExperimentRequest": {
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "ToneExperimentRequest",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "ctx": {
@@ -4485,6 +4498,56 @@
           }
         },
         "summary": "Desktop Session"
+      }
+    },
+    "/experiments/less-ai-tone": {
+      "get": {
+        "operationId": "preferences_experiments_less_ai_tone_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Preferences"
+      },
+      "put": {
+        "operationId": "save_preferences_experiments_less_ai_tone_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ToneExperimentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Preferences"
       }
     },
     "/health": {
