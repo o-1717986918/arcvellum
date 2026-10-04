@@ -63,6 +63,7 @@ class ToneExperimentTests(unittest.TestCase):
                 cleaned = adapter.create_scene("tone-tx", brief())
                 self.assertEqual(cleaned.prose, CLEAN)
                 self.assertIs(cleaned.scene_delta, delta)
+                self.assertIn("less-ai-tone-edited-prose-review", cleaned.escalation_reasons)
                 adapter.create_scene("tone-tx", brief())
             self.assertEqual(len(gateway.calls), 2)
             self.assertEqual([role for role, _ in gateway.calls], ["worker", "reviewer"])

@@ -63,7 +63,7 @@ class LessAiToneExperimentMixin:
             if report["original"] != result.prose or cleaned != report["cleaned"] or len(accepted) != len(report["accepted"]):
                 raise ValueError("less-ai-tone report does not match its frozen source")
             self._cache_hits += 1
-            return replace(result, prose=cleaned)
+            return _delivery(result, cleaned, accepted)
         directory.mkdir(parents=True, exist_ok=True)
         (directory / "original.md").write_text(result.prose, encoding="utf-8")
         context = {"prose": result.prose, "scene_brief": brief.to_dict(),
@@ -91,7 +91,7 @@ class LessAiToneExperimentMixin:
             self._event_sink("scene.less-ai-tone.completed", {"scene_transaction_id": transaction_id,
                 "scene_id": brief.scene_id, "accepted_count": len(accepted), "rejected_count": len(rejected),
                 "report_path": str(report_path), "message": f"主创局部清理完成：{len(accepted)} 处修改，{len(rejected)} 条建议保留原文。"})
-        return replace(result, prose=cleaned)
+        return _delivery(result, cleaned, accepted)
 
     def _tone_invoke(self, transaction_id, system, prompt, role="worker"):
         return self._run(json.dumps({"schema": "arcvellum/default-conversation/v1",
@@ -106,6 +106,13 @@ def _protected(brief, result):
             texts.extend(item["evidence"] for item in changes
                          if isinstance(item, dict) and item.get("evidence"))
     return texts
+
+
+def _delivery(result, prose, accepted):
+    reasons = result.escalation_reasons
+    if accepted:
+        reasons = tuple(dict.fromkeys((*reasons, "less-ai-tone-edited-prose-review")))
+    return replace(result, prose=prose, escalation_reasons=reasons)
 
 
 def _text_digest(text):
