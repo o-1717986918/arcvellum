@@ -24,10 +24,12 @@ for item in collect_data_files("literary_engineering_studio_engine"):
     if is_installable_engine_resource(relative):
         engine_data.append(item)
 datas += engine_data
+datas += collect_data_files("jieba")
 hiddenimports = collect_submodules("uvicorn")
 hiddenimports += collect_submodules("fastapi")
 hiddenimports += collect_submodules("literary_engineering_studio")
 hiddenimports += collect_submodules("literary_engineering_studio_engine")
+hiddenimports += collect_submodules("stylometric_prompt_lab")
 
 analysis = Analysis(
     [str(ROOT / "packaging" / "studio_sidecar.py")],
