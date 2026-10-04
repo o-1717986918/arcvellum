@@ -38,6 +38,9 @@ _MATERIAL_CONTRACT = {
 _REVIEW_CONTRACT = {"decision": "pass/revise/escalate", "summary": "editor's judgment",
                     "revision_instructions": [], "evidence": []}
 CONTRACTS = {"creator": _CREATOR_CONTRACT, "material": _MATERIAL_CONTRACT, "review": _REVIEW_CONTRACT}
+CONTRACTS["tone"] = {"edits": [{"rule_id": "1 through 11", "before": "exact original fragment",
+    "after": "verbatim proposed replacement", "reason": "editor's stated literary reason"}],
+    "summary": "editor's summary; empty edits when text is retained"}
 CONTRACTS["card"] = {"card": {"schema": "arcvellum/actor-character-card/v1", "target": "target from context",
     "sections": {key: "verbatim card section" for key in ACTOR_CARD_SECTIONS}, "source_refs": [], "notes": ""}}
 _CHANGE = {"target_ref": "existing archive reference", "summary": "stated change",
@@ -100,6 +103,20 @@ def validate_extracted_text(answer: str, payload: Mapping[str, Any], kind: str,
         _validate_requested_cards(answer, payload, context or {})
     if kind == "material":
         _validate_material_text(answer, payload)
+    if kind == "tone":
+        _validate_tone_text(answer, payload)
+
+
+def _validate_tone_text(answer: str, payload: Mapping[str, Any]) -> None:
+    edits = payload.get("edits")
+    if not isinstance(edits, list):
+        raise ValueError("tone extraction needs local edits")
+    for edit in edits:
+        if not isinstance(edit, dict):
+            raise ValueError("tone edit extraction is invalid")
+        _verbatim(answer, edit.get("before"), "tone original fragment")
+        if edit.get("after"):
+            _verbatim(answer, edit["after"], "tone replacement")
 
 
 def _validate_card_text(answer: str, card: Mapping[str, Any]) -> None:

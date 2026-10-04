@@ -31,6 +31,7 @@ from .scene_performance_ownership import has_actor_entries
 from .scene_creator_memory import SceneCreatorMemoryV1
 from .scene_creator_material_policy import repair_material_choice
 from .scene_creator_v2_transaction import SceneCreatorV2Mixin
+from .less_ai_tone_experiment import LessAiToneExperimentMixin
 from .scene_material_library import SceneMaterialLibrary
 from ..runtime.prompt_recipes import lean_scene_prompt_recipe
 from .scene_source_evidence import scene_source_evidence
@@ -41,9 +42,8 @@ class PiSceneRuntimeMetrics:
     provider_calls: int
     cache_hits: int
 
-class PiSceneTransactionRuntime(SceneCreatorV2Mixin):
+class PiSceneTransactionRuntime(LessAiToneExperimentMixin, SceneCreatorV2Mixin):
     """Use the embedded Pi conversation transport behind K2 runtime ports."""
-
     def __init__(
         self,
         config: dict[str, Any],
@@ -72,7 +72,7 @@ class PiSceneTransactionRuntime(SceneCreatorV2Mixin):
     def metrics(self) -> PiSceneRuntimeMetrics:
         return PiSceneRuntimeMetrics(self._provider_calls, self._cache_hits)
 
-    def create_scene(self, transaction_id: str, brief: SceneBrief) -> CreativeResult:
+    def _create_scene(self, transaction_id: str, brief: SceneBrief) -> CreativeResult:
         if self._uses_creator_v2(transaction_id):
             return self._create_scene_v2(transaction_id, brief)
         prompt_layers = self._prompt_snapshot(transaction_id)
@@ -192,7 +192,7 @@ class PiSceneTransactionRuntime(SceneCreatorV2Mixin):
         )
         return review
 
-    def revise_scene(
+    def _revise_scene(
         self,
         transaction_id: str,
         brief: SceneBrief,
