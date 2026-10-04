@@ -7,7 +7,7 @@ from literary_engineering_studio.application.style.stylometry_contracts import C
 from literary_engineering_studio.application.style.stylometry_service import StylometryService
 from literary_engineering_studio.infrastructure.stylometry_analysis import LabStylometryAnalysis
 from literary_engineering_studio.persistence.stylometry import FileStylometryRepository
-from stylometric_prompt_lab.integration import analyze_text
+from stylometric_prompt_lab.integration import analyze_text, analyze_corpus
 
 
 class StylometryServiceTests(unittest.TestCase):
@@ -31,6 +31,23 @@ class StylometryServiceTests(unittest.TestCase):
         result = self.service.analyze(self.root, (CorpusTextSource("text-one", "work-one", text),), "片段")
         self.assertEqual(result["result"], analyze_text(text))
         self.assertEqual(self.service.workbench(self.root)["profiles"], [])
+
+    def test_windows_line_endings_match_native_lab_files(self):
+        sources = (CorpusTextSource("train-one", "work-one", "窗子开着。\r\n河水在响。\r\n\r\n她提起碗。" * 30),
+            CorpusTextSource("holdout-one", "work-two", "门外有脚步。\r\n门房抬头。\r\n\r\n他等她问。" * 30, split="holdout"))
+        native = Path(self.folder.name) / "native"
+        native.mkdir()
+        rows = []
+        for index, source in enumerate(sources):
+            name = f"source-{index}.txt"
+            (native / name).write_bytes(source.text.encode("utf-8"))
+            rows.append({"source_id": source.source_id, "work_id": source.work_id, "path": name,
+                "split": source.split, "topic": source.topic, "genre": source.genre})
+        manifest = native / "manifest.json"
+        manifest.write_text(json.dumps({"schema": "corpus-manifest/v1", "label": "换行", "sources": rows}), encoding="utf-8")
+        expected = analyze_corpus(manifest)["profile"]
+        actual = json.loads(LabStylometryAnalysis().analyze(sources, "换行").json_text)["profile"]
+        self.assertEqual(actual, expected)
 
     def test_profile_version_mount_and_measure_are_independent_from_formal_archives(self):
         profile = self._profile()

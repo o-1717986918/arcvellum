@@ -1,0 +1,20 @@
+{
+  "schema": "arcvellum/bundled-stylometry/v1",
+  "source_commit": "fcea974",
+  "version": "0.9.0",
+  "wheel": "stylometric_prompt_lab-0.9.0-py3-none-any.whl",
+  "wheel_sha256": "e20e71d8a98ad284d9585d0f9ab7042cb91faff68b8f62731f89e97e1d95e23b",
+  "modules": {
+    "stylometric_prompt_lab/__init__.py": "54bddd55aea61a23c28ca2cd3d2bfb15b02ee02a1136777b3c5121fec34a0a4e",
+    "stylometric_prompt_lab/integration.py": "173afabc4b7db338a01cb05838b4e82084db638c8b1b34ad881ba2550293e962",
+    "stylometric_prompt_lab/creator_fragment.py": "b8a04ef074bdddc22b36c6f0111166702c617cd3c185e3e75ec3bb6fcf345ef5",
+    "stylometric_prompt_lab/io.py": "9d445c7f4debaf518a84ef7138a0fb85421ad9a9f1268276076a3ec4721b5c15",
+    "stylometric_prompt_lab/corpus.py": "304af55aaa9ae24870ff568af5f752faa6710c409728cc9bdcd6e3ce9417fe00",
+    "stylometric_prompt_lab/metrics.py": "4cd1c209f458ad79dc42fa9ac1157263e93f98b13bdce52ab1d9680c9f082878",
+    "stylometric_prompt_lab/extended_metrics.py": "ccc4d9f132972482a19968e6716c31ed62c8dfab2c695a0168d0178bc5ba0627",
+    "stylometric_prompt_lab/keyword_metrics.py": "a5d2df6affea59dc1765dd62357d8602e49d448a7b15d81b0972893bae3b242b",
+    "stylometric_prompt_lab/dependency_targets.py": "d0b74575a4596bfb76e71df2f39c718fd06c8933345414a22550996d365db420",
+    "stylometric_prompt_lab/dependency_metrics.py": "8d82bee3555d592bb75b912cc1978fd4d44bd42899ec82711f9f3210a0feff38"
+  },
+  "scope": "Public measurement dependency closure; optional R and LTP executors remain in the research lab."
+}

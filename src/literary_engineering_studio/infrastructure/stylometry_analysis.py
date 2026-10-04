@@ -44,7 +44,7 @@ class LabStylometryAnalysis:
             directory, rows = Path(folder), []
             for index, source in enumerate(sources):
                 filename = f"source-{index}.{'md' if source.markdown else 'txt'}"
-                (directory / filename).write_text(source.text, encoding="utf-8")
+                (directory / filename).write_text(source.text, encoding="utf-8", newline="\n")
                 rows.append({"source_id": source.source_id, "work_id": source.work_id,
                     "path": filename, "split": source.split, "topic": source.topic, "genre": source.genre})
             manifest = directory / "manifest.json"

@@ -6,7 +6,7 @@ from . import __version__
 from .io import ContractError, digest
 from .corpus import load_corpus
 from .metrics import build_profile, measure, diagnostics
-from .extended_metrics import extended_statistics, scalar_values, secondary_summary_key
+from .extended_metrics import extended_statistics, scalar_values
 from .creator_fragment import default_creator_controls, compile_creator_fragment, validate_creator_controls
 from .dependency_targets import reference_view
 
@@ -57,7 +57,7 @@ def evaluate_text(text, profile, controls, *, reference_parse=None, candidate_pa
         elif key.startswith("dep:"):
             value = report["dependency"]["summary"]["metrics"][key[4:]]["value"] if report["dependency"] else None
         else:
-            value = scalars.get(secondary_summary_key(key))
+            value = scalars.get(key)
         distance = max(target["min"] - value, value - target["max"], 0) if value is not None else None
         rows.append({"id": key, "label": target["label"], "unit": target["unit"], "enabled": target["enabled"],
                      "observed": value, "min": target["min"], "max": target["max"], "distance": distance,
