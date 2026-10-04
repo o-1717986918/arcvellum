@@ -73,6 +73,7 @@ Engine 是正式文学工程真相的所有者。Studio 只能通过 `src/litera
 | `application/ports.py` | 事件、缓存、进程、Runtime pool、执行协调器等替换边界 | `ApplicationPorts` | DTO、Protocol | adapter 构造、业务默认值 | `test_application_container.py`、composition tests |
 | `application/persistence_ports.py` | job/autopilot/session/ledger/receipt/lease/plan/asset/event/UoW 合同 | `PersistencePorts` | DTO、Protocol | SQL、路径布局、文学决策 | `test_persistence_ports.py` |
 | `application/character_chat.py` | 用户独立角色对话、角色卡及已知档案冻结、历史恢复 | `CharacterChatService`、`character_chat_ports.py`；container 装配 | Engine public、角色会话/档案/存储 ports | 主创交易历史、正式正文写回 | `test_character_chat.py`、`test_character_chat_api.py` |
+| `application/less_ai_tone_preferences.py` | 默认关闭的自动去 AI 味实验设置及来源摘要 | get/set_less_ai_tone_preferences | application.config | 模型执行、正式写回 | `test_less_ai_tone_preferences.py`、`test_less_ai_tone_api.py` |
 | `automation/` | 自动创作 Campaign、长期目标执行泵、授权窗口、推进与恢复 | `automation/controller.py`、`managed_goal.py`、`campaign_runtime.py` | application/runtime ports、Engine state | 重写 Engine Gate、解释用户意图、与 Project Agent 争夺总控权 | `test_autopilot.py`、`tests/automation/*` |
 | `orchestration/` | CreativeExecutionPlan、Plan Lint/Compile/Simulate/Review/Recovery | package services；Engine 目录从 `public/orchestration.py` 读取 | Engine public catalog、ports | 第二套 task lifecycle、直接写项目事实 | `tests/orchestration/*` |
 | `project_agent/` | 作品库级顶层 Agent、稳定作品作用域、自然语言工具编排、长期目标管理与诊断恢复 | `project_agent/service.py`、`contracts.py`、`tools.py` | application services、automation facade、Project Agent runtime port | 直接写项目文件、生成正式正文、绕过 Engine Gate、创建第二套任务循环 | `tests/project_agent/*`、Pi Project Agent protocol tests |
@@ -87,6 +88,7 @@ Engine 是正式文学工程真相的所有者。Studio 只能通过 `src/litera
 |---|---|---|---|---|---|
 | `runtimes/` | Agent Runner SPI、descriptor/factory、adapter 注册 | `runtimes/base.py::AgentRuntimePort`、`runtimes/registry.py` | subprocess/SDK adapter、Runtime DTO | 文学 route 判断、项目正式写入 | `test_runtime_registry.py`、adapter contract tests |
 | `runtimes/scene_creator_natural.py`、`scene_natural_output.py` | opt-in 场景自然创作与后置记录整理、原文缓存 | `SceneCreatorV2Mixin`、`NaturalOutputProcessor` | Engine public、既有 RoleConversationGateway | 新模型客户端、整理步骤代写文学正文 | `test_scene_natural_output.py`、旧快照兼容测试 |
+| `runtimes/less_ai_tone_experiment.py`、`less_ai_tone_edits.py` | 主创成稿与返修后的实验局部编辑、冻结文风及原稿审计 | `PiSceneTransactionRuntime.create_scene/revise_scene` | Engine public、既有 gateway、自然输出整理器 | 直接正式写回、改变 SceneDelta | `test_less_ai_tone_experiment.py` |
 | `runtime/` | Worker 执行、bundle、沙箱、上下文、写回、修复、恢复 | `runtime/worker.py` 与显式子模块 | Runtime port、ports、Engine public API | Provider-specific 分支散入 Worker、绕过 preflight | `test_worker_integration.py`、`tests/runtime/*` |
 | `runtime/capabilities/` | 明确 allowlist 的受控工具能力 | manifest/policy/registry/broker | 当前 TaskPackage、显式 handlers | 通用 Shell、任意读写、动态 import | runtime capability contract tests |
 | `runtime/resources/` | ResourceClaim 与读写/Barrier 冲突判断 | resource contracts/conflict functions | immutable DTO | task ordering、数据库 lease 实现 | `test_runtime_resources.py`、orchestration resource tests |
