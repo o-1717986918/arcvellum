@@ -52,7 +52,9 @@ class StylometryService:
         payload = _decode(record.document_json)
         return {"schema": "arcvellum/stylometry-profile/v1", **_profile_view(record),
                 "profile_json": json.dumps(payload["profile"], ensure_ascii=False),
-                "controls": payload["controls"], "inspection": payload.get("inspection", {})}
+                "controls": payload["controls"], "inspection": payload.get("inspection", {}),
+                "source_declarations": [{key: value for key, value in source.items() if key != "text"}
+                                        for source in _decode(record.sources_json)]}
 
     def parameters(self, root: Path, profile_id: str, dependency_json: str = ""):
         record = self.profile(root, profile_id)

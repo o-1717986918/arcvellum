@@ -1756,6 +1756,18 @@
             "title": "Markdown",
             "type": "boolean"
           },
+          "origin": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Origin",
+            "type": "string"
+          },
+          "revision": {
+            "default": "",
+            "maxLength": 200,
+            "title": "Revision",
+            "type": "string"
+          },
           "source_id": {
             "title": "Source Id",
             "type": "string"

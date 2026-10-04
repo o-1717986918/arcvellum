@@ -15,6 +15,8 @@ class TextSourceRequest(BaseModel):
     topic: str = "unknown"
     genre: str = "narrative"
     markdown: bool = False
+    origin: str = Field(default="", max_length=2000)
+    revision: str = Field(default="", max_length=200)
 
 
 class StylometryAnalyzeRequest(BaseModel):

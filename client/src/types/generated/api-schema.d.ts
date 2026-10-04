@@ -4032,6 +4032,16 @@ export interface components {
              * @default false
              */
             markdown: boolean;
+            /**
+             * Origin
+             * @default
+             */
+            origin: string;
+            /**
+             * Revision
+             * @default
+             */
+            revision: string;
             /** Source Id */
             source_id: string;
             /**

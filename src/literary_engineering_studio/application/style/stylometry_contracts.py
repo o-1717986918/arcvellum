@@ -13,6 +13,8 @@ class CorpusTextSource:
     topic: str = "unknown"
     genre: str = "narrative"
     markdown: bool = False
+    origin: str = ""
+    revision: str = ""
 
 
 @dataclass(frozen=True)
