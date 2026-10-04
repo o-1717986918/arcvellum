@@ -16,6 +16,35 @@
 - tests: 委托／文风改写拒绝、有效来源、失败后新回答、角色中断恢复、标准收集。
 - rollback_unit: runtime 修复独立提交；测试收集单独提交。
 - documentation: 本文件。
+## Module Change Packet：宿主文风用例合同
+
+- objective: 用户可统计语料、保存参数版本并选择主创实验挂载。
+- primary_module: application/style。
+- public_entry: StylometryService、版本化文档 DTO、分析与存储 ports。
+- variation_point: 独立 lab 计算后端及 Studio data root 存储。
+- inputs: 作品、上传文本、画像、参数、可选依存原树。
+- outputs: 分析结果、不可变版本、挂载快照与逐项测量。
+- invariants: 正式文风版本和 Gate、默认未挂载、角色上下文、实验开关相互独立。
+- allowed_dependencies: 标准库、application ports、作品标识。
+- forbidden_dependencies: Lab 内部计算、FastAPI、Provider、正式作品写入。
+- tests: 用例、版本切换、过期挂载、源哈希、缺测与恢复。
+- rollback_unit: application 合同与用例独立提交。
+- documentation: 本文件。
+
+## Module Change Packet：固定计算包与 adapter
+
+- objective: 安装后的宿主可脱离研究 checkout 运行统计。
+- primary_module: infrastructure。
+- public_entry: StylometryAnalysisPort / StylometryRepositoryPort。
+- variation_point: 固定 wheel 的分析模块与文件 adapter。
+- inputs: typed sources 和原始 JSON 合同。
+- outputs: typed versioned documents。
+- invariants: Lab 原始计算与版本／文件摘要；无模型客户端。
+- allowed_dependencies: lab 安装包、标准库、application DTO。
+- forbidden_dependencies: Engine internal、正式项目写回。
+- tests: 计算一致、来源封装与 wheel 脱离目录运行。
+- rollback_unit: 固定计算包与 adapter 独立提交。
+- documentation: 本文件、third_party provenance。
 
 ## 实施记录
 
