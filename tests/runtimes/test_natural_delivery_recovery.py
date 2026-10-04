@@ -46,8 +46,25 @@ class DeliveryRecoveryTests(unittest.TestCase):
             payload["material_plan"]["reason"] = "听取雨声所推动的等待"
             runtime._accept_natural_turn(payload, brief, coordinator, memory)
             self.assertEqual(coordinator.plan_context()["reason"], "观察雨滴")
+            payload["material_plan"]["required_kinds"] = ["actor"]
+            runtime._accept_natural_turn(payload, brief, coordinator, memory)
+            self.assertEqual(coordinator.plan_context()["required_kinds"], ["environment"])
+            with self.assertRaisesRegex(ValueError, "environment"):
+                coordinator.assert_ready_for_prose()
             with self.assertRaisesRegex(ValueError, "frozen"):
                 coordinator.save_plan(CreatorMaterialPlanV1(("actor",), "听人物回应"))
+
+    def test_extractor_sees_current_source_and_recovery_feedback_stays_with_creator(self):
+        prompts = []
+        with TemporaryDirectory() as tmp:
+            def extract(_system, prompt):
+                prompts.append(json.loads(prompt))
+                return json.dumps({"prose": PROSE}, ensure_ascii=False)
+            processor = NaturalOutputProcessor(Path(tmp), "整理当轮原文", extract)
+            processor.process(PROSE, kind="creator", context={"delivery_feedback": {"original": "前一轮失败正文"},
+                "briefing": {"scene_brief": {"participants": ["阿青"]}}})
+        self.assertEqual(prompts[0]["source_text"], PROSE)
+        self.assertNotIn("delivery_feedback", prompts[0]["context"])
 
     def test_quote_markers_restore_exact_source_while_word_changes_fail(self):
         source = "> 请描写湿木。\n>\n> 把水声交给旧碗。"

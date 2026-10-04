@@ -80,6 +80,7 @@ class NaturalOutputProcessor:
         directory = self.root / "natural-answers" / digest
         directory.mkdir(parents=True, exist_ok=True)
         (directory / "original.md").write_text(answer, encoding="utf-8")
+        context = {key: value for key, value in context.items() if key != "delivery_feedback"}
         fingerprint = sha256(json.dumps(["verbatim-commission-v2", kind, context, self.system_prompt],
             ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
         cache = directory / (fingerprint + ".json")

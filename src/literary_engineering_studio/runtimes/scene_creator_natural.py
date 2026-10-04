@@ -70,7 +70,7 @@ class NaturalCreatorMixin:
         if requests:
             if str(payload.get("prose") or "").strip():
                 raise ValueError("creator offered prose while requesting new materials")
-            if payload.get("material_plan"):
+            if payload.get("material_plan") and coordinator.plan_context() is None:
                 coordinator.save_plan(parse_creator_material_plan(payload))
             return requests
         if not str(payload.get("prose") or "").strip():
