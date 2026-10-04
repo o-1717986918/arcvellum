@@ -15,7 +15,8 @@ _CREATOR_CONTRACT = {
     "material_plan": {"required_kinds": ["one or more of the five kind IDs"], "reason": "creator reason"},
     "material_requests": [{"kind": "actor/environment/character-description/event-narration/scene-description",
         "target": "target", "purpose": "purpose", "scene_moment": "moment", "cue": "stimulus",
-        "author_prompt": "creator's invitation", "style_direction": "free style for nonactor",
+        "author_prompt": "verbatim contiguous creator invitation from source_text",
+        "style_direction": "verbatim contiguous style from source_text, or empty when unstated",
         "archive_attachments": [{"path": "relative archive path", "start_line": None,
                                 "end_line": None, "knowledge": "known/reference for actor; empty otherwise"}],
         "character_card": "actor only: schema arcvellum/actor-character-card/v1, target, sections mapping from the supplied sixteen template keys, source_refs list, notes"}],
@@ -74,7 +75,7 @@ class NaturalOutputProcessor:
         directory = self.root / "natural-answers" / digest
         directory.mkdir(parents=True, exist_ok=True)
         (directory / "original.md").write_text(answer, encoding="utf-8")
-        fingerprint = sha256(json.dumps([kind, context, self.system_prompt],
+        fingerprint = sha256(json.dumps(["verbatim-commission-v2", kind, context, self.system_prompt],
             ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
         cache = directory / (fingerprint + ".json")
         if cache.is_file():
@@ -90,6 +91,9 @@ class NaturalOutputProcessor:
             validate_extracted_text(answer, payload, kind, context)
             cache.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         validate_extracted_text(answer, payload, kind, context)
+        if kind == "creator":
+            payload["source_provenance"] = _commission_provenance(answer, payload)
+            cache.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         return payload
 
 
@@ -101,10 +105,28 @@ def validate_extracted_text(answer: str, payload: Mapping[str, Any], kind: str,
         _verbatim(answer, payload["prose"], "prose")
     if kind == "creator":
         _validate_requested_cards(answer, payload, context or {})
+        _commission_provenance(answer, payload)
     if kind == "material":
         _validate_material_text(answer, payload)
     if kind == "tone":
         _validate_tone_text(answer, payload)
+
+
+def _commission_provenance(answer: str, payload: Mapping[str, Any]) -> dict[str, Any]:
+    rows = []
+    for index, request in enumerate(payload.get("material_requests") or []):
+        if not isinstance(request, dict):
+            raise ValueError("invalid creator invitation extraction")
+        spans = {}
+        for key in ("author_prompt", "style_direction"):
+            if key not in request or (key == "style_direction" and not request[key]):
+                continue
+            value = request[key]
+            _verbatim(answer, value, key)
+            start = answer.index(value)
+            spans[key] = {"start": start, "end": start + len(value)}
+        rows.append({"request_index": index, "spans": spans})
+    return {"source_sha256": sha256(answer.encode("utf-8")).hexdigest(), "requests": rows}
 
 
 def _validate_tone_text(answer: str, payload: Mapping[str, Any]) -> None:

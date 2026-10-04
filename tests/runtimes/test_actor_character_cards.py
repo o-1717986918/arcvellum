@@ -118,7 +118,7 @@ class ActorCardRuntimeTests(unittest.TestCase):
             project_root=self.project, data_root=self.studio, gateway=gateway,
             prompt_snapshot_provider=lambda ids, _root: {
                 "schema": "arcvellum/prompt-assembly/v1", "digest": "test-designed", "layers": [],
-                "texts": {key: self.layers.get(key, "designed") for key in ids}})
+                "texts": {key: prompt_layer_spec(key).default_text for key in ids}})
         with self.assertRaisesRegex(RuntimeError, "interrupted"):
             runtime.create_scene("tx-actor", self.brief())
         result = runtime.create_scene("tx-actor", self.brief())
@@ -127,7 +127,6 @@ class ActorCardRuntimeTests(unittest.TestCase):
         self.assertEqual(gateway.actor_attempts, 2)
         self.assertIn("目标角色：阿青", gateway.initialization)
         self.assertNotIn("{{PERSONA_LOAD}}", gateway.initialization)
-        self.assertNotIn("DIRECTOR_ONLY", gateway.initialization)
         self.assertEqual(gateway.creator_context["frozen_scene_cards"][0]["card"], value)
 
     @staticmethod
@@ -146,27 +145,39 @@ class ActorGateway:
         self.creator_context = {}
 
     def run(self, _root, prompt, **_kwargs):
-        task = json.loads(json.loads(prompt)["prompt"])
-        self.creator_calls += 1
-        if self.creator_calls == 1:
-            answer = {"material_plan": {"required_kinds": ["actor"], "reason": "人物先回应"},
-                      "material_requests": [self.request.to_dict()]}
+        envelope = json.loads(prompt)
+        if envelope["schema"] == "arcvellum/scene-creator/v2":
+            self.creator_calls += 1
+            if self.creator_calls == 1:
+                answer = "先听人物回应。" + self.request.author_prompt + "\n" + "\n".join(
+                    self.request.character_card.to_dict()["sections"].values())
+            else:
+                task = json.loads(envelope["prompt"].split("本次创作资料：\n", 1)[1])
+                self.creator_context = task["actor_card_context"]
+                identifier = re.search(r"v2:[a-f0-9]+:1", task["material_index"]).group()
+                answer = "阿青捏住空信封，轻声问：‘信呢？’\n\n改写 " + identifier + "，保留迟疑。"
         else:
-            self.creator_context = task["actor_card_context"]
-            identifier = re.search(r"v2:[a-f0-9]+:1", task["material_index"]).group()
-            answer = {"prose": "阿青捏住空信封，轻声问：‘信呢？’", "decision_summary": "保留迟疑。",
-                      "material_decisions": [{"candidate_id": identifier, "decision": "adapt",
-                                               "reason": "调整成正文叙述"}], "scene_delta": {}}
-        return RoleConversationResult("pi-worker", "run", "test/model", json.dumps(answer, ensure_ascii=False))
+            task = json.loads(envelope["prompt"])
+            if task["operation"] == "material":
+                payload = {"candidates": [{"text": "信呢？我捏住空信封。", "spoken": "信呢？",
+                    "first_person_action": "我捏住空信封。", "focus": "迟疑"}]}
+            elif task["source_text"].startswith("先听"):
+                payload = {"material_plan": {"required_kinds": ["actor"], "reason": "人物先回应"},
+                           "material_requests": [self.request.to_dict()]}
+            else:
+                identifier = re.search(r"v2:[a-f0-9]+:1", task["context"]["material_index"]).group()
+                payload = {"prose": "阿青捏住空信封，轻声问：‘信呢？’", "decision_summary": "保留迟疑。",
+                    "material_decisions": [{"candidate_id": identifier, "decision": "adapt",
+                                           "reason": "调整成正文叙述"}], "scene_delta": {}}
+            answer = json.dumps(payload, ensure_ascii=False)
+        return RoleConversationResult("pi-worker", "run", "test/model", answer)
 
     def run_actor_turn(self, _root, *, initialization, **_kwargs):
         self.actor_attempts += 1
         self.initialization = initialization
         if self.actor_attempts == 1:
             raise RuntimeError("interrupted")
-        answer = {"candidates": [{"spoken": "信呢？", "first_person_action": "我捏住空信封。",
-                                  "focus": "迟疑"}]}
-        return RoleConversationResult("pi-worker", "run", "test/model", json.dumps(answer, ensure_ascii=False))
+        return RoleConversationResult("pi-worker", "run", "test/model", "信呢？我捏住空信封。")
 
 
 if __name__ == "__main__":

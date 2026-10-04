@@ -34,7 +34,7 @@ class NaturalGateway:
         if envelope["schema"] == "arcvellum/scene-creator/v2":
             self.creator_calls += 1
             if self.creator_calls == 1:
-                answer = "本场先用 environment 取材，借水声延续等待。请沿湿木与水滴写出房间的等待。"
+                answer = "本场先用 environment 取材，借水声延续等待。" + REQUEST["author_prompt"] + "\n文风：" + REQUEST["style_direction"]
             else:
                 self.context = json.loads(envelope["prompt"].split("本次创作资料：\n", 1)[1])
                 identifier = re.search(r"v2:[a-f0-9]+:1", self.context["material_index"])[0]

@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-from hashlib import sha256
 from typing import Any
 
 from literary_engineering_studio_engine.public.literary import (
@@ -13,6 +12,7 @@ from .scene_creator_memory import SceneCreatorMemoryV1
 from .scene_creator_material_policy import material_selection_error
 from .scene_material_library import SceneMaterialLibrary
 from .scene_natural_output import NaturalOutputProcessor, creator_style, render_style
+from .natural_turn_store import NaturalTurnStore
 
 
 class NaturalCreatorMixin:
@@ -31,10 +31,14 @@ class NaturalCreatorMixin:
         memory_path = self._cache_path(transaction_id, "scene_creator_memory.json")
         memory = SceneCreatorMemoryV1.load(memory_path, brief.scene_id, request_limit_chars=160_000)
         processor = self._natural_processor(transaction_id, layers)
+        journal = NaturalTurnStore(self._cache_path(transaction_id, "v2/literary-originals"), "creator")
+        failures = 0
         for _ in range(16):
             self._fulfill_v2_pending(memory, memory_path, brief, coordinator, transaction_id)
             context = _creator_context(memory, coordinator, briefing, revision_context)
             context["actor_system_template"] = layers["scene.v2.material.actor"]
+            if journal.feedback():
+                context["delivery_feedback"] = journal.feedback()
             guidance = "\n\n".join(layers[key] for key in (
                 "scene.v2.creator.bootstrap", f"scene.v2.creator.{mode}",
                 "scene.v2.creator.delegation", "scene.v2.creator.actor-card",
@@ -42,10 +46,18 @@ class NaturalCreatorMixin:
             prompt = guidance + "\n\n本次创作资料：\n" + json.dumps(context, ensure_ascii=False)
             answer = self._preserved_natural_answer(transaction_id, "creator", prompt, lambda:
                 self._run_v2_creator(prompt, transaction_id, layers, briefing, workspace, coordinator))
-            payload = processor.process(answer, kind="creator", context=context)
-            requests = self._accept_natural_turn(payload, brief, coordinator, memory)
-            memory.record_creator(payload, brief, prompt=prompt, request_limit_chars=160_000)
+            try:
+                payload = processor.process(answer, kind="creator", context=context)
+                requests = self._accept_natural_turn(payload, brief, coordinator, memory)
+                memory.record_creator(payload, brief, prompt=prompt, request_limit_chars=160_000)
+            except ValueError as error:
+                journal.reject(prompt, error)
+                failures += 1
+                if failures >= 2:
+                    raise
+                continue
             memory.save(memory_path)
+            journal.accept()
             if not requests:
                 return creative_result_from_payload(payload)
         raise RuntimeError("natural scene creator exceeded its material turns")
@@ -74,24 +86,27 @@ class NaturalCreatorMixin:
         context = {"briefing": briefing, "prose": result.prose,
                    "scene_delta": result.scene_delta.to_dict(), "verification": verification.to_dict(),
                    "material_index": index, "creator_memory": memory.to_dict()}
+        journal = NaturalTurnStore(self._cache_path(transaction_id, "v2/literary-originals"), "review")
+        if journal.feedback():
+            context["delivery_feedback"] = journal.feedback()
         system = render_style(layers["scene.v2.review"], creator_style(briefing))
         prompt = layers["scene.v2.review.protocol"] + "\n\n" + json.dumps(context, ensure_ascii=False)
         answer = self._preserved_natural_answer(transaction_id, "review", system + prompt, lambda:
             self._run_natural_text(system, prompt, transaction_id, "reviewer"))
-        return review_result_from_payload(self._natural_processor(transaction_id, layers).process(
-            answer, kind="review", context=context))
+        try:
+            review = review_result_from_payload(self._natural_processor(transaction_id, layers).process(
+                answer, kind="review", context=context))
+        except ValueError as error:
+            journal.reject(system + prompt, error)
+            raise
+        journal.accept()
+        return review
 
     def _preserved_natural_answer(self, transaction_id, phase, prompt, invoke):
-        digest = sha256(prompt.encode("utf-8")).hexdigest()
-        path = self._cache_path(transaction_id, f"v2/literary-originals/{phase}-{digest}.md")
-        if path.is_file():
+        journal = NaturalTurnStore(self._cache_path(transaction_id, "v2/literary-originals"), phase)
+        answer, cached = journal.answer(prompt, invoke)
+        if cached:
             self._cache_hits += 1
-            return path.read_text(encoding="utf-8")
-        answer = invoke()
-        path.parent.mkdir(parents=True, exist_ok=True)
-        temporary = path.with_suffix(".tmp")
-        temporary.write_text(answer, encoding="utf-8")
-        temporary.replace(path)
         return answer
 
 
