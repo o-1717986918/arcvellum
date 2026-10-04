@@ -18,6 +18,7 @@ class ModuleBoundary:
 
 
 BOUNDARIES = (
+    ModuleBoundary("src/stylometric_prompt_lab", "Bundled Lab calculations", "integration.py / creator_fragment.py", "standard library and jieba", "Studio lifecycle or formal literary Gates"),
     ModuleBoundary("src/literary_engineering_studio_engine/foundation", "Engine foundation", "package exports", "standard library", "Studio runtime or UI"),
     ModuleBoundary("src/literary_engineering_studio_engine/tasking", "Formal task contracts", "tasking/__init__.py", "Engine foundation", "Agent execution"),
     ModuleBoundary("src/literary_engineering_studio_engine/routes", "Formal route catalog", "routes/catalog.py", "tasking and literary services", "Studio lifecycle"),

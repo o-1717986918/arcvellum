@@ -133,7 +133,7 @@ Engine 是正式文学工程真相的所有者。Studio 只能通过 `src/litera
 | `archive` | `services/archiveClient.ts` | 资产档案、修订、候选晋升 |
 | `character-chat` | `services/characterChatClient.ts` | 独立角色卡、已知资料挂载、场景上下文与自然对话；档案室入口或 `/character-chat` |
 | `archaeology` | `services/archaeologyClient.ts` | 已有作品导入与反推 |
-| `style-atelier` | `services/styleAtelierClient.ts` | 作家语料、文风工程、挂载 |
+| `style-atelier` | `services/styleAtelierClient.ts`、`services/stylometryClient.ts` | 正式文风工程；计量语料、可调参数版本、实验主创挂载与正文测量 |
 | `delivery` | `services/deliveryClient.ts` | 交付就绪与导出 |
 | `settings` | `services/settingsClient.ts` | Runtime、Provider、模型和应用设置 |
 | `creative-live` | `services/creativeLiveClient.ts` | 候选产物、Agent 会话、审查证据、修订快照与项目级 SSE |
@@ -149,6 +149,17 @@ Engine 是正式文学工程真相的所有者。Studio 只能通过 `src/litera
 | `scripts/` | 架构、版本、OpenAPI、模块图和构建验证 | 每个脚本 CLI | 成为运行时业务入口 | 对应 script tests/check mode |
 | `tools/prompt-design-desk/` | 独立离线提示词文案评审工具 | `build_snapshot.py` 与 `arcvellum/prompt-design-submission/v2` | 写正式档案、自动启用运行链路、执行来源文字 | `test_desk.cjs`、prompt registry tests |
 | `tests/` | 合同、单元、集成、连续 E2E 与架构棘轮 | unittest/vitest/playwright | 使用生产秘密、伪造真实 E2E 通过 | 全量测试矩阵 |
+
+## 8.1 计量文风所有权
+
+- `application/style/stylometry_service.py` 与 `stylometry_jobs.py`：作品作用域的分析、不可变版本、挂载修订和后台任务；公开合同在 `stylometry_contracts.py`。
+- `infrastructure/stylometry_analysis.py`：固定 Lab 计算适配；`persistence/stylometry.py` 与 `infrastructure/stylometry_cache.py`：Studio 私有存储、来源绑定和缓存。
+- `src/stylometric_prompt_lab/`：由固定 Lab wheel 提取的计算依赖闭包；公开入口 `integration.py` 与 `creator_fragment.py`。算法归 Lab，版本和文件摘要见 `third_party/stylometric-prompt-lab/provenance.json`。
+- `runtimes/creator_stylometry.py`：主创快照消费与正文统计；通过既有场景 runtime 与 composition 接线。
+- `api/routers/stylometry*.py`：HTTP 转译；`client/style-atelier`：统计、调参、自由片段编辑、挂载预览和结构化导出。
+- 计量挂载保存于 Studio data root，原正式文风、Canon 和 Gate 沿用原所有者；独立角色对话和五类取材沿用各自委托。
+
+关键验证：`tests/test_stylometry*.py`、`tests/runtimes/test_creator_stylometry.py`、API 合同测试、`StylometryWorkbench.spec.ts` 和真实 HTTP 页面验收 `client/e2e/stylometry-workbench.spec.ts`。
 
 ## 9. 受控遗留债务
 
