@@ -21,6 +21,22 @@ from tests.runtimes.test_scene_natural_output import NaturalGateway, REQUEST, PR
 
 
 class DeliveryRecoveryTests(unittest.TestCase):
+    def test_unsourced_event_is_a_source_bound_proposal_and_confirmed_note_is_preserved(self):
+        with TemporaryDirectory() as tmp:
+            def extract(_system, _prompt):
+                return json.dumps({"candidates": [{"text": PROSE, "focus": "信封的去向",
+                    "basis": "confirmed", "source_note": None}]}, ensure_ascii=False)
+            processor = NaturalOutputProcessor(Path(tmp), "整理素材", extract)
+            payload = processor.process(PROSE, kind="material", context={"role": "event-narrator"})
+            self.assertEqual(payload["candidates"][0]["text"], PROSE)
+            self.assertEqual(payload["candidates"][0]["basis"], "proposed")
+            self.assertIn(payload["source_status_recovery"][0]["source_sha256"], payload["candidates"][0]["source_note"])
+            processor.invoke = lambda *_: self.fail("accepted source metadata should be cached")
+            self.assertEqual(payload, processor.process(PROSE, kind="material", context={"role": "event-narrator"}))
+            confirmed = {"candidates": [{"text": PROSE, "focus": "已提交经历", "basis": "confirmed", "source_note": "上一场已提交正文"}]}
+            validate_extracted_text(PROSE, confirmed, "material", {"role": "event-narrator"})
+            self.assertEqual(confirmed["candidates"][0]["basis"], "confirmed")
+
     def test_explicit_role_heading_resolves_only_to_a_current_participant(self):
         payload = {"material_requests": [{"kind": "actor", "target": "角色扮演器（角色：阿青）"}]}
         context = {"briefing": {"scene_brief": {"participants": ["阿青"]}}}

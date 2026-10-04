@@ -15,6 +15,7 @@ from literary_engineering_studio_engine.public.literary import (
 
 from .scene_creator_workspace import SceneCreatorWorkspace
 from .scene_natural_output import NATURAL_RESPONSE_MODE, render_style
+from .event_material_provenance import event_fields as _event_fields
 
 
 _KIND_ROLE = {
@@ -322,14 +323,6 @@ def _actor_fields(item: Mapping[str, Any]) -> dict[str, str]:
         raise ValueError("actor candidate needs speech or first-person action")
     return {"spoken": spoken[:1200], "first_person_action": action[:1200],
             "private_impulse": str(item.get("private_impulse") or "").strip()[:800]}
-
-
-def _event_fields(item: Mapping[str, Any]) -> dict[str, str]:
-    basis = str(item.get("basis") or "")
-    note = str(item.get("source_note") or "").strip()
-    if basis not in {"confirmed", "attributed", "proposed"} or not note:
-        raise ValueError("event candidate needs basis and source_note")
-    return {"basis": basis, "source_note": note[:500]}
 
 
 __all__ = [

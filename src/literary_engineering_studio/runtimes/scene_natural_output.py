@@ -9,6 +9,7 @@ from typing import Any, Callable, Mapping
 from .pi_scene_payload import _answer_payload
 from .commission_source_format import restore_commission_source
 from .creator_delivery_labels import resolve_creator_targets
+from .event_material_provenance import event_fields, recover_event_source_status
 from literary_engineering_studio_engine.public.literary import ACTOR_CARD_SECTIONS
 
 NATURAL_RESPONSE_MODE = "natural-v1"
@@ -96,15 +97,19 @@ class NaturalOutputProcessor:
             payload = _transport_payload(_answer_payload(extracted), kind)
             if kind == "creator":
                 payload = restore_commission_source(answer, payload)
+            if kind == "material" and context.get("role") == "event-narrator":
+                payload = recover_event_source_status(answer, payload)
             validate_extracted_text(answer, payload, kind, context)
             cache.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         if kind == "creator":
             payload = restore_commission_source(answer, payload)
             payload = resolve_creator_targets(payload, context)
+        if kind == "material" and context.get("role") == "event-narrator":
+            payload = recover_event_source_status(answer, payload)
         validate_extracted_text(answer, payload, kind, context)
         if kind == "creator":
             payload["source_provenance"] = _commission_provenance(answer, payload)
-            cache.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        cache.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         return payload
 
 
@@ -127,6 +132,9 @@ def validate_extracted_text(answer: str, payload: Mapping[str, Any], kind: str,
         _commission_provenance(answer, payload)
     if kind == "material":
         _validate_material_text(answer, payload)
+        if (context or {}).get("role") == "event-narrator":
+            for candidate in payload["candidates"]:
+                event_fields(candidate)
     if kind == "tone":
         _validate_tone_text(answer, payload)
 
