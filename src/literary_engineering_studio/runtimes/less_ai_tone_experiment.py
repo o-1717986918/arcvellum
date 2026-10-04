@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 from literary_engineering_studio_engine.public.literary import active_style_prompt_text
-from literary_engineering_studio_engine.public.prompting import prompt_layer_spec
+from literary_engineering_studio_engine.public.prompting import prompt_layer_spec, resolve_prompt_layer, prompt_assembly_manifest
 from ..application.style.owner_directive import read_owner_style_directive
 from .less_ai_tone_edits import apply_tone_edits
 from .scene_natural_output import NaturalOutputProcessor, render_style
@@ -39,9 +39,11 @@ class LessAiToneExperimentMixin:
         if mount["enabled"]:
             if self._prompt_snapshot_provider:
                 snapshot = self._prompt_snapshot_provider((EDITOR, EXTRACTOR), self._project_root)
-                mount["texts"] = snapshot["texts"]
             else:
-                mount["texts"] = {key: prompt_layer_spec(key).default_text for key in (EDITOR, EXTRACTOR)}
+                layers = [resolve_prompt_layer(prompt_layer_spec(key)) for key in (EDITOR, EXTRACTOR)]
+                snapshot = {**prompt_assembly_manifest(layers), "texts": {layer.layer_id: layer.text for layer in layers}}
+            mount["texts"] = snapshot["texts"]
+            mount["prompt_snapshot"] = {key: value for key, value in snapshot.items() if key != "texts"}
             directive = read_owner_style_directive(self._project_root)
             mount["style"] = "\n\n".join(text for text in (
                 str(directive["content"]), active_style_prompt_text(self._project_root)) if text)
@@ -65,7 +67,8 @@ class LessAiToneExperimentMixin:
         directory.mkdir(parents=True, exist_ok=True)
         (directory / "original.md").write_text(result.prose, encoding="utf-8")
         context = {"prose": result.prose, "scene_brief": brief.to_dict(),
-                   "scene_delta": result.scene_delta.to_dict(), "author_style": mount["style"]}
+                   "scene_delta": result.scene_delta.to_dict(), "author_style": mount["style"],
+                   "author_intent": {"decision_summary": result.decision_summary, "decision_trace": result.decision_trace}}
         answer_path = directory / "editor-answer.md"
         if answer_path.is_file():
             answer = answer_path.read_text(encoding="utf-8")

@@ -118,6 +118,23 @@ class ToneExperimentTests(unittest.TestCase):
             adapter.review_scene("v2-tone", brief(), result, VerificationReport("s1", len(result.prose)))
             self.assertIn(result.prose, gateway.review_prompt)
 
+    def test_prompt_version_and_style_are_frozen_with_the_mount(self):
+        with TemporaryDirectory() as tmp:
+            adapter = runtime(Path(tmp))
+            texts = {key: prompt_layer_spec(key).default_text for key in (EDITOR, "scene.v2.transport.extractor")}
+            adapter._prompt_snapshot_provider = lambda *_: {"texts": texts, "digest": "version-one",
+                "layers": [{"layer_id": EDITOR, "source": "project", "version": 3}]}
+            style_path = adapter._project_root / "style/owner_style_directive.md"
+            style_path.parent.mkdir()
+            style_path.write_text("原有文风", encoding="utf-8")
+            mounted = adapter._tone_mount("versioned")
+            adapter._prompt_snapshot_provider = lambda *_: {"texts": {}, "digest": "version-two"}
+            style_path.write_text("新的文风", encoding="utf-8")
+            resumed = adapter._tone_mount("versioned")
+            self.assertEqual(resumed, mounted)
+            self.assertIn("原有文风", resumed["style"])
+            self.assertEqual(resumed["prompt_snapshot"]["layers"][0]["version"], 3)
+
     def test_positive_template_keeps_one_style_field_and_eleven_rules(self):
         text = prompt_layer_spec(EDITOR).default_text
         self.assertEqual(text.count("{{STYLE_DIRECTION}}"), 1)
