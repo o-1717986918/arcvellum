@@ -14,6 +14,11 @@ from ..persistence.scene_transactions import SceneTransactionRepository
 from ..persistence.prompt_layers import FilePromptLayerRepository
 from ..runtimes.pi_scene_transaction import PiSceneTransactionRuntime
 from .project_scene_transactions import AtomicProjectSceneCommitter, ProjectSceneBriefProvider
+from .stylometry_analysis import LabStylometryAnalysis
+from ..persistence.stylometry import FileStylometryRepository
+from ..application.style.stylometry_service import StylometryService
+from ..application.style.stylometry_contracts import LabDocument
+import json
 
 
 @dataclass(frozen=True)
@@ -35,12 +40,16 @@ def build_lean_scene_runtime(
 ) -> LeanSceneRuntimeBundle:
     project = project_root.expanduser().resolve()
     prompt_workbench = PromptWorkbenchService(FilePromptLayerRepository(data_root))
+    stylometry = StylometryService(LabStylometryAnalysis(), FileStylometryRepository(data_root))
     runtime = PiSceneTransactionRuntime(
         config,
         project_root=project,
         data_root=data_root.expanduser().resolve(),
         event_sink=event_sink,
         prompt_snapshot_provider=prompt_workbench.snapshot,
+        creator_style_snapshot_provider=stylometry.repository.snapshot,
+        creator_style_measure_provider=lambda root, text, version: LabDocument("stylometric-host/v1",
+            json.dumps(stylometry.measure(root, text, version_id=version), ensure_ascii=False)),
     )
     service = SceneTransactionService(
         briefs=ProjectSceneBriefProvider(),

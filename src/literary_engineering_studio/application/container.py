@@ -16,6 +16,7 @@ from .style.mount_service import StyleMountApplicationService
 from ..observability.agent_session_tracking import AgentSessionEventProjector
 from ..persistence.scene_transactions import SceneTransactionRepository
 from .character_chat import CharacterChatService
+from .style.stylometry_service import StylometryService
 
 
 @dataclass(frozen=True)
@@ -28,6 +29,7 @@ class ApplicationServices:
     session_events: AgentSessionEventProjector
     prompts: PromptWorkbenchService | None = None
     character_chat: CharacterChatService | None = None
+    stylometry: StylometryService | None = None
 
 
 @dataclass(frozen=True)
@@ -103,6 +105,8 @@ def build_application_container(
             session_events=session_events,
             prompts=prompts,
             character_chat=character_chat,
+            stylometry=StylometryService(ports.stylometry_analysis, ports.stylometry_repository)
+            if ports.stylometry_analysis is not None and ports.stylometry_repository is not None else None,
         ),
     )
 

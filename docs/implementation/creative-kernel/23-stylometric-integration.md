@@ -48,6 +48,21 @@
 
 ## 实施记录
 
+## Module Change Packet：主创动态消费
+
+- objective: 项目所选计量文风经现有主创接口消费，场景交易冻结并记录输出统计。
+- primary_module: runtimes。
+- public_entry: PiSceneTransactionRuntime、既有 lean runtime composition。
+- variation_point: typed snapshot provider 与只读 measurement provider。
+- inputs: 不可变版本快照、主创交付正文。
+- outputs: 文风快照、源摘要及测量文件。
+- invariants: 旧交易保持关闭；五类取材和独立角色聊天沿用原委托；文风与去 AI 味独立；Gate 与写回。
+- allowed_dependencies: application DTO、现有 gateway、已注入 ports。
+- forbidden_dependencies: Lab 计算、模型客户端、正式档案写入。
+- tests: 新旧交易、冻结与版本切换、文风组合、主创独占、输出统计。
+- rollback_unit: composition 和 runtime adapter 提交。
+- documentation: 本文件。
+
 自然委托／文风逐字校验及来源范围完成；失败原文与原因保留，最多两次即时修正，外部重试使用新反馈继续；有效素材和角色卡保持复用。角色恢复测试已迁移到自然交付，移除没有真实来源的 DIRECTOR_ONLY 占位断言。31 项运行时测试通过；架构债务维持 16 文件／76 函数／0 cycle，diff 检查通过。
 
 ## Module Change Packet：标准测试收集

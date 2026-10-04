@@ -13,7 +13,7 @@ from literary_engineering_studio_engine.public.prompting import list_prompt_laye
 from literary_engineering_studio_engine.public.literary import (
     CreativeResult, ReviewResult, SceneBrief, VerificationReport,
     select_active_style_references, recent_formal_reference_ids,
-    active_style_mount_snapshot_payload, active_style_prompt_text,
+    active_style_mount_snapshot_payload,
     render_style_reference_selection,
 )
 from ..runtime.role_conversation import RoleConversationGateway
@@ -32,6 +32,8 @@ from .scene_creator_memory import SceneCreatorMemoryV1
 from .scene_creator_material_policy import repair_material_choice
 from .scene_creator_v2_transaction import SceneCreatorV2Mixin
 from .less_ai_tone_experiment import LessAiToneExperimentMixin
+from .creator_stylometry import CreatorStylometryMixin
+from ..application.style.stylometry_contracts import CreatorStyleSnapshot, LabDocument
 from .scene_material_library import SceneMaterialLibrary
 from ..runtime.prompt_recipes import lean_scene_prompt_recipe
 from .scene_source_evidence import scene_source_evidence
@@ -42,7 +44,7 @@ class PiSceneRuntimeMetrics:
     provider_calls: int
     cache_hits: int
 
-class PiSceneTransactionRuntime(LessAiToneExperimentMixin, SceneCreatorV2Mixin):
+class PiSceneTransactionRuntime(CreatorStylometryMixin, LessAiToneExperimentMixin, SceneCreatorV2Mixin):
     """Use the embedded Pi conversation transport behind K2 runtime ports."""
     def __init__(
         self,
@@ -54,6 +56,8 @@ class PiSceneTransactionRuntime(LessAiToneExperimentMixin, SceneCreatorV2Mixin):
         event_sink: Callable[[str, dict[str, Any]], None] | None = None,
         timeout: int = 900,
         prompt_snapshot_provider: Callable[[tuple[str, ...], Path], dict[str, Any]] | None = None,
+        creator_style_snapshot_provider: Callable[[Path], CreatorStyleSnapshot] | None = None,
+        creator_style_measure_provider: Callable[[Path, str, str], LabDocument] | None = None,
     ):
         self._config = config
         self._project_root = project_root.resolve()
@@ -65,6 +69,8 @@ class PiSceneTransactionRuntime(LessAiToneExperimentMixin, SceneCreatorV2Mixin):
         self._event_sink = event_sink
         self._timeout = max(30, min(900, int(timeout)))
         self._prompt_snapshot_provider = prompt_snapshot_provider
+        self._creator_style_snapshot_provider = creator_style_snapshot_provider
+        self._creator_style_measure_provider = creator_style_measure_provider
         self._provider_calls = 0
         self._cache_hits = 0
 
@@ -81,7 +87,7 @@ class PiSceneTransactionRuntime(LessAiToneExperimentMixin, SceneCreatorV2Mixin):
         projection_digest = self._creative_projection_digest(selection, expression, prompt_layers["digest"])
         initial_sources = self._source_evidence(brief, purpose="create")
         style_reference = self._style_reference(selection)
-        author_style = self._author_style_reference(style_reference)
+        author_style = self._creator_style_text(transaction_id, self._author_style_reference(style_reference))
         creative_digest = scene_creative_cache_digest(projection_digest, brief.to_dict(), initial_sources, self._config)
         cache = self._cache_path(transaction_id, f"creative_result_{creative_digest}.json")
         materials_cache = self._cache_path(transaction_id, f"performance_materials_{creative_digest}.json")
@@ -223,7 +229,7 @@ class PiSceneTransactionRuntime(LessAiToneExperimentMixin, SceneCreatorV2Mixin):
             self._cache_hits += 1
             return creative_result_from_payload(cached)
         style_reference = self._style_reference(selection)
-        author_style = self._author_style_reference(style_reference)
+        author_style = self._creator_style_text(transaction_id, self._author_style_reference(style_reference))
         expression_context = _expression_context_for_prompt(expression, actor_owned=has_actor_entries(materials))
         revised, materials = self._ask_creator_with_materials(
             transaction_id, brief, expression, initial_sources, style_reference, materials_cache, materials,
@@ -390,15 +396,6 @@ class PiSceneTransactionRuntime(LessAiToneExperimentMixin, SceneCreatorV2Mixin):
             if owner["active"] else ""
         )
         return prefix + render_style_reference_selection(selection)
-
-    def _author_style_reference(self, selected_reference: str) -> str:
-        mounted = active_style_prompt_text(self._project_root)
-        if not mounted:
-            return selected_reference
-        return (
-            "### 项目已挂载文风（约束 prose 表达；交付格式由本场 Output 决定）\n"
-            + mounted + "\n\n" + selected_reference
-        )
 
     def _source_evidence(self, brief: SceneBrief, *, purpose: str, reserve_chars: int = 0,
                          max_chars: int | None = None) -> str:

@@ -71,6 +71,7 @@ class SceneCreatorV2Mixin(NaturalCreatorMixin):
             briefing = build_scene_creator_briefing(brief, workspace, CreatorPersonaStore(self._data_root))
             if briefing["creator_persona"]["status"] != "ready":
                 raise RuntimeError("scene creator v2 requires a work-level persona from the top agent")
+            self._creator_style_briefing(transaction_id, briefing)
             _atomic_json(briefing_path, briefing)
         _atomic_json(self._cache_path(transaction_id, "scene_creator_v2_mode.json"),
                      {"schema": "arcvellum/scene-creator-mode/v2", "prompt_digest": snapshot["digest"]})

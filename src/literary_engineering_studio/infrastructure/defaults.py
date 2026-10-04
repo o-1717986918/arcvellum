@@ -22,6 +22,8 @@ from ..runtimes import DEFAULT_RUNTIME_REGISTRY, agent_runner_status
 from ..persistence.character_chats import FileCharacterChatRepository
 from ..runtime.role_conversation import RoleConversationGateway
 from .character_chat import CharacterChatArchiveAdapter, CharacterChatRuntimeAdapter
+from .stylometry_analysis import LabStylometryAnalysis
+from ..persistence.stylometry import FileStylometryRepository
 
 
 def build_default_application_ports(config: dict[str, Any]) -> ApplicationPorts:
@@ -63,6 +65,8 @@ def build_default_application_ports(config: dict[str, Any]) -> ApplicationPorts:
         character_conversation=CharacterChatRuntimeAdapter(RoleConversationGateway(
             config, data_root=data_root / "character-chat-runs")),
         character_chat_archive=CharacterChatArchiveAdapter(data_root),
+        stylometry_analysis=LabStylometryAnalysis(),
+        stylometry_repository=FileStylometryRepository(data_root),
     )
 
 

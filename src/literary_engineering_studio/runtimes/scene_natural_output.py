@@ -59,8 +59,10 @@ def render_style(template: str, direction: str) -> str:
 
 def creator_style(briefing: Mapping[str, Any]) -> str:
     style = briefing.get("style") or {}
+    measured = style.get("stylometry") or {}
+    keys = ("author_directive",) if measured.get("combine") == "replace" else ("author_directive", "mounted")
     return "\n\n".join(str(item.get("content") or "").strip()
-                        for key in ("author_directive", "mounted")
+                        for key in (*keys, "stylometry")
                         if isinstance((item := style.get(key)), dict) and item.get("content"))
 
 

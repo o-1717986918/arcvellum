@@ -7,6 +7,7 @@ from typing import Any, Callable, Protocol
 
 from .persistence_ports import PersistencePorts
 from .character_chat_ports import CharacterChatArchivePort, CharacterChatRepositoryPort, CharacterConversationPort
+from .style.stylometry_contracts import StylometryAnalysisPort, StylometryRepositoryPort
 
 
 class LiveEventPublisherPort(Protocol):
@@ -91,6 +92,8 @@ class ApplicationPorts:
     character_chats: CharacterChatRepositoryPort | None = None
     character_conversation: CharacterConversationPort | None = None
     character_chat_archive: CharacterChatArchivePort | None = None
+    stylometry_analysis: StylometryAnalysisPort | None = None
+    stylometry_repository: StylometryRepositoryPort | None = None
 
     @property
     def store(self) -> Any:
