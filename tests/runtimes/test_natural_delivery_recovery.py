@@ -21,6 +21,21 @@ from tests.runtimes.test_scene_natural_output import NaturalGateway, REQUEST, PR
 
 
 class DeliveryRecoveryTests(unittest.TestCase):
+    def test_bad_transport_retries_same_original_with_specific_feedback(self):
+        prompts = []
+        with TemporaryDirectory() as tmp:
+            def extract(_system, prompt):
+                prompts.append(json.loads(prompt))
+                return json.dumps({"candidates": [{"text": PROSE, "focus": "等待",
+                    "private_impulse": "整理者添加的内心" if len(prompts) == 1 else ""}]}, ensure_ascii=False)
+            processor = NaturalOutputProcessor(Path(tmp), "整理素材原文", extract)
+            result = processor.process(PROSE, kind="material", context={"role": "character-actor"})
+            self.assertEqual(result["candidates"][0]["text"], PROSE)
+            self.assertEqual(prompts[0]["source_text"], prompts[1]["source_text"])
+            self.assertIn("private_impulse", prompts[1]["transport_feedback"]["issue"])
+            self.assertEqual(len(list(Path(tmp).rglob("*.extraction*.md"))), 2)
+            self.assertEqual(len(list(Path(tmp).rglob("*.failure.json"))), 1)
+
     def test_unsourced_event_is_a_source_bound_proposal_and_confirmed_note_is_preserved(self):
         with TemporaryDirectory() as tmp:
             def extract(_system, _prompt):

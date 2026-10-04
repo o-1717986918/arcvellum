@@ -35,7 +35,7 @@ _CREATOR_CONTRACT = {
 _MATERIAL_CONTRACT = {
     "candidates": [{"text": "exact contiguous literary source text", "focus": "literary focus",
         "spoken": "exact source speech for actor", "first_person_action": "exact actor action",
-        "private_impulse": "exact private impulse if present",
+        "private_impulse": "verbatim private impulse when explicitly present in source_text, otherwise empty",
         "basis": "event only: confirmed/attributed/proposed",
         "source_note": "event only: source or author's proposal note"}],
     "no_material_reason": "reason if creator offers no material",
@@ -85,32 +85,51 @@ class NaturalOutputProcessor:
         fingerprint = sha256(json.dumps(["verbatim-commission-v2", kind, context, self.system_prompt],
             ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
         cache = directory / (fingerprint + ".json")
+        issue = ""
         if cache.is_file():
-            payload = _transport_payload(json.loads(cache.read_text(encoding="utf-8")), kind)
+            try:
+                payload = _prepare_transport_payload(answer, json.loads(cache.read_text(encoding="utf-8")), kind, context)
+            except ValueError as error:
+                issue = str(error)
+                payload = self._extract(answer, kind, context, directory, fingerprint, issue)
         else:
-            prompt = json.dumps({"operation": kind, "task_contract": CONTRACTS[kind],
-                                 "transport_limits": {"candidate_count": 3, "candidate_chars": 2400,
-                                     "requests": 8, "author_prompt_chars": 6000, "style_chars": 8000},
-                                 "source_text": answer, "context": context}, ensure_ascii=False)
-            extracted = self.invoke(self.system_prompt, prompt)
-            (directory / (fingerprint + ".extraction.md")).write_text(extracted, encoding="utf-8")
-            payload = _transport_payload(_answer_payload(extracted), kind)
-            if kind == "creator":
-                payload = restore_commission_source(answer, payload)
-            if kind == "material" and context.get("role") == "event-narrator":
-                payload = recover_event_source_status(answer, payload)
-            validate_extracted_text(answer, payload, kind, context)
-            cache.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-        if kind == "creator":
-            payload = restore_commission_source(answer, payload)
-            payload = resolve_creator_targets(payload, context)
-        if kind == "material" and context.get("role") == "event-narrator":
-            payload = recover_event_source_status(answer, payload)
-        validate_extracted_text(answer, payload, kind, context)
+            payload = self._extract(answer, kind, context, directory, fingerprint, issue)
         if kind == "creator":
             payload["source_provenance"] = _commission_provenance(answer, payload)
         cache.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         return payload
+
+    def _extract(self, answer, kind, context, directory, fingerprint, issue):
+        task = {"operation": kind, "task_contract": CONTRACTS[kind], "source_text": answer, "context": context,
+            "transport_limits": {"candidate_count": 3, "candidate_chars": 2400,
+                "requests": 8, "author_prompt_chars": 6000, "style_chars": 8000}}
+        for attempt in range(2):
+            if issue:
+                task["transport_feedback"] = {"issue": issue,
+                    "request": "请用本次 source_text 中连续的原文片段完成整理；可选内容空缺时使用合同空值。"}
+            extracted = self.invoke(self.system_prompt, json.dumps(task, ensure_ascii=False))
+            sequence = len(list(directory.glob(fingerprint + ".extraction*.md"))) + 1
+            suffix = ".extraction.md" if sequence == 1 else f".extraction-{sequence}.md"
+            path = directory / (fingerprint + suffix)
+            path.write_text(extracted, encoding="utf-8")
+            try:
+                return _prepare_transport_payload(answer, _answer_payload(extracted), kind, context)
+            except ValueError as error:
+                issue = str(error)
+                path.with_suffix(".failure.json").write_text(json.dumps({"issue": issue}, ensure_ascii=False), encoding="utf-8")
+                if attempt == 1:
+                    raise
+
+
+def _prepare_transport_payload(answer, payload, kind, context):
+    payload = _transport_payload(payload, kind)
+    if kind == "creator":
+        payload = restore_commission_source(answer, payload)
+        payload = resolve_creator_targets(payload, context)
+    if kind == "material" and context.get("role") == "event-narrator":
+        payload = recover_event_source_status(answer, payload)
+    validate_extracted_text(answer, payload, kind, context)
+    return payload
 
 
 def _transport_payload(payload, kind):
