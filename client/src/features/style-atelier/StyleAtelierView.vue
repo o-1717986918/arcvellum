@@ -16,6 +16,7 @@ import StyleMountManager from "./components/StyleMountManager.vue";
 import StyleSourceRail from "./components/StyleSourceRail.vue";
 import StyleSourceWorkshop from "./components/StyleSourceWorkshop.vue";
 import StyleVersionRack from "./components/StyleVersionRack.vue";
+import StylometryWorkbench from "./components/StylometryWorkbench.vue";
 import { useStyleAtelierStore } from "./stores/styleAtelier";
 import type {
   StyleAuthorCreatePayload,
@@ -127,6 +128,8 @@ function verdictLabel(value: unknown): string {
       <span>{{ style.notice }}</span>
       <button @click="style.clearNotice">关闭</button>
     </div>
+
+    <StylometryWorkbench :project-root="style.projectRoot" />
 
     <section v-if="style.workbench" class="style-atelier-shell">
       <header class="style-atelier-instrument">
