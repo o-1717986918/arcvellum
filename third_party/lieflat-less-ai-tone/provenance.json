@@ -1,0 +1,7 @@
+{
+  "repository": "https://github.com/larashero3-dotcom/lieflat-less-ai-tone",
+  "commit": "27d29232f10124db904ca9c0536d0b67cb3b2833",
+  "skill_sha256": "1db087d4db618cf635ec15b304803f3a219d57f92297e1103f922f2f051c8a35",
+  "runtime_prompt": "experiment.less_ai_tone.editor",
+  "use": "positive literary adaptation of eleven rules"
+}
