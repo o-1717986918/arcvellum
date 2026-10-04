@@ -48,7 +48,8 @@ CONTRACTS["tone"] = {"edits": [{"rule_id": "1 through 11", "before": "exact orig
     "summary": "editor's summary; empty edits when text is retained"}
 CONTRACTS["card"] = {"card": {"schema": "arcvellum/actor-character-card/v1", "target": "target from context",
     "sections": {key: "verbatim card section" for key in ACTOR_CARD_SECTIONS}, "source_refs": [], "notes": ""}}
-_CHANGE = {"target_ref": "existing archive reference", "summary": "stated change",
+_CHANGE = {"target_ref": "reference in context.briefing.scene_brief.source_refs; narrative future handoffs use next_handoff",
+           "summary": "stated change",
            "evidence": "verbatim source passage", "operation": "update/create", "attributes": {}}
 for _key in _CREATOR_CONTRACT["scene_delta"]:
     if _key != "next_handoff":
