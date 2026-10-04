@@ -48,6 +48,36 @@
 
 ## 实施记录
 
+## Module Change Packet：计量文风前端
+
+- objective: 用户能直接统计、调参、修改片段并选择主创挂载，看到实际版本与缺测。
+- primary_module: client/style-atelier。
+- public_entry: 文风工坊中的计量文风工作台。
+- variation_point: feature-owned stylometry client。
+- inputs: 当前作品、导入语料或正式档案、指标范围、用户片段。
+- outputs: 版本、挂载、结构化导出及测量展示。
+- invariants: 原正式文风流程、当前作品隔离、用户自由编辑、实验状态可见。
+- allowed_dependencies: feature client、现有 archive read client、Vue。
+- forbidden_dependencies: 组件直调通用 transport、前端重新计算统计。
+- tests: feature contract、实际统计/调参/挂载/卸载/导出、桌面和移动布局。
+- rollback_unit: feature types/client 与界面分批。
+- documentation: 本文件。
+
+## Module Change Packet：长统计任务与缓存
+
+- objective: 长统计可离页继续，显示阶段、取消并恢复；计算按来源及方法复用。
+- primary_module: application/style。
+- public_entry: StylometryJobsService / typed job repository port。
+- variation_point: 后台 executor、原有统计 port、文件 job adapter。
+- inputs: 上传文本与来源声明。
+- outputs: 持久任务、阶段、分析结果或原因。
+- invariants: 取消后计算段完成即停止交付；统计不自动挂载；恢复使用保存的输入。
+- allowed_dependencies: application DTO、标准 executor；adapter 拥有文件与缓存。
+- forbidden_dependencies: 新模型或 Provider、正式文学状态修改。
+- tests: 成功、取消、失败恢复、重启中断、缓存一致。
+- rollback_unit: 长分析合同、adapter 与 API 独立提交。
+- documentation: 本文件。
+
 ## Module Change Packet：计量工作台 HTTP
 
 - objective: 前端可经宿主接口统计、编辑、保存及挂载计量文风。

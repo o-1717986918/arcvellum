@@ -65,7 +65,7 @@ def build_default_application_ports(config: dict[str, Any]) -> ApplicationPorts:
         character_conversation=CharacterChatRuntimeAdapter(RoleConversationGateway(
             config, data_root=data_root / "character-chat-runs")),
         character_chat_archive=CharacterChatArchiveAdapter(data_root),
-        stylometry_analysis=LabStylometryAnalysis(),
+        stylometry_analysis=LabStylometryAnalysis(data_root / "stylometry-cache"),
         stylometry_repository=FileStylometryRepository(data_root),
     )
 

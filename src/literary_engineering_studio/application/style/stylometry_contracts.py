@@ -63,6 +63,18 @@ class CreatorStyleSnapshot:
         return {"schema": "arcvellum/creator-stylometry-snapshot/v1", **asdict(self)}
 
 
+@dataclass(frozen=True)
+class StylometryJob:
+    job_id: str
+    title: str
+    sources_json: str
+    status: str = "queued"
+    phase: str = "等待计算"
+    attempt: int = 1
+    result_json: str = ""
+    error: str = ""
+
+
 class StylometryAnalysisPort(Protocol):
     def capabilities(self) -> LabDocument: ...
     def analyze(self, sources: tuple[CorpusTextSource, ...], label: str) -> LabDocument: ...
@@ -82,4 +94,7 @@ class StylometryRepositoryPort(Protocol):
     def save_version(self, root: Path, record: StylometryVersion) -> None: ...
     def snapshot(self, root: Path) -> CreatorStyleSnapshot: ...
     def set_mount(self, root: Path, snapshot: CreatorStyleSnapshot, expected_revision: int) -> CreatorStyleSnapshot: ...
+    def jobs(self, root: Path) -> tuple[StylometryJob, ...]: ...
+    def job(self, root: Path, job_id: str) -> StylometryJob: ...
+    def save_job(self, root: Path, record: StylometryJob) -> None: ...
 

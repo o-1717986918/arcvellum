@@ -11,9 +11,13 @@ from stylometric_prompt_lab.creator_fragment import (
 from stylometric_prompt_lab.corpus import normalize_source
 
 from ..application.style.stylometry_contracts import LabDocument
+from .stylometry_cache import StylometryCalculationCache
 
 
 class LabStylometryAnalysis:
+    def __init__(self, cache_root: Path | None = None):
+        self.cache = StylometryCalculationCache(cache_root)
+
     def capabilities(self):
         return _document({"schema": "arcvellum/stylometry-capabilities/v1", "lab_version": __version__,
             "basic": True, "lexical": True, "dependency": "saved-tree-import",
@@ -21,6 +25,15 @@ class LabStylometryAnalysis:
             "generation_effect": "not-verified"})
 
     def analyze(self, sources, label):
+        key = self.cache.key(sources, label, __version__)
+        cached = self.cache.read(key)
+        if cached is not None:
+            return cached
+        result = self._analyze(sources, label)
+        self.cache.save(key, result)
+        return result
+
+    def _analyze(self, sources, label):
         if not 1 <= len(sources) <= 64 or sum(len(row.text) for row in sources) > 2_000_000:
             raise ValueError("语料需为 1–64 篇，总计不超过 200 万字符。")
         if not label.strip() or len(label) > 80:

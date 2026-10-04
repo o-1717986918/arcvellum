@@ -17,6 +17,7 @@ from ..observability.agent_session_tracking import AgentSessionEventProjector
 from ..persistence.scene_transactions import SceneTransactionRepository
 from .character_chat import CharacterChatService
 from .style.stylometry_service import StylometryService
+from .style.stylometry_jobs import StylometryJobsService
 
 
 @dataclass(frozen=True)
@@ -30,6 +31,7 @@ class ApplicationServices:
     prompts: PromptWorkbenchService | None = None
     character_chat: CharacterChatService | None = None
     stylometry: StylometryService | None = None
+    stylometry_jobs: StylometryJobsService | None = None
 
 
 @dataclass(frozen=True)
@@ -39,6 +41,8 @@ class ApplicationContainer:
     services: ApplicationServices
 
     def shutdown(self, *, wait: bool = True) -> None:
+        if self.services.stylometry_jobs is not None:
+            self.services.stylometry_jobs.shutdown(wait=wait)
         self.services.autopilot.shutdown()
         self.services.bootstrap.shutdown()
         self.services.lifecycle.shutdown(wait=wait)
@@ -89,6 +93,8 @@ def build_application_container(
         if prompts is not None else None,
     )
     character_chat = None
+    stylometry = (StylometryService(ports.stylometry_analysis, ports.stylometry_repository)
+                  if ports.stylometry_analysis is not None and ports.stylometry_repository is not None else None)
     if ports.character_chats and ports.character_conversation and ports.character_chat_archive:
         character_chat = CharacterChatService(ports.character_chats, ports.character_conversation,
             ports.character_chat_archive, prompt_resolver=(lambda key, root: prompts.resolve(key, root).text)
@@ -105,8 +111,8 @@ def build_application_container(
             session_events=session_events,
             prompts=prompts,
             character_chat=character_chat,
-            stylometry=StylometryService(ports.stylometry_analysis, ports.stylometry_repository)
-            if ports.stylometry_analysis is not None and ports.stylometry_repository is not None else None,
+            stylometry=stylometry,
+            stylometry_jobs=StylometryJobsService(stylometry) if stylometry is not None else None,
         ),
     )
 

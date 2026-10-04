@@ -5,6 +5,8 @@ from hashlib import sha256
 import json
 from pathlib import Path
 from uuid import uuid4
+from literary_engineering_studio_engine.public.literary import active_style_prompt_text
+from .owner_directive import read_owner_style_directive
 from .stylometry_contracts import (
     CorpusTextSource, CreatorStyleSnapshot, StylometryAnalysisPort, StylometryRepositoryPort,
     StylometryProfile, StylometryVersion,
@@ -25,15 +27,21 @@ class StylometryService:
             "capabilities": _decode(self.analysis.capabilities().json_text),
             "profiles": [_profile_view(row) for row in self.repository.profiles(root)],
             "versions": [_version_view(row) for row in self.repository.versions(root)],
-            "mount": self.repository.snapshot(root).to_dict()}
+            "mount": self.repository.snapshot(root).to_dict(),
+            "style_context": {"author_directive": read_owner_style_directive(root)["content"],
+                              "formal": active_style_prompt_text(root)}}
 
     def analyze(self, root: Path, sources: tuple[CorpusTextSource, ...], title: str):
         _project(root)
         result = self.analysis.analyze(sources, title)
-        payload = _decode(result.json_text)
+        return self.save_analysis(root, sources, title, result.json_text)
+
+    def save_analysis(self, root, sources, title, result_json):
+        _project(root)
+        payload = _decode(result_json)
         if "profile" not in payload:
             return {"schema": "arcvellum/stylometry-analysis/v1", "kind": "single-text", "result": payload}
-        record = StylometryProfile(str(uuid4()), title, _now(), result.json_text,
+        record = StylometryProfile(str(uuid4()), title, _now(), result_json,
                                    json.dumps([asdict(row) for row in sources], ensure_ascii=False))
         self.repository.save_profile(root, record)
         return self.profile(root, record.profile_id)

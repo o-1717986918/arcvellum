@@ -7,7 +7,7 @@ from tempfile import NamedTemporaryFile
 from threading import RLock
 from uuid import UUID
 
-from ..application.style.stylometry_contracts import CreatorStyleSnapshot, StylometryProfile, StylometryVersion
+from ..application.style.stylometry_contracts import CreatorStyleSnapshot, StylometryProfile, StylometryVersion, StylometryJob
 from ..project_agent.scope import work_id_for_root
 from .stylometry_lock import mount_lock
 
@@ -76,6 +76,16 @@ class FileStylometryRepository:
             updated = replace(snapshot, revision=current.revision + 1)
             _write(self._directory(root) / "mount.json", root, asdict(updated))
             return updated
+
+    def jobs(self, root):
+        return tuple(self.job(root, path.stem) for path in sorted(self._directory(root).glob("jobs/*.json")))
+
+    def job(self, root, job_id):
+        return StylometryJob(**_read(self._path(root, "jobs", job_id), root))
+
+    def save_job(self, root, record):
+        with _LOCK:
+            _write(self._path(root, "jobs", record.job_id), root, asdict(record))
 
 
 def _read(path, root):

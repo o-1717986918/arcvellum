@@ -1582,6 +1582,19 @@
         "title": "StylometryCompileRequest",
         "type": "object"
       },
+      "StylometryJobActionRequest": {
+        "properties": {
+          "project_root": {
+            "title": "Project Root",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_root"
+        ],
+        "title": "StylometryJobActionRequest",
+        "type": "object"
+      },
       "StylometryMeasureRequest": {
         "properties": {
           "candidate_json": {
@@ -8471,6 +8484,232 @@
           }
         },
         "summary": "Compile Fragment",
+        "tags": [
+          "stylometry"
+        ]
+      }
+    },
+    "/stylometry/jobs": {
+      "get": {
+        "operationId": "list_jobs_stylometry_jobs_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Jobs",
+        "tags": [
+          "stylometry"
+        ]
+      },
+      "post": {
+        "operationId": "launch_stylometry_jobs_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StylometryAnalyzeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Launch",
+        "tags": [
+          "stylometry"
+        ]
+      }
+    },
+    "/stylometry/jobs/{job_id}": {
+      "get": {
+        "operationId": "read_stylometry_jobs__job_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read",
+        "tags": [
+          "stylometry"
+        ]
+      }
+    },
+    "/stylometry/jobs/{job_id}/cancel": {
+      "post": {
+        "operationId": "cancel_stylometry_jobs__job_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StylometryJobActionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel",
+        "tags": [
+          "stylometry"
+        ]
+      }
+    },
+    "/stylometry/jobs/{job_id}/resume": {
+      "post": {
+        "operationId": "resume_stylometry_jobs__job_id__resume_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StylometryJobActionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resume",
         "tags": [
           "stylometry"
         ]

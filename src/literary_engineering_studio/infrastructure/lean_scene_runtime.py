@@ -40,7 +40,7 @@ def build_lean_scene_runtime(
 ) -> LeanSceneRuntimeBundle:
     project = project_root.expanduser().resolve()
     prompt_workbench = PromptWorkbenchService(FilePromptLayerRepository(data_root))
-    stylometry = StylometryService(LabStylometryAnalysis(), FileStylometryRepository(data_root))
+    stylometry = StylometryService(LabStylometryAnalysis(data_root / "stylometry-cache"), FileStylometryRepository(data_root))
     runtime = PiSceneTransactionRuntime(
         config,
         project_root=project,
