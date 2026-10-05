@@ -31,6 +31,16 @@ class StylometryParametersRequest(BaseModel):
     dependency_json: str = Field(default="", max_length=16_000_000)
 
 
+class StylometryImportRequest(BaseModel):
+    project_root: str
+    profile_id: str = ""
+    profile_json: str = Field(default="", max_length=4_000_000)
+    parameters_json: str = Field(default="", max_length=512_000)
+    dependency_json: str = Field(default="", max_length=16_000_000)
+    title: str = Field(default="", max_length=80)
+    intent: str = Field(default="", max_length=8000)
+
+
 class StylometryCompileRequest(StylometryParametersRequest):
     controls_json: str = Field(max_length=128_000)
     title: str = Field(min_length=1, max_length=80)
@@ -79,6 +89,10 @@ def build_stylometry_router(service: StylometryService):
     @router.post("/parameters")
     def parameters(payload: StylometryParametersRequest):
         return invoke(service.parameters, payload, **_arguments(payload))
+
+    @router.post("/import")
+    def import_parameters(payload: StylometryImportRequest):
+        return invoke(service.import_parameters, payload, **_arguments(payload))
 
     @router.post("/compile")
     def compile_fragment(payload: StylometryCompileRequest):

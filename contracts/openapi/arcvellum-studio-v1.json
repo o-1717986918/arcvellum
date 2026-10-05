@@ -1582,6 +1582,54 @@
         "title": "StylometryCompileRequest",
         "type": "object"
       },
+      "StylometryImportRequest": {
+        "properties": {
+          "dependency_json": {
+            "default": "",
+            "maxLength": 16000000,
+            "title": "Dependency Json",
+            "type": "string"
+          },
+          "intent": {
+            "default": "",
+            "maxLength": 8000,
+            "title": "Intent",
+            "type": "string"
+          },
+          "parameters_json": {
+            "default": "",
+            "maxLength": 512000,
+            "title": "Parameters Json",
+            "type": "string"
+          },
+          "profile_id": {
+            "default": "",
+            "title": "Profile Id",
+            "type": "string"
+          },
+          "profile_json": {
+            "default": "",
+            "maxLength": 4000000,
+            "title": "Profile Json",
+            "type": "string"
+          },
+          "project_root": {
+            "title": "Project Root",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "maxLength": 80,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_root"
+        ],
+        "title": "StylometryImportRequest",
+        "type": "object"
+      },
       "StylometryJobActionRequest": {
         "properties": {
           "project_root": {
@@ -8496,6 +8544,45 @@
           }
         },
         "summary": "Compile Fragment",
+        "tags": [
+          "stylometry"
+        ]
+      }
+    },
+    "/stylometry/import": {
+      "post": {
+        "operationId": "import_parameters_stylometry_import_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StylometryImportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Import Parameters",
         "tags": [
           "stylometry"
         ]

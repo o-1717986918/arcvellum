@@ -35,6 +35,11 @@ class StylometryApiTests(unittest.TestCase):
                     {"source_id": "holdout-one", "work_id": "work-two", "split": "holdout",
                      "text": "他循着山路走过去。石头上落着水，远处传来鸟叫。" * 30}]}).json()
                 request = {**params, "profile_id": profile["profile_id"], "controls_json": json.dumps(profile["controls"]), "title": "舒缓"}
+                imported = client.post("/stylometry/import", json={**params,
+                    "profile_json": profile["profile_json"], "parameters_json": request["controls_json"], "title": "导入"})
+                self.assertEqual(imported.status_code, 200, imported.text)
+                self.assertEqual(imported.json()["controls"], profile["controls"])
+                self.assertEqual(client.post("/stylometry/import", json={**params, "parameters_json": request["controls_json"]}).status_code, 400)
                 preview = client.post("/stylometry/compile", json=request)
                 self.assertEqual(preview.status_code, 200, preview.text)
                 version = client.post("/stylometry/versions", json={**request, "fragment_override": "让句子的呼吸顺着风展开。"}).json()

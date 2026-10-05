@@ -2616,6 +2616,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/stylometry/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Import Parameters */
+        post: operations["import_parameters_stylometry_import_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/stylometry/jobs": {
         parameters: {
             query?: never;
@@ -3937,6 +3954,41 @@ export interface components {
             /** Project Root */
             project_root: string;
             /** Title */
+            title: string;
+        };
+        /** StylometryImportRequest */
+        StylometryImportRequest: {
+            /**
+             * Dependency Json
+             * @default
+             */
+            dependency_json: string;
+            /**
+             * Intent
+             * @default
+             */
+            intent: string;
+            /**
+             * Parameters Json
+             * @default
+             */
+            parameters_json: string;
+            /**
+             * Profile Id
+             * @default
+             */
+            profile_id: string;
+            /**
+             * Profile Json
+             * @default
+             */
+            profile_json: string;
+            /** Project Root */
+            project_root: string;
+            /**
+             * Title
+             * @default
+             */
             title: string;
         };
         /** StylometryJobActionRequest */
@@ -9209,6 +9261,39 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["StylometryCompileRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_parameters_stylometry_import_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StylometryImportRequest"];
             };
         };
         responses: {
