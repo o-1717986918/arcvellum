@@ -1,7 +1,9 @@
 import { computed, onBeforeUnmount, ref, watch, type Ref } from "vue";
 import { stylometryClient as client } from "../services/stylometryClient";
+import { readParameterFiles } from "../services/stylometryImport";
+import { useStylometryTuning } from "./useStylometryTuning";
 import type { CorpusSource, CreatorControls, MetricRow, StyloCompiled, StyloJob,
-  StyloMeasurement, StyloProfile, StyloVersion, StyloWorkbench } from "../stylometryTypes";
+  FragmentRequest, StyloMeasurement, StyloProfile, StyloVersion, StyloWorkbench } from "../stylometryTypes";
 
 export function useStylometry(root: Ref<string>) {
   const workbench = ref<StyloWorkbench | null>(null), profile = ref<StyloProfile | null>(null);
@@ -43,10 +45,15 @@ export function useStylometry(root: Ref<string>) {
     });
   }
   function selectProfile(id: string): Promise<void> {
-    return run(async project => ({ profile: await client.profile(project, id), parameters: await client.parameters(project, id) }), result => {
-      profile.value = result.profile; metrics.value = result.parameters.metrics; controls.value = result.parameters.controls;
-      title.value = result.profile.title; dependency.value = ""; fragment.value = "";
+    return run(async project => {
+      const profile = await client.profile(project, id);
+      return { profile, parameters: await client.parameters(project, id, profile.dependency_json || "") };
+    }, result => {
+      profile.value = result.profile; metrics.value = result.parameters.metrics; controls.value = structuredClone(result.profile.controls);
+      title.value = result.profile.title; dependency.value = result.profile.dependency_json || ""; fragment.value = "";
+      intent.value = result.profile.intent || "";
       selectedVersion.value = null; compiled.value = null; report.value = null; tab.value = "parameters";
+      tuning.reset();
     });
   }
   function selectVersion(id: string): Promise<void> {
@@ -59,6 +66,7 @@ export function useStylometry(root: Ref<string>) {
       controls.value = JSON.parse(result.version.controls_json); dependency.value = result.version.dependency_json;
       title.value = result.version.title; intent.value = result.version.intent; fragment.value = result.version.fragment_text;
       compiled.value = JSON.parse(result.version.compiled_json); report.value = null; tab.value = "mount";
+      tuning.reset(result.version.user_edited || fragment.value !== compiled.value?.fragment_text);
     });
   }
   function request(project: string) {
@@ -67,9 +75,7 @@ export function useStylometry(root: Ref<string>) {
       title: title.value, intent: intent.value, dependency_json: dependency.value };
   }
   function compile(): Promise<void> {
-    return run(project => client.compile(request(project)), result => {
-      compiled.value = result; fragment.value = result.fragment_text; notice.value = "已重新编译，可直接修改片段后保存。";
-    });
+    return tuning.refresh();
   }
   function save(): Promise<void> {
     return run(async project => ({ version: await client.save({ ...request(project), fragment_override: fragment.value || null }),
@@ -85,6 +91,40 @@ export function useStylometry(root: Ref<string>) {
       await client.mount(project, selectedVersion.value?.version_id || "", enabled, workbench.value?.mount.revision || 0, combine.value, usage.value);
       return client.workbench(project);
     }, result => { workbench.value = result; notice.value = enabled ? "已挂载，后续新场景生效。" : "已卸载，后续新场景生效。"; });
+  }
+  async function importFiles(files: File[]): Promise<void> {
+    tuning.reset();
+    await run(async project => {
+      const imported = await client.importParameters(project, profile.value?.profile_id || "", await readParameterFiles(files));
+      return { profile: imported, parameters: await client.parameters(project, imported.profile_id, imported.dependency_json || ""),
+        workbench: await client.workbench(project) };
+    }, result => {
+      workbench.value = result.workbench; profile.value = result.profile; metrics.value = result.parameters.metrics;
+      controls.value = structuredClone(result.profile.controls); dependency.value = result.profile.dependency_json || "";
+      title.value = result.profile.title; intent.value = result.profile.intent || "";
+      fragment.value = ""; compiled.value = null; selectedVersion.value = null; report.value = null;
+      tab.value = "parameters"; tuning.reset(); notice.value = "已导入原始计量参数，可拖动调整并挂载。";
+    });
+  }
+  async function publish(input: FragmentRequest, body: string, current: () => boolean): Promise<boolean> {
+    const key = JSON.stringify(input);
+    let published = false;
+    await run(async project => {
+      const version = await client.save({ ...input, project_root: project,
+        fragment_override: body === compiled.value?.fragment_text ? null : body });
+      if (!current() || key !== JSON.stringify(tuningInput.value) || fragment.value !== body) return null;
+      await client.mount(project, version.version_id, true, workbench.value?.mount.revision || 0, combine.value, usage.value);
+      return { version, workbench: await client.workbench(project) };
+    }, result => {
+      if (!result) return;
+      workbench.value = result.workbench; published = true;
+      if (key === JSON.stringify(tuningInput.value) && fragment.value === body) {
+        selectedVersion.value = result.version; compiled.value = JSON.parse(result.version.compiled_json); report.value = null;
+        fragment.value = result.version.fragment_text;
+        notice.value = "参数要求已保存并挂载，后续新场景生效。";
+      }
+    });
+    return published;
   }
   function measure(): Promise<void> {
     const body = text.value, tree = candidateTree.value, version = selectedVersion.value?.version_id;
@@ -136,8 +176,12 @@ export function useStylometry(root: Ref<string>) {
       else report.value = row.result.result;
     }
   }
+  const tuningInput = computed(() => root.value && profile.value && controls.value ? request(root.value) : null);
+  const tuning = useStylometryTuning(tuningInput, fragment, compiled, publish);
   watch([text, candidateTree], () => { report.value = null; }, { flush: "sync" });
+  watch(controls, () => { report.value = null; }, { deep: true, flush: "sync" });
   watch(root, () => {
+    tuning.reset();
     generation++; clearTimeout(timer); workbench.value = null; profile.value = null; selectedVersion.value = null;
     sources.value = []; metrics.value = []; controls.value = null; dependency.value = ""; candidateTree.value = "";
     fragment.value = ""; text.value = ""; report.value = null; compiled.value = null; intent.value = "";
@@ -147,5 +191,8 @@ export function useStylometry(root: Ref<string>) {
   onBeforeUnmount(() => { generation++; clearTimeout(timer); });
   return { workbench, profile, metrics, controls, sources, title, intent, dependency, candidateTree, fragment,
     compiled, selectedVersion, report, text, busy, error, notice, job, jobs, tab, combine, usage, running, dirty, combined,
-    load, selectProfile, selectVersion, compile, save, mount, measure, launch, jobAction, loadDependency, restore, selectJob };
+    previewBusy: tuning.previewBusy, previewError: tuning.previewError, previewCurrent: tuning.previewCurrent,
+    autoMount: tuning.autoMount, publishing: tuning.publishing, manualFragment: tuning.manualFragment,
+    takePreview: tuning.takePreview, applyAndMount: tuning.applyAndMount,
+    importFiles, load, selectProfile, selectVersion, compile, save, mount, measure, launch, jobAction, loadDependency, restore, selectJob };
 }

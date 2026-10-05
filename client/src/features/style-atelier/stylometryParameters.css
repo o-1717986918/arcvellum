@@ -1,0 +1,30 @@
+.stylo-import-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
+.stylo-import-bar small { flex: 1; min-width: 160px; line-height: 1.6; }
+.stylo-import-bar .stylo-file-button { position: relative; display: block; overflow: hidden; margin: 0; }
+.stylo-import-bar input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.stylo-tuning-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, .72fr); gap: 22px; align-items: start; }
+.stylo-tuning-preview { position: sticky; top: 12px; padding-left: 20px; border-left: 1px solid var(--stylo-line); min-width: 0; }
+.stylo-parameter-deck { min-width: 0; }.stylo-parameter-deck h3 { margin-top: 12px; }
+.stylo-parameter-deck > details { margin: 10px 0 18px; }.stylo-parameter-deck > details > summary { font-size: 14px; font-weight: 650; margin-bottom: 12px; }.stylo-parameter-deck > details > summary small { display: inline; margin-left: 6px; font-weight: 400; }
+.stylo-range-grid { display: grid; gap: 12px; }.stylo-range-card { border: 1px solid var(--stylo-line); border-radius: 6px; padding: 12px 14px; min-width: 0; }
+.stylo-range-card[data-enabled=true] { border-left: 3px solid var(--pa-accent, var(--jade-600)); }
+.stylo-range-card header { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.stylo-desk .stylo-range-card header label, .stylo-desk .stylo-auto-mount { flex-direction: row; align-items: center; gap: 8px; }
+.stylo-range-card header label { font-weight: 650; margin: 0; }.stylo-range-card header span { color: var(--stylo-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.stylo-range-summary { height: 18px; position: relative; margin: 5px 0 10px; }
+.stylo-range-base, .stylo-range-band { position: absolute; height: 4px; border-radius: 3px; top: 8px; }
+.stylo-range-base { inset-inline: 0; background: var(--stylo-line); }.stylo-range-band { background: var(--pa-accent, var(--jade-600)); }
+.stylo-range-observed { position: absolute; top: 2px; width: 2px; height: 16px; background: var(--stylo-muted); }
+.stylo-desk .stylo-range-slider { display: grid; grid-template-columns: 30px minmax(0, 1fr); align-items: center; margin: 2px 0; }
+.stylo-desk .stylo-range-slider input[type=range] { width: 100%; height: 28px; appearance: none; -webkit-appearance: none; background: transparent; border: 0; padding: 0; margin: 0; cursor: pointer; }
+.stylo-range-slider input[type=range]::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: var(--stylo-line); }
+.stylo-range-slider input[type=range]::-webkit-slider-thumb { appearance: none; -webkit-appearance: none; box-sizing: border-box; width: 18px; height: 18px; margin-top: -7px; border: 2px solid var(--pa-accent, var(--jade-600)); border-radius: 50%; background: var(--pa-surface, var(--mineral-50)); cursor: grab; }
+.stylo-range-slider input[type=range]::-moz-range-track { height: 4px; background: var(--stylo-line); }
+.stylo-range-slider input[type=range]::-moz-range-thumb { box-sizing: border-box; width: 18px; height: 18px; border: 2px solid var(--pa-accent, var(--jade-600)); border-radius: 50%; background: var(--pa-surface, var(--mineral-50)); cursor: grab; }
+.stylo-range-slider input[type=range]:disabled { opacity: .45; cursor: default; }
+.stylo-range-numbers { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: end; gap: 7px; }
+.stylo-desk .stylo-range-numbers label { margin: 2px 0; }.stylo-range-numbers > span { padding-bottom: 9px; }.stylo-range-numbers > small { grid-column: 1 / -1; overflow-wrap: anywhere; }
+.stylo-range-card footer { display: flex; justify-content: space-between; gap: 8px; align-items: center; margin-top: 8px; color: var(--stylo-muted); font-size: 10px; }
+.stylo-range-card footer button { padding: 4px 6px; font-size: 10px; }
+@media (min-width: 1700px) { .stylo-range-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 1100px) { .stylo-tuning-layout { grid-template-columns: minmax(0, 1fr); }.stylo-tuning-preview { position: static; padding-left: 0; border-left: 0; border-top: 1px solid var(--stylo-line); padding-top: 12px; } }

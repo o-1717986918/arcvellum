@@ -48,7 +48,7 @@
 | `reader` | 1 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `settings` | 10 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `spatial-os` | 2 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
-| `style-atelier` | 26 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
+| `style-atelier` | 33 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `workflow` | 2 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 
 ## 机器检查

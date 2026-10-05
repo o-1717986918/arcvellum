@@ -10,13 +10,14 @@ export interface CreatorControls {
 }
 export interface MetricRow {
   id: string; label: string; unit: string; group: string; observed: number | null;
-  floor: number; ceiling: number; available: boolean; suggested: { min: number; max: number };
+  floor: number; ceiling: number | null; available: boolean; suggested: { min: number; max: number };
   source_range: { p25: number | null; p75: number | null };
 }
 export interface ProfileSummary { profile_id: string; title: string; created_at: string }
 export interface StyloProfile extends ProfileSummary {
   schema: string; profile_json: string; controls: CreatorControls; inspection: Record<string, unknown>;
   source_declarations: Omit<CorpusSource, "text">[];
+  dependency_json?: string; intent?: string;
 }
 export interface VersionSummary {
   version_id: string; profile_id: string; title: string; content_sha256: string; user_edited: boolean;
@@ -48,4 +49,7 @@ export interface StyloJob {
 export interface FragmentRequest {
   project_root: string; profile_id: string; controls_json: string; title: string;
   intent: string; dependency_json: string;
+}
+export interface ParameterImport {
+  profile_json: string; parameters_json: string; dependency_json: string; title: string; intent: string;
 }

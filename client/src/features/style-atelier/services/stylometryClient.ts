@@ -1,6 +1,6 @@
 import { api, query } from "@/services/api";
 import type { CorpusSource, CreatorControls, CreatorMount, FragmentRequest, MetricRow,
-  StyloCompiled, StyloJob, StyloMeasurement, StyloProfile, StyloVersion, StyloWorkbench } from "../stylometryTypes";
+  ParameterImport, StyloCompiled, StyloJob, StyloMeasurement, StyloProfile, StyloVersion, StyloWorkbench } from "../stylometryTypes";
 
 function post<T>(path: string, payload: unknown): Promise<T> {
   return api(`/stylometry/${path}`, { method: "POST", body: JSON.stringify(payload) });
@@ -11,6 +11,8 @@ export const stylometryClient = {
   version: (root: string, id: string) => api<StyloVersion>(`/stylometry/versions/${encodeURIComponent(id)}?${query({ project_root: root })}`),
   parameters: (root: string, profileId: string, dependencyJson = "") => post<{ controls: CreatorControls; metrics: MetricRow[] }>(
     "parameters", { project_root: root, profile_id: profileId, dependency_json: dependencyJson }),
+  importParameters: (root: string, profileId: string, data: ParameterImport) => post<StyloProfile>(
+    "import", { project_root: root, profile_id: profileId, ...data }),
   compile: (payload: FragmentRequest) => post<StyloCompiled>("compile", payload),
   save: (payload: FragmentRequest & { fragment_override: string | null }) => post<StyloVersion>("versions", payload),
   mount: (root: string, versionId: string, enabled: boolean, revision: number, combine: string, usage: string) => post<CreatorMount>(
