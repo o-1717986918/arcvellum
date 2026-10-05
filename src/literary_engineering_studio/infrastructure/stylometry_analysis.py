@@ -12,6 +12,7 @@ from stylometric_prompt_lab.corpus import normalize_source
 
 from ..application.style.stylometry_contracts import LabDocument
 from .stylometry_cache import StylometryCalculationCache
+from .stylometry_import import import_parameters
 
 
 class LabStylometryAnalysis:
@@ -56,6 +57,9 @@ class LabStylometryAnalysis:
         profile, tree = _object(profile_json), _optional(dependency_json)
         return _document({"schema": "arcvellum/stylometry-parameters/v1",
             "controls": default_creator_controls(profile, tree), "metrics": metric_catalog(profile, tree)})
+
+    def import_parameters(self, profile_json, parameters_json, dependency_json, title, intent):
+        return _document(import_parameters(profile_json, parameters_json, dependency_json, title, intent))
 
     def compile(self, profile_json, controls_json, dependency_json, title, intent):
         return _document(compile_creator_fragment(_object(profile_json), _object(controls_json),

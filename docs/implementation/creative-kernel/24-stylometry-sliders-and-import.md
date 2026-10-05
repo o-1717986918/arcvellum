@@ -19,6 +19,16 @@
 
 ## Module Change Packet：拖动与实时挂载
 
+### 导入 adapter 和 HTTP 迁移
+
+- adapter owner/public entry: infrastructure 的 LabStylometryAnalysis.import_parameters；输入为应用 port 中的 JSON 字符串，输出为验证后的 LabDocument。
+- implementation: 同一画像摘要下转译 controls/card 的原始目标，通过现有 creator compiler 校验；保存原始导出及摘要，失败保持未写入。
+- API owner/public entry: api/routers/stylometry 的 POST /stylometry/import。
+- HTTP contract: 有界 JSON 字符串与作品作用域，HTTP 层只调用上述 service，不参与指标映射。
+- invariants/dependencies: 沿用固定 Lab、application ports 和既有 HTTP helper；正式档案、模型、Gate 保留。
+- tests/rollback: 导出映射及应用端到端合同测试；API 新鲜作品导入；两个独立提交。
+- documentation: 本文件、生成 OpenAPI。
+
 - objective: 用区间滑块调整各测量指标，实时查看参数要求，保存并挂载，按用户选择自动挂载后续调整。
 - primary_module: client/style-atelier。
 - public_entry: stylometryClient 与计量文风工作台。
