@@ -59,7 +59,10 @@ class LabStylometryAnalysis:
             "controls": default_creator_controls(profile, tree), "metrics": metric_catalog(profile, tree)})
 
     def import_parameters(self, profile_json, parameters_json, dependency_json, title, intent):
-        return _document(import_parameters(profile_json, parameters_json, dependency_json, title, intent))
+        try:
+            return _document(import_parameters(profile_json, parameters_json, dependency_json, title, intent))
+        except (KeyError, TypeError, AttributeError) as error:
+            raise ValueError("计量导出结构不完整，请重新导出画像、参数或参考树。") from error
 
     def compile(self, profile_json, controls_json, dependency_json, title, intent):
         return _document(compile_creator_fragment(_object(profile_json), _object(controls_json),

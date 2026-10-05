@@ -73,11 +73,12 @@ class StylometryImportTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "摘要"):
             self.ingest(card)
 
-    def test_wrong_profile_unit_bounds_and_duplicate_cards_do_not_persist(self):
+    def test_wrong_profile_unit_bounds_and_malformed_groups_do_not_persist(self):
         baseline = len(self.repository.profiles(self.root))
         for mutate in (lambda x: x.update(profile_sha256="wrong"),
             lambda x: x["axes"]["dialogue_share"].update(unit="percent"),
-            lambda x: x["axes"]["dialogue_share"].update(max=2)):
+            lambda x: x["axes"]["dialogue_share"].update(max=2),
+            lambda x: x.update(lexical_targets=None)):
             bad = self.legacy()
             mutate(bad)
             with self.assertRaises(ValueError):
