@@ -53,12 +53,29 @@ class StylometryService:
         return {"schema": "arcvellum/stylometry-profile/v1", **_profile_view(record),
                 "profile_json": json.dumps(payload["profile"], ensure_ascii=False),
                 "controls": payload["controls"], "inspection": payload.get("inspection", {}),
+                "dependency_json": payload.get("dependency_json", ""), "intent": payload.get("intent", ""),
                 "source_declarations": [{key: value for key, value in source.items() if key != "text"}
                                         for source in _decode(record.sources_json)]}
 
     def parameters(self, root: Path, profile_id: str, dependency_json: str = ""):
         record = self.profile(root, profile_id)
         return _decode(self.analysis.parameters(record["profile_json"], dependency_json).json_text)
+
+    def import_parameters(self, root: Path, *, profile_json: str = "", profile_id: str = "",
+                          parameters_json: str = "", dependency_json: str = "",
+                          title: str = "", intent: str = ""):
+        _project(root)
+        if not profile_json:
+            if not profile_id:
+                raise StylometryError("请同时导入画像 JSON，或先选择该参数对应的语料画像。")
+            profile_json = self.profile(root, profile_id)["profile_json"]
+        payload = _decode(self.analysis.import_parameters(
+            profile_json, parameters_json, dependency_json, title, intent).json_text)
+        record = StylometryProfile(str(uuid4()), payload["title"], _now(),
+            json.dumps(payload, ensure_ascii=False),
+            json.dumps(payload["profile"].get("source_evidence", []), ensure_ascii=False))
+        self.repository.save_profile(root, record)
+        return self.profile(root, record.profile_id)
 
     def compile(self, root: Path, profile_id: str, controls_json: str, *, title: str,
                 intent: str = "", dependency_json: str = ""):
