@@ -57,11 +57,16 @@ class CreatorStylometryMixin:
                 + mounted + "\n\n" + selected_reference)
 
     def _creator_style_briefing(self, transaction_id, briefing):
+        path = self._cache_path(transaction_id, "creator_style_briefing.json")
+        if path.is_file():
+            briefing["style"] = json.loads(path.read_text(encoding="utf-8"))
+            return
         mount = self._creator_style_snapshot(transaction_id)
         if mount["enabled"] and mount["usage"] == "guide":
             briefing["style"]["stylometry"] = {"content": mount["fragment_text"],
                 "combine": mount["combine"], "version_id": mount["version_id"],
                 "content_sha256": mount["content_sha256"]}
+        _save(path, briefing["style"])
 
     def _measure_creator_style(self, transaction_id, result):
         mount = self._creator_style_snapshot(transaction_id)

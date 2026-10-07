@@ -5,11 +5,10 @@ from hashlib import sha256
 import json
 from pathlib import Path
 
-from literary_engineering_studio_engine.public.literary import active_style_prompt_text
 from literary_engineering_studio_engine.public.prompting import prompt_layer_spec, resolve_prompt_layer, prompt_assembly_manifest
-from ..application.style.owner_directive import read_owner_style_directive
 from .less_ai_tone_edits import apply_tone_edits
-from .scene_natural_output import NaturalOutputProcessor, render_style
+from .scene_natural_output import NaturalOutputProcessor, creator_style, render_style
+from .scene_creator_briefing import scene_creator_style
 
 EDITOR = "experiment.less_ai_tone.editor"
 EXTRACTOR = "scene.v2.transport.extractor"
@@ -18,16 +17,16 @@ SOURCE_COMMIT = "27d29232f10124db904ca9c0536d0b67cb3b2833"
 
 class LessAiToneExperimentMixin:
     def create_scene(self, transaction_id, brief):
-        mount = self._tone_mount(transaction_id)
+        mount = self._tone_mount(transaction_id, brief)
         result = self._create_scene(transaction_id, brief)
         return self._tone_result(transaction_id, brief, result, mount, "create")
 
     def revise_scene(self, transaction_id, brief, result, verification, review, *, attempt):
-        mount = self._tone_mount(transaction_id)
+        mount = self._tone_mount(transaction_id, brief)
         revised = self._revise_scene(transaction_id, brief, result, verification, review, attempt=attempt)
         return self._tone_result(transaction_id, brief, revised, mount, f"revise-{attempt}")
 
-    def _tone_mount(self, transaction_id):
+    def _tone_mount(self, transaction_id, brief=None):
         path = self._cache_path(transaction_id, "less-ai-tone/mount.json")
         if path.is_file():
             return json.loads(path.read_text(encoding="utf-8"))
@@ -44,9 +43,11 @@ class LessAiToneExperimentMixin:
                 snapshot = {**prompt_assembly_manifest(layers), "texts": {layer.layer_id: layer.text for layer in layers}}
             mount["texts"] = snapshot["texts"]
             mount["prompt_snapshot"] = {key: value for key, value in snapshot.items() if key != "texts"}
-            directive = read_owner_style_directive(self._project_root)
-            mount["style"] = "\n\n".join(text for text in (
-                str(directive["content"]), active_style_prompt_text(self._project_root)) if text)
+            refs = [ref for ref in brief.source_refs if ref.startswith("style/")] if brief else []
+            briefing = {"style": scene_creator_style(self._project_root, refs)}
+            self._creator_style_briefing(transaction_id, briefing)
+            mount["style"] = creator_style(briefing)
+            mount["style_sources"] = briefing["style"]
         _save(path, mount)
         return mount
 

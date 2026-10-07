@@ -41,7 +41,7 @@ def build_scene_creator_briefing(
         "creator_persona": _persona_payload(active, persona),
         "canon_constraints": {"status": "from_scene_brief", "items": list(brief.canon_constraints),
                               "source_paths": [item for item in refs if item.startswith("canon/")]},
-        "style": _style_payload(root, style_sources),
+        "style": scene_creator_style(root, style_sources),
         "source_entries": sources,
         "source_refs": list(refs),
         "archive_tool": "list/search/read work archive for full context",
@@ -55,13 +55,13 @@ def _persona_payload(active: dict[str, Any] | None, persona: dict[str, Any]) -> 
     return {"status": "missing", "version": 0, "source_digest": persona["source_digest"]}
 
 
-def _style_payload(root: Path, style_sources: list[str]) -> dict[str, Any]:
+def scene_creator_style(root: Path, style_sources=()) -> dict[str, Any]:
     mounted_style = active_style_prompt_text(root)
     owner_style = read_owner_style_directive(root)
     return {
         "mounted": {"status": "mounted" if mounted_style else "missing",
                     "content": mounted_style, "complete": True,
-                    "source_paths": style_sources},
+                    "source_paths": list(style_sources)},
         "author_directive": {"status": "active" if owner_style["active"] else "missing",
                              "content": str(owner_style["content"]),
                              "revision": owner_style["revision"]},
@@ -111,4 +111,4 @@ def _projection(body: str, kind: str) -> tuple[str, bool]:
     return content[:4500], len(content) <= 4500 and (not isinstance(entries, list) or len(entries) <= 8)
 
 
-__all__ = ["build_scene_creator_briefing"]
+__all__ = ["build_scene_creator_briefing", "scene_creator_style"]
