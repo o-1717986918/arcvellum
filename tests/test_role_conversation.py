@@ -56,7 +56,9 @@ class RoleConversationGatewayTests(unittest.TestCase):
                 with self.assertRaises(RoleConversationError) as caught:
                     RoleConversationGateway(config, data_root=root).run(root, "question", role="advisor", timeout=30)
             error = caught.exception
-            self.assertEqual(str(error), "terminated")
+            self.assertIn("模型连接中断或超时", str(error))
+            self.assertIn("连接恢复后可继续", str(error))
+            self.assertEqual(error.provider_error, "terminated")
             self.assertEqual(error.failure_kind, "transient_network")
             self.assertTrue(error.retryable)
             self.assertEqual(error.partial_answer, "部分正文")

@@ -67,7 +67,7 @@ delivery:
 
 ## 实测中的新增修复面
 
-网络中断留下部分回答时，Worker 原消息仍称“conversation completed”且 validationPassed 为真。本项归 Worker conversation 结果装配与 Studio runtime Gateway：完成状态以全文返回且无 Provider 错误为依据；保留部分原文、失败类型、可重试属性及原运行目录。验收台账读取既有失败元数据，不重试模型、不猜测未知失败。通过部分回答中断回归及角色 Gateway 回归验证。
+网络中断留下部分回答时，Worker 原消息仍称“conversation completed”且 validationPassed 为真。本项归 Worker conversation 结果装配与 Studio runtime Gateway：完成状态以全文返回且无 Provider 错误为依据；保留部分原文、失败类型、可重试属性及原运行目录。前端沿用原错误合同，展示明确的中文原因、下一步及原始诊断。验收台账读取既有失败元数据，不重试模型、不猜测未知失败。通过部分回答中断回归及角色 Gateway 回归验证。
 
 真实工具日志显示 32 次成功工具调用就触发 64 次限额：事件适配与场景工具钩子各加一次计数。此项归 workers/pi-worker 的 conversation adapter：计数由工具开始事件唯一拥有，工具钩子读取配置限额，保留原权限和路径校验；验证每次只计一次，既有工具合同继续通过。
 

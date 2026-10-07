@@ -34,11 +34,22 @@ class RoleConversationError(RuntimeError):
     def __init__(self, message: str, *, run_root: Path, metadata: dict[str, Any] | None):
         values = metadata if isinstance(metadata, dict) else {}
         result = _worker_result(values)
-        super().__init__(str(result.get("providerError") or message))
         self.failure_kind = values.get("failure_kind") or result.get("failureKind") or "unreported"
+        self.provider_error = str(result.get("providerError") or message)
+        summary = _role_failure_summary(self.failure_kind)
+        super().__init__(summary + " 原始原因：" + self.provider_error if summary else self.provider_error)
         self.retryable = result.get("providerFailureRetryable", values.get("retryable"))
         self.run_root = str(run_root)
         self.partial_answer = str(result.get("answer") or "")
+
+
+def _role_failure_summary(kind):
+    if kind in {"transient_network", "first_event_timeout", "idle_timeout", "total_timeout"}:
+        return "模型连接中断或超时，本次回应未完成。运行记录已保留，连接恢复后可继续。"
+    return {
+        "provider_quota": "模型余额或额度不足。运行记录已保留，补充额度或选择可用模型后可继续。",
+        "authentication_failure": "模型身份验证失败。更新该供应商凭据后可继续。",
+    }.get(kind, "")
 
 
 class RoleConversationGateway:
