@@ -1,8 +1,10 @@
 import type { AgentEvent } from "@earendil-works/pi-agent-core";
+import { randomUUID } from "node:crypto";
 import type { RuntimeEventSink, WorkerState } from "./contracts.ts";
 import type { ArtifactPreviewExtractor } from "./artifact-preview.ts";
 
 export class WorkerEventAdapter {
+    private readonly usageAttempt = randomUUID();
 	private pendingReasoningEvents = 0;
 	private pendingReasoningCharacters = 0;
 	private lastReasoningEmit = 0;
@@ -67,6 +69,7 @@ export class WorkerEventAdapter {
 				tool_use_id: event.toolCallId,
 				status: event.isError ? "error" : "completed",
 				...(event.isError ? { reason } : {}),
+				...(!event.isError && event.toolName === "work_archive" ? archiveReceiptData(event.result) : {}),
 			});
 			return;
 		}
@@ -165,7 +168,7 @@ export class WorkerEventAdapter {
 		}
 		this.emit("usage.updated", {
 			session_id: this.sessionId,
-			usage_id: `${this.sessionId}-${index}`,
+			usage_id: `${this.sessionId}-${this.usageAttempt}-${index}`,
 			provider: String(message.provider ?? ""),
 			model: String(message.model ?? ""),
 			usage: {
@@ -201,6 +204,13 @@ function toolErrorReason(value: unknown): string {
 		.replace(/\s+/g, " ")
 		.trim()
 		.slice(0, 500) || "tool execution failed";
+}
+
+function archiveReceiptData(result: unknown): Record<string, unknown> {
+	if (!isRecord(result) || !isRecord(result.details) || !isRecord(result.details.archive_receipt)) return {};
+	const receipt = result.details.archive_receipt;
+	const keys = ["action", "path", "status", "start_line", "end_line", "complete", "next_offset", "file_sha256", "offset", "chars", "content_sha256"];
+	return { archive_receipt: Object.fromEntries(keys.filter(key => key in receipt).map(key => [key, receipt[key]])) };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

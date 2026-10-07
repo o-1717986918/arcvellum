@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from literary_engineering_studio.runtime.role_conversation import RoleConversationGateway
+from literary_engineering_studio.runtime.role_conversation import RoleConversationGateway, RoleConversationError
 from literary_engineering_studio.runtime.runtime_selection import (
     DEFAULT_CREATIVE_RUNTIME,
     runtime_for_role,
@@ -41,6 +41,27 @@ class _ConversationRuntime:
 
 
 class RoleConversationGatewayTests(unittest.TestCase):
+    def test_partial_failure_preserves_provider_cause_and_run_evidence(self):
+        from dataclasses import replace
+        class FailedRuntime(_ConversationRuntime):
+            def execute(self, *args, **kwargs):
+                return replace(super().execute(*args, **kwargs), status="blocked",
+                    message="conversation completed", metadata={"worker_result": {
+                        "answer": "部分正文", "providerError": "terminated",
+                        "failureKind": "transient_network", "providerFailureRetryable": True}})
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            config = {"agent_runners": {"pi-worker": {"model": "fixture/model"}}}
+            with patch("literary_engineering_studio.runtime.role_conversation.build_runtime", return_value=FailedRuntime()):
+                with self.assertRaises(RoleConversationError) as caught:
+                    RoleConversationGateway(config, data_root=root).run(root, "question", role="advisor", timeout=30)
+            error = caught.exception
+            self.assertEqual(str(error), "terminated")
+            self.assertEqual(error.failure_kind, "transient_network")
+            self.assertTrue(error.retryable)
+            self.assertEqual(error.partial_answer, "部分正文")
+            self.assertTrue((Path(error.run_root) / "conversation.prompt.md").is_file())
+
     def test_roles_default_to_embedded_pi_worker(self):
         self.assertEqual(DEFAULT_CREATIVE_RUNTIME, "pi-worker")
         self.assertEqual(runtime_for_role({}, "advisor"), "pi-worker")

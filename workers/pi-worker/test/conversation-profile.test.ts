@@ -1,7 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { actorHistoryMessages, actorTurnEnvelope, conversationMessages, conversationSystemPrompt, roleTurnEnvelope, sceneCreatorEnvelope } from "../src/conversation.ts";
+import { actorHistoryMessages, actorTurnEnvelope, conversationMessages, conversationOutcome, conversationSystemPrompt, roleTurnEnvelope, sceneCreatorEnvelope } from "../src/conversation.ts";
 
 describe("bounded scene performance profiles", () => {
+	it("keeps partial provider output blocked with its actual failure", () => {
+		expect(conversationOutcome("刚写到这里", "terminated")).toEqual({
+			status: "blocked", message: "terminated", validationPassed: false,
+		});
+		expect(conversationOutcome("完整答复")).toEqual({
+			status: "completed", message: "conversation completed", validationPassed: true,
+		});
+		expect(conversationOutcome("   ").status).toBe("blocked");
+	});
 	it("gives the character actor no competing system prompt", () => {
 		expect(conversationSystemPrompt("character-actor")).toBe("");
 	});

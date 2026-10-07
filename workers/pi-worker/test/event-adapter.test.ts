@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { AgentEvent } from "@earendil-works/pi-agent-core";
 import type { WorkerState } from "../src/contracts.ts";
 import { WorkerEventAdapter } from "../src/event-adapter.ts";
+import { assertConversationToolBudget } from "../src/conversation.ts";
 
 function state(): WorkerState {
 	return {
@@ -29,6 +30,30 @@ function state(): WorkerState {
 }
 
 describe("WorkerEventAdapter", () => {
+	it("exposes a successful archive receipt with only its declared fields", () => {
+		const events: Record<string, unknown>[] = [];
+		const adapter = new WorkerEventAdapter("session", state(), (_, data = {}) => events.push(data));
+		adapter.handle({ type: "tool_execution_end", toolName: "work_archive", toolCallId: "read", isError: false,
+			result: { content: [], details: { archive_receipt: { action: "read", path: "canon/facts.md",
+				complete: true, file_sha256: "digest", content: "the whole file", unrelated: "ignored" } } } } as unknown as AgentEvent);
+		expect(events.at(-1)?.archive_receipt).toEqual({ action: "read", path: "canon/facts.md", complete: true, file_sha256: "digest" });
+	});
+	it("counts a scene tool once and distinguishes new charges for the same session", () => {
+        const identities: string[] = [];
+        for (let attempt = 0; attempt < 2; attempt++) {
+            const current = state();
+            const adapter = new WorkerEventAdapter("same-prompt-session", current, (event, data) => {
+                if (event === "usage.updated") identities.push(String(data?.usage_id));
+            });
+            adapter.handle({ type: "tool_execution_start", toolName: "creator_scratch", toolCallId: "one" } as AgentEvent);
+            assertConversationToolBudget(current, 1);
+            expect(current.toolCalls).toBe(1);
+            expect(() => assertConversationToolBudget(current, 0)).toThrow("tool call limit");
+            adapter.handle(messageEnd());
+        }
+        expect(identities).toHaveLength(2);
+        expect(identities[0]).not.toBe(identities[1]);
+    });
 	it("coalesces text deltas and closes reasoning after an earlier activity flush", () => {
 		const workerState = state();
 		const events: Array<{ event: string; data: Record<string, unknown> }> = [];

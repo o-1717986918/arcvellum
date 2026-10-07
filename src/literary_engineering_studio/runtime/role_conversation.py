@@ -28,6 +28,19 @@ class RoleConversationResult:
     initialization_answer: str = ""
 
 
+class RoleConversationError(RuntimeError):
+    """Preserve the registered runtime's failure evidence and partial output."""
+
+    def __init__(self, message: str, *, run_root: Path, metadata: dict[str, Any] | None):
+        values = metadata if isinstance(metadata, dict) else {}
+        result = _worker_result(values)
+        super().__init__(str(result.get("providerError") or message))
+        self.failure_kind = values.get("failure_kind") or result.get("failureKind") or "unreported"
+        self.retryable = result.get("providerFailureRetryable", values.get("retryable"))
+        self.run_root = str(run_root)
+        self.partial_answer = str(result.get("answer") or "")
+
+
 class RoleConversationGateway:
     """Run bounded literary roles; only the scene creator gets material-file reads."""
 
@@ -137,7 +150,8 @@ class RoleConversationGateway:
         final_answer = str(worker_result.get("answer") or "").strip()
         answer = final_answer if scene_creator or role in _INITIALIZED_ROLES else "".join(pieces).strip() or final_answer
         if result.status != "completed":
-            raise RuntimeError(result.message or f"{role} conversation failed")
+            raise RoleConversationError(result.message or f"{role} conversation failed",
+                                        run_root=run_root, metadata=result.metadata)
         if not answer:
             raise RuntimeError(f"{role} conversation returned no answer")
         return RoleConversationResult(
@@ -223,4 +237,4 @@ def _scene_creator_envelope(prompt: str) -> bool:
     if any(not isinstance(payload.get(key), str) or not payload[key].strip() for key in keys):
         raise ValueError("scene creator envelope is incomplete")
     return True
-__all__ = ["RoleConversationGateway", "RoleConversationResult"]
+__all__ = ["RoleConversationGateway", "RoleConversationResult", "RoleConversationError"]

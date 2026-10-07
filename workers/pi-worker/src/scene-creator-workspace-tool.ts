@@ -162,9 +162,25 @@ export function createSceneArchiveTool(root: string, onCall: () => void): AgentT
 		execute: async (_id, params) => {
 			onCall();
 			const result = await workArchiveOperation(root, params as Record<string, unknown>);
-			return { content: [{ type: "text", text: JSON.stringify(result) }], details: { action: (params as Record<string, unknown>).action } };
+			return { content: [{ type: "text", text: JSON.stringify(result) }], details: {
+				action: (params as Record<string, unknown>).action,
+				archive_receipt: archiveReceipt(params as Record<string, unknown>, result),
+			} };
 		},
 	};
+}
+
+function archiveReceipt(input: Record<string, unknown>, result: Record<string, unknown>) {
+	const receipt: Record<string, unknown> = { action: input.action };
+	if (input.action === "read") {
+		for (const key of ["path", "status", "start_line", "end_line", "complete", "next_offset", "file_sha256"]) {
+			receipt[key] = result[key];
+		}
+		receipt.offset = input.offset || 0;
+		receipt.chars = String(result.content || "").length;
+		receipt.content_sha256 = createHash("sha256").update(String(result.content || "")).digest("hex");
+	}
+	return receipt;
 }
 
 export function createSceneScratchTool(root: string, onCall: () => void): AgentTool {

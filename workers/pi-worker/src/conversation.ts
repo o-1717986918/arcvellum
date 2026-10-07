@@ -12,6 +12,19 @@ import defaultConversationProfile from "../profiles/conversation-system.md?raw";
 import { createSceneMaterialTool } from "./scene-material-tool.ts";
 import { createSceneArchiveTool, createSceneScratchTool } from "./scene-creator-workspace-tool.ts";
 
+export function assertConversationToolBudget(state: Pick<WorkerState, "toolCalls">, limit: number): void {
+    if (state.toolCalls > limit) throw new Error("scene creator tool call limit reached");
+}
+
+export function conversationOutcome(answer: string, error?: string, promptedCurrent = true) {
+	const completed = Boolean(answer.trim()) && !error && promptedCurrent;
+	return {
+		status: completed ? "completed" as const : "blocked" as const,
+		message: completed ? "conversation completed" : (error || "conversation returned no answer"),
+		validationPassed: completed,
+	};
+}
+
 export interface ConversationResult {
 	status: "completed" | "blocked";
 	message: string;
@@ -78,17 +91,14 @@ export async function runConversation(
 			thinkingLevel: effectiveThinking,
 			tools: sceneCreator ? [
 				createSceneMaterialTool(sceneCreator.materialRoot, () => {
-					state.toolCalls += 1;
-					if (state.toolCalls > (sceneCreatorV2 ? 64 : 8)) throw new Error("scene creator tool call limit reached");
+					assertConversationToolBudget(state, options.maxToolCalls);
 				}),
 				...(sceneCreatorV2 ? [
 					createSceneArchiveTool(sceneCreatorV2.archiveRoot, () => {
-						state.toolCalls += 1;
-						if (state.toolCalls > 64) throw new Error("scene creator tool call limit reached");
+						assertConversationToolBudget(state, options.maxToolCalls);
 					}),
 					createSceneScratchTool(sceneCreatorV2.scratchRoot, () => {
-						state.toolCalls += 1;
-						if (state.toolCalls > 64) throw new Error("scene creator tool call limit reached");
+						assertConversationToolBudget(state, options.maxToolCalls);
 					}),
 				] : []),
 			] : [],
@@ -130,12 +140,12 @@ export async function runConversation(
 		}
 	}
 	const answer = actorTurn || initializedEnvironment ? currentAnswer : lastAssistantText(agent.state.messages as unknown[]);
-	const status = answer && !agent.state.errorMessage && (!actorTurn || promptedCurrent) ? "completed" : "blocked";
+	const outcome = conversationOutcome(answer, agent.state.errorMessage, !actorTurn || promptedCurrent);
+	const { status } = outcome;
 	const providerError = status === "completed" ? "" : String(agent.state.errorMessage || "").trim();
 	const providerFailure = providerError ? classifyProviderFailure(providerError) : null;
 	const result: ConversationResult = {
-		status,
-		message: answer ? "conversation completed" : (agent.state.errorMessage || "conversation returned no answer"),
+		...outcome,
 		answer,
 		taskId: sessionId,
 		provider,
@@ -146,7 +156,6 @@ export async function runConversation(
 		reasoningCharacters: state.reasoningCharacters,
 		textCharacters: state.textCharacters,
 		writtenOutputs: [],
-		validationPassed: Boolean(answer),
 		...(actorTurn || initializedEnvironment ? { initializationAnswer } : {}),
 		...(providerFailure ? {
 			failureKind: providerFailure.kind,

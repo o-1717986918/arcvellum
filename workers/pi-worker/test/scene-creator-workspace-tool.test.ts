@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { sceneCreatorV2Envelope } from "../src/conversation.ts";
-import { sceneScratchOperation, workArchiveOperation } from "../src/scene-creator-workspace-tool.ts";
+import { createSceneArchiveTool, sceneScratchOperation, workArchiveOperation } from "../src/scene-creator-workspace-tool.ts";
 
 const roots: string[] = [];
 afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
@@ -33,6 +33,13 @@ describe("scene creator v2 work boundaries", () => {
 		expect(JSON.stringify(found)).toContain("qing.md");
 		const read = await workArchiveOperation(archive, { action: "read", path: "characters/qing.md", start_line: 2, end_line: 2 });
 		expect(read.content).toBe("secret: letter\n");
+		const delivered = await createSceneArchiveTool(archive, () => {}).execute("read", {
+			action: "read", path: "characters/qing.md", start_line: 2, end_line: 2,
+		});
+		const receipt = (delivered.details as { archive_receipt: Record<string, unknown> }).archive_receipt;
+		expect(receipt).toMatchObject({ path: "characters/qing.md", start_line: 2, end_line: 2, complete: true, file_sha256: read.file_sha256 });
+		expect(receipt.content_sha256).toMatch(/^[a-f0-9]{64}$/);
+		expect(receipt).not.toHaveProperty("content");
 		await expect(workArchiveOperation(archive, { action: "read", path: "../outside.txt" })).rejects.toThrow();
 		await sceneScratchOperation(scratch, { action: "write", path: "chapter/note.md", content: "keep mystery" });
 		expect((await sceneScratchOperation(scratch, { action: "read", path: "chapter/note.md" })).content).toBe("keep mystery");
