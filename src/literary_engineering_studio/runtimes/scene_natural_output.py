@@ -7,7 +7,10 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 
 from .pi_scene_payload import _answer_payload
-from .commission_source_format import restore_commission_source
+from .commission_source_format import restore_commission_source, restore_tone_source
+from .natural_card_source import restore_labelled_card_sections
+from .archive_partition_transport import normalize_archive_partitions
+from .natural_material_response import whole_material_response
 from .creator_delivery_labels import resolve_creator_targets
 from .event_material_provenance import event_fields, recover_event_source_status
 from literary_engineering_studio_engine.public.literary import ACTOR_CARD_SECTIONS, parse_scene_material_requests_v3
@@ -23,7 +26,7 @@ _CREATOR_CONTRACT = {
         "style_direction": "verbatim contiguous style from source_text, or empty when unstated",
         "archive_attachments": [{"path": "relative archive path", "start_line": None,
                                 "end_line": None,
-                                "knowledge": "actor: known from role_known_archive/character_known/角色可知区; reference from director_reference_archive/creator_reference/主创参考区; empty otherwise"}],
+                                "knowledge": "known or reference for actor; empty for other kinds"}],
         "character_card": "actor only: schema arcvellum/actor-character-card/v1, target, sections mapping from the supplied sixteen template keys, source_refs list, notes"}],
     "prose": "exact contiguous source text of completed body, or empty during preparation",
     "decision_summary": "creator's working intention and decisions",
@@ -73,25 +76,43 @@ def creator_style(briefing: Mapping[str, Any]) -> str:
 
 
 class NaturalOutputProcessor:
-    def __init__(self, root: Path, system_prompt: str, invoke: Callable[[str, str], str]):
+    def __init__(self, root: Path, system_prompt: str, invoke: Callable[[str, str], str], validate_payload=None):
         self.root, self.system_prompt, self.invoke = root, system_prompt, invoke
+        self.validate_payload = validate_payload
 
-    def process(self, answer: str, *, kind: str, context: Mapping[str, Any]) -> dict[str, Any]:
+    def _prepare(self, answer, payload, kind, context):
+        payload = _prepare_transport_payload(answer, payload, kind, context)
+        if self.validate_payload:
+            self.validate_payload(payload)
+        return payload
+
+    def process(self, answer: str, *, kind: str, context: Mapping[str, Any], reuse_only=False) -> dict[str, Any]:
         if not answer.strip() or len(answer) > 160_000:
             raise ValueError("natural response is empty or exceeds the transport budget")
         digest = sha256(answer.encode("utf-8")).hexdigest()
         directory = self.root / "natural-answers" / digest
         directory.mkdir(parents=True, exist_ok=True)
         (directory / "original.md").write_text(answer, encoding="utf-8")
+        if kind == "material":
+            whole = whole_material_response(answer, context)
+            if whole is not None:
+                validate_extracted_text(answer, whole, kind, context)
+                return whole
         context = {key: value for key, value in context.items() if key != "delivery_feedback"}
-        fingerprint = sha256(json.dumps(["verbatim-commission-v3", kind, context, self.system_prompt],
+        fingerprint = sha256(json.dumps(["verbatim-commission-v4", kind, context, self.system_prompt],
             ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
         cache = directory / (fingerprint + ".json")
         issue = ""
+        if not cache.is_file():
+            self._reuse_legacy(answer, kind, context, directory, cache)
+        if reuse_only and not cache.is_file():
+            raise ValueError("saved source has no valid extraction for the current context")
         if cache.is_file():
             try:
-                payload = _prepare_transport_payload(answer, json.loads(cache.read_text(encoding="utf-8")), kind, context)
+                payload = self._prepare(answer, json.loads(cache.read_text(encoding="utf-8")), kind, context)
             except ValueError as error:
+                if reuse_only:
+                    raise
                 issue = str(error)
                 payload = self._extract(answer, kind, context, directory, fingerprint, issue)
         else:
@@ -101,16 +122,35 @@ class NaturalOutputProcessor:
         cache.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         return payload
 
+    def _reuse_legacy(self, answer, kind, context, directory, cache):
+        legacy = sha256(json.dumps(["verbatim-commission-v3", kind, context, self.system_prompt],
+            ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
+        for prior in sorted(directory.glob(legacy + ".extraction*.md")):
+            try:
+                recovered = self._prepare(answer, _answer_payload(prior.read_text(encoding="utf-8")), kind, context)
+            except ValueError:
+                continue
+            recovered["reused_extraction"] = prior.name
+            cache.write_text(json.dumps(recovered, ensure_ascii=False, indent=2), encoding="utf-8")
+            break
+
     def _extract(self, answer, kind, context, directory, fingerprint, issue):
         task = {"operation": kind, "task_contract": CONTRACTS[kind], "source_text": answer, "context": context,
             "transport_limits": {"candidate_count": 3, "candidate_chars": 2400,
                 "requests": 8, "author_prompt_chars": 6000, "style_chars": 8000}}
+        if kind == "material":
+            task["literal_annotation"] = "text 保留完整的连续原文。spoken、first_person_action、private_impulse 各用一个连续原文片段；对白穿插动作时可连同原动作取出。完整回应中分散的语句留在 text，相应独立标注使用空字符串。"
         if kind == "creator":
+            task["archive_knowledge_values"] = {
+                "known": ["role_known_archive", "character_known", "角色可知区"],
+                "reference": ["director_reference_archive", "creator_reference", "主创参考区"],
+                "instruction": "依据目标角色在原文被明确分配的资料，逐条使用 known 或 reference 作为 knowledge 值；原文未选择分区时使用空字符串。分区名称、解释及人物名作为来源说明保留。"}
             task["delivery_modes"] = {
                 "prepare": "原文明示等待新一轮取材时，提取当轮待调用邀请，prose 使用空值。",
                 "complete": "原文明示交付完成正文时，逐字提取正文；素材取舍、旧邀请和角色卡回顾留在工作记录，material_requests 使用空数组。",
                 "selection": "依据本次 source_text 的交付意图选择一个阶段；现有候选与冻结计划帮助识别回顾记录。"}
             task["archive_partition_transport"] = "把原文明确选择的 role_known_archive 与 director_reference_archive 各路径逐条展开为 archive_attachments，逐条保留原分类。原文未明确分类时保留空值，由主创补充。"
+            task["handoff_transport"] = "交接札记里的后续起点、未完成事项与下一场安排，写入 scene_delta.next_handoff 的字符串数组。人物改变用目标人物名或本场提供的人物档案引用；连续性事实用本场已有引用。next_handoff 是字段名。"
         for attempt in range(2):
             if issue:
                 task["transport_feedback"] = {"issue": issue,
@@ -121,7 +161,7 @@ class NaturalOutputProcessor:
             path = directory / (fingerprint + suffix)
             path.write_text(extracted, encoding="utf-8")
             try:
-                return _prepare_transport_payload(answer, _answer_payload(extracted), kind, context)
+                return self._prepare(answer, _answer_payload(extracted), kind, context)
             except ValueError as error:
                 issue = str(error)
                 path.with_suffix(".failure.json").write_text(json.dumps({"issue": issue}, ensure_ascii=False), encoding="utf-8")
@@ -132,10 +172,14 @@ class NaturalOutputProcessor:
 def _prepare_transport_payload(answer, payload, kind, context):
     payload = _transport_payload(payload, kind)
     if kind == "creator":
+        payload = restore_labelled_card_sections(answer, payload)
         payload = restore_commission_source(answer, payload)
         payload = resolve_creator_targets(payload, context)
+        payload = normalize_archive_partitions(payload)
     if kind == "material" and context.get("role") == "event-narrator":
         payload = recover_event_source_status(answer, payload)
+    if kind == 'tone':
+        payload = restore_tone_source(answer,payload)
     validate_extracted_text(answer, payload, kind, context)
     if kind == "creator" and "briefing" in context:
         participants = (context["briefing"].get("scene_brief") or {}).get("participants") or []

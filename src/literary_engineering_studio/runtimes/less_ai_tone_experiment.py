@@ -51,7 +51,7 @@ class LessAiToneExperimentMixin:
         _save(path, mount)
         return mount
 
-    def _tone_result(self, transaction_id, brief, result, mount, phase):
+    def _tone_result(self, transaction_id, brief, result, mount, phase, *, preserved_editor_answer=None):
         if not mount["enabled"]:
             return result
         fingerprint = _digest({"phase": phase, "result": result.to_dict(), "mount": mount})
@@ -73,6 +73,9 @@ class LessAiToneExperimentMixin:
         answer_path = directory / "editor-answer.md"
         if answer_path.is_file():
             answer = answer_path.read_text(encoding="utf-8")
+        elif preserved_editor_answer is not None:
+            answer = preserved_editor_answer
+            answer_path.write_text(answer,encoding='utf-8')
         else:
             answer = self._tone_invoke(transaction_id, render_style(mount["texts"][EDITOR], mount["style"]),
                 "请回看本场已经完成的正文，提出具体的局部修改建议。\n" + json.dumps(context, ensure_ascii=False))

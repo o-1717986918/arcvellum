@@ -88,7 +88,7 @@ class DeliveryRecoveryTests(unittest.TestCase):
             def capture(project, prompt, **kwargs):
                 envelope = json.loads(prompt)
                 if envelope["schema"] == "arcvellum/default-conversation/v1" and "task_contract" not in envelope["prompt"]:
-                    contexts.append(json.loads(envelope["prompt"].split("\n\n", 1)[1]))
+                    contexts.append(json.loads(envelope["prompt"].split("\n\n本次审读资料：\n", 1)[1]))
                 return invoke(project, prompt, **kwargs)
             gateway.run = capture
             layers = {spec.layer_id: spec.default_text for spec in list_prompt_layer_specs()}
@@ -113,6 +113,7 @@ class DeliveryRecoveryTests(unittest.TestCase):
                     return json.dumps(payload, ensure_ascii=False)
                 processor = NaturalOutputProcessor(Path(tmp), "整理当轮交付", extract)
                 result = processor.process(source, kind="creator", context={})
+                self.assertEqual(prompts[0]["archive_knowledge_values"]["known"][0], "role_known_archive")
                 self.assertEqual(result["prose"], "" if phase == "prepare" else PROSE)
                 self.assertEqual(result["material_requests"], [REQUEST] if phase == "prepare" else [])
                 self.assertEqual(prompts[0]["source_text"], prompts[1]["source_text"])

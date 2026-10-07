@@ -151,10 +151,21 @@ class SceneCreatorV2Mixin(NaturalCreatorMixin):
                    "review": ({"decision": review.decision.value, "summary": review.summary,
                                "revision_instructions": list(review.revision_instructions)}
                               if review is not None else None)}
+        if review is not None:
+            source = self._review_original(transaction_id,result.prose)
+            if source:
+                context['review_original'] = source
         revised = self._ask_creator_v2(transaction_id, brief, snapshot["texts"], briefing,
                                        workspace, coordinator, mode="revise", revision_context=context)
         _atomic_json(cache, revised.to_dict())
         return revised
+
+    def _review_original(self,transaction_id,prose):
+        digest=hashlib.sha256(prose.encode('utf-8')).hexdigest()
+        path=self._cache_path(transaction_id,'review_original_v2_'+digest+'.md')
+        if not path.is_file():
+            return None
+        return {'content':path.read_text(encoding='utf-8'),'source':path.name,'prose_sha256':digest}
 
     def _ask_creator_v2(
         self, transaction_id: str, brief: SceneBrief, layers: dict[str, str],

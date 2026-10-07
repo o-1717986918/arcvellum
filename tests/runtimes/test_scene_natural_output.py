@@ -80,7 +80,7 @@ class NaturalSceneTests(unittest.TestCase):
             result = runtime.create_scene("tx-natural", brief)
             self.assertEqual(result.prose, PROSE)
             self.assertEqual(result.scene_delta.next_handoff, ("信的去向仍待揭晓",))
-            self.assertEqual((gateway.creator_calls, gateway.material_calls, gateway.extract_calls), (2, 1, 3))
+            self.assertEqual((gateway.creator_calls, gateway.material_calls, gateway.extract_calls), (2, 1, 2))
             runtime.create_scene("tx-natural", brief)
             self.assertEqual(gateway.creator_calls, 2)
             originals = list((data / "scene-transactions/tx-natural/v2/natural-answers").glob("*/original.md"))
@@ -94,10 +94,12 @@ class NaturalSceneTests(unittest.TestCase):
             self.assertNotIn("scene.v2.material.shared.protocol", snapshot["texts"])
             review = runtime.review_scene("tx-natural", brief, result, VerificationReport("s1", len(PROSE)))
             self.assertEqual(review.decision.value, "pass")
+            self.assertIsNone(runtime._review_original("tx-natural", PROSE + "新稿"))
             revised = runtime.revise_scene("tx-natural", brief, result,
                 VerificationReport("s1", len(PROSE)), review, attempt=1)
             self.assertEqual(revised.prose, PROSE)
             self.assertEqual(gateway.context["revision_context"]["previous_prose"], PROSE)
+            self.assertIn("信封压在碗底这个动作", gateway.context["revision_context"]["review_original"]["content"])
             self.assertEqual(gateway.material_calls, 1)
             runtime.revise_scene("tx-natural", brief, result,
                 VerificationReport("s1", len(PROSE)), review, attempt=1)
