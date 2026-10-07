@@ -8,6 +8,22 @@ const api = vi.hoisted(() => ({
 vi.mock("./services/settingsClient", () => ({ settingsClient: api }));
 
 describe("prompt workbench", () => {
+  it("opens the matching prompt after a delayed catalog arrives for an existing search", async () => {
+    let deliver: (value: object) => void = () => {};
+    api.promptCatalog.mockReturnValue(new Promise(resolve => { deliver = resolve; }));
+    api.promptHistory.mockResolvedValue({ versions: [] });
+    const { default: PromptWorkbench } = await import("./PromptWorkbench.vue");
+    const wrapper = mount(PromptWorkbench, { props: { projectRoot: "C:/Books/Work" } });
+    await wrapper.find("input[aria-label='搜索提示词']").setValue("scene.v2.creator.selection");
+    deliver({ layers: [{ layer_id: "scene.v2.creator.selection", responsibility: "stage", purpose: "取舍",
+      source: "package", version: "1", editable: true, flow_stage: "scene.selection", default_text: "取舍", effective_text: "取舍" }],
+      formal_assets: [], flow_tree: [{ id: "scene", label: "场景", children: [{ id: "scene.selection", label: "候选", children: [
+        { id: "scene.v2.creator.selection", layer_id: "scene.v2.creator.selection", label: "取舍" },
+      ] }] }] });
+    await flushPromises();
+    expect(wrapper.find(".prompt-tree-leaf").text()).toContain("scene.v2.creator.selection");
+    wrapper.unmount();
+  });
   it("loads the selected scope before editing so project text cannot leak into a global version", async () => {
     api.promptCatalog.mockImplementation(async (root: string) => ({ layers: [{
       layer_id: "scene.creator.identity", responsibility: "identity", purpose: "主创文学使命",

@@ -27,6 +27,9 @@ const selectedCard = ref("");
 const showEditor = ref(false);
 const transcript = ref<HTMLElement | null>(null);
 const panel = ref<HTMLElement | null>(null);
+let generation = 0;
+const sourceLabels: Record<string,string> = { canon:'作品设定', character_archive:'人物档案', planning:'创作规划',
+  scene_prose:'已提交正文', mixed_continuity:'连续性记录', user_direction:'作者方向', archive_reference:'参考资料' };
 const labels: Record<string, string> = {
   PERSONA_LOAD: "人格加载", CORE_IDENTITY: "核心身份", PERSONALITY_LAYERS: "人格层次",
   PRIVATE_BEHAVIOR_MODES: "私下行为模式", INTERACTION_LIBRARY: "互动库",
@@ -36,25 +39,30 @@ const labels: Record<string, string> = {
   SELF_CLAIM_EXAMPLES: "自称例句", FOOD_PREFERENCE: "食物偏好", REAL_SELF_BEHAVIOR: "真实自我行为",
 };
 
-async function action(task: () => Promise<void>): Promise<void> {
+async function action(task: (current:()=>boolean, root:string) => Promise<void>): Promise<void> {
+  const epoch = generation, root=props.projectRoot;
+  const current=()=>epoch===generation && root===props.projectRoot;
   busy.value = true;
   error.value = "";
-  try { await task(); }
-  catch (cause) { error.value = cause instanceof Error ? cause.message : String(cause); }
-  finally { busy.value = false; }
+  try { await task(current,root); }
+  catch (cause) { if(current()) error.value = cause instanceof Error ? cause.message : String(cause); }
+  finally { if(current()) busy.value = false; }
 }
 async function load(): Promise<void> {
-  await action(async () => {
-    setup.value = await client.setup(props.projectRoot);
+  await action(async (current,root) => {
+    const loaded = await client.setup(root);
+    if(!current()) return;
+    setup.value = loaded;
     sections.value = Object.fromEntries(setup.value.sections.map((key) => [key, ""]));
     entries.value = [];
     cursor.value = 0;
-    await moreArchives();
+    await moreArchives(current,root);
   });
 }
-async function moreArchives(): Promise<void> {
+async function moreArchives(current:()=>boolean, root:string): Promise<void> {
   if (cursor.value === null) return;
-  const page = await client.archive(props.projectRoot, cursor.value);
+  const page = await client.archive(root, cursor.value);
+  if(!current()) return;
   entries.value.push(...page.entries);
   cursor.value = page.next_cursor;
 }
@@ -71,24 +79,29 @@ function attach(): void {
     end_line: endLine.value || null, knowledge: "known" });
 }
 async function showSource(more = false): Promise<void> {
-  await action(async () => {
-    const page = await client.readArchive(props.projectRoot, sourcePath.value, more ? previewOffset.value || 0 : 0);
+  await action(async (current,root) => {
+    const page = await client.readArchive(root, sourcePath.value, more ? previewOffset.value || 0 : 0);
+    if(!current()) return;
     preview.value = more ? preview.value + page.content : page.content;
     previewOffset.value = page.next_offset;
   });
 }
 async function create(): Promise<void> {
-  await action(async () => {
+  await action(async (current,root) => {
     const card: CharacterCard = { schema: "arcvellum/actor-character-card/v1", target: target.value,
       sections: { ...sections.value }, source_refs: sourceRefs.value.split("\n").map((s) => s.trim()).filter(Boolean),
       notes: "" };
-    session.value = (await client.create(props.projectRoot, card, attachments.value, context.value)).session;
-    setup.value = await client.setup(props.projectRoot);
+    const created = await client.create(root, card, attachments.value, context.value);
+    if(!current()) return;
+    session.value = created.session;
+    const loaded = await client.setup(root);
+    if(current()) setup.value = loaded;
   });
 }
 async function draftCard(): Promise<void> {
-  await action(async () => {
-    const draft = await client.draftCard(props.projectRoot, target.value, attachments.value, context.value);
+  await action(async (current,root) => {
+    const draft = await client.draftCard(root, target.value, attachments.value, context.value);
+    if(!current()) return;
     sections.value = { ...draft.card.sections };
     sourceRefs.value = draft.card.source_refs.join("\n");
     selectedCard.value = "";
@@ -96,12 +109,14 @@ async function draftCard(): Promise<void> {
   });
 }
 async function resume(sessionId: string): Promise<void> {
-  await action(async () => { session.value = (await client.session(props.projectRoot, sessionId)).session; });
+  await action(async (current,root) => { const loaded = await client.session(root, sessionId); if(current()) session.value=loaded.session; });
 }
 async function send(): Promise<void> {
   if (!session.value || !message.value.trim()) return;
-  await action(async () => {
-    session.value = (await client.ask(props.projectRoot, session.value!.session_id, message.value)).session;
+  await action(async (current,root) => {
+    const answered = await client.ask(root, session.value!.session_id, message.value);
+    if(!current()) return;
+    session.value=answered.session;
     message.value = "";
     await nextTick();
     transcript.value?.scrollTo({ top: transcript.value.scrollHeight, behavior: "smooth" });
@@ -115,7 +130,12 @@ function trapFocus(event: KeyboardEvent): void {
   if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
   else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
 }
-watch(() => props.projectRoot, () => { session.value = null; attachments.value = []; void load(); });
+watch(() => props.projectRoot, () => {
+  generation++; session.value=null; attachments.value=[]; setup.value=null;
+  target.value=''; context.value=''; sourceRefs.value=''; selectedCard.value=''; sourcePath.value='';
+  startLine.value=null; endLine.value=null; preview.value=''; previewOffset.value=null; message.value='';
+  void load();
+});
 onMounted(async () => { panel.value?.focus(); await load(); });
 </script>
 
@@ -150,7 +170,7 @@ onMounted(async () => { panel.value?.focus(); await load(); });
             <h3>角色已知资料</h3>
             <label>档案条目<select v-model="sourcePath" :disabled="busy" @change="preview = ''">
               <option value="">选择条目</option>
-              <option v-for="item in entries" :key="item.path" :value="item.path">{{ item.path }}</option>
+              <option v-for="item in entries" :key="item.path" :value="item.path">{{ item.path }} · {{ sourceLabels[item.status] || item.status }}</option>
             </select></label>
             <button v-if="cursor !== null" :disabled="busy" @click="action(moreArchives)">更多条目</button>
             <div class="character-chat-range"><label>起始行<input v-model.number="startLine" type="number" min="1" /></label>
@@ -168,6 +188,7 @@ onMounted(async () => { panel.value?.focus(); await load(); });
             </li></ul>
             <label>这段对话的场景<textarea v-model="context" rows="4" :disabled="busy"
               placeholder="此刻在哪里，你以什么身份与角色交谈，刚刚发生了什么…" /></label>
+            <small>写下你的名字、与角色的关系和发生时刻。例如：新来的维修工小陆，第一次来到食堂，在后门与许钉交谈。</small>
             <button :disabled="busy || !target" @click="draftCard">按已知资料生成本段角色卡</button>
             <button class="character-chat-primary" :disabled="busy || !target" @click="create">加载并开始新对话</button>
             <h3>已有对话</h3>

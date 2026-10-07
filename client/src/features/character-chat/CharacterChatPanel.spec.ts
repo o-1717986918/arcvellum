@@ -41,5 +41,24 @@ describe("character dialogue panel", () => {
     expect(wrapper.emitted("close")).toHaveLength(1);
     wrapper.unmount();
   });
+
+  it("keeps an old work's late reply out of the newly selected work", async () => {
+    const session = { session_id:"old-chat", target:"阿青", context:"窗边", known_archive:[],system_prompt:"角色卡",turns:[] };
+    mocks.create.mockResolvedValue({ session });
+    let finish!: (value: unknown) => void;
+    mocks.ask.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    const wrapper = mount(CharacterChatPanel, { props:{projectRoot:"C:/works/old"},global:{stubs:{Teleport:true}} });
+    await flushPromises(); await wrapper.findAll("select")[0].setValue("card-1");
+    await wrapper.findAll("button").find(button => button.text()==="加载并开始新对话")!.trigger("click");
+    await flushPromises(); await wrapper.find("form textarea").setValue("等我回来。");
+    await wrapper.find("form").trigger("submit");
+    await wrapper.setProps({projectRoot:"C:/works/new"}); await flushPromises();
+    finish({session:{...session,turns:[{message:"等我回来。",answer:"来自旧作品的迟到回复"}]}});
+    await flushPromises();
+    expect(wrapper.text()).not.toContain("来自旧作品的迟到回复");
+    expect(wrapper.find("form").exists()).toBe(false);
+    expect(mocks.ask).toHaveBeenCalledWith("C:/works/old","old-chat","等我回来。");
+    wrapper.unmount();
+  });
 });
 

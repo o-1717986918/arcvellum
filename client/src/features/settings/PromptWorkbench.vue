@@ -38,7 +38,7 @@ onMounted(() => { void loadCatalog(); });
 watch(layerId, () => { void loadSelection(); });
 watch(scope, () => { void loadCatalog(); });
 watch(() => props.projectRoot, () => { void loadCatalog(); });
-watch([query, responsibility], () => {
+watch([query, responsibility, filteredTree], () => {
   if (!query.value.trim() && responsibility.value === "all") return;
   const branches = filteredTree.value.flatMap((group) => [group.id, ...(group.children || []).map((stage) => stage.id)]);
   expandedNodes.value = [...new Set([...expandedNodes.value, ...branches])];
