@@ -45,27 +45,45 @@ class ActorCardRuntimeTests(unittest.TestCase):
 
     def invoke(self, call):
         self.calls.append(call)
-        return {"candidates": [{"spoken": "信呢？", "first_person_action": "我捏住信封。",
-                                "focus": "迟疑"}], "__answer": "actor-answer",
+        return {"candidates": [{"text": "我捏住信封。阿婶说：‘回家吧。’",
+                                "spoken": "信呢？", "first_person_action": "我捏住信封。",
+                                "private_impulse": "我怕她已经走了。", "focus": "迟疑"}],
+                "__answer": "我捏住信封。‘信呢？’我问。阿婶说：‘回家吧。’",
                 "__initialization_answer": "initialized"}
 
     def test_first_card_required_then_reuses_frozen_card_and_history(self):
         with self.assertRaisesRegex(ValueError, "first actor request"):
             self.coordinator.execute(replace(self.request, character_card=None), self.invoke)
-        self.coordinator.execute(self.request, self.invoke)
+        first_candidate, = self.coordinator.execute(self.request, self.invoke)
+        self.assertEqual(first_candidate["text"], "我捏住信封。\n信呢？")
         followup = replace(self.request, cue="有人追问信去了哪", character_card=None)
         self.coordinator.execute(followup, self.invoke)
+        self.assertEqual(self.calls[1].history, ())
+        adopted_followup = replace(self.request, cue="阿婶听见追问后停下手里的活", character_card=None)
+        self.coordinator.execute(adopted_followup, self.invoke,
+                                 adopted_candidate_ids={first_candidate["candidate_id"]})
         self.assertEqual(self.calls[0].initialization, self.calls[1].initialization)
-        self.assertEqual(self.calls[1].history, (("角色此前呈现的台词与动作", "actor-answer"),))
-        self.assertEqual(self.calls[1].initialization_answer, "initialized")
+        self.assertEqual(self.calls[0].initialization, self.calls[2].initialization)
+        self.assertEqual(self.calls[2].history, (("主创选用的本角色上一轮表达",
+            "台词：信呢？\n动作：我捏住信封。\n内心冲动：我怕她已经走了。"),))
+        self.assertNotIn("阿婶说", self.calls[2].history[0][1])
+        self.assertEqual(self.calls[2].initialization_answer, "initialized")
         self.assertNotIn("LEGACY_SOURCE_ONLY", self.calls[0].initialization)
         self.assertNotIn("DIRECTOR_ONLY", self.calls[0].initialization)
         records = [json.loads(path.read_text(encoding="utf-8"))
                    for path in (self.coordinator.root / "calls").glob("*.json")]
+        self.assertTrue(any("阿婶说" in row["answer"] for row in records))
+        self.assertTrue(all("阿婶说" not in row["candidates"][0]["text"] for row in records))
         self.assertEqual({row["character_card_digest"] for row in records},
                          {self.calls[0].character_card_digest})
         self.assertEqual(len(self.calls[0].character_card_digest), 64)
         self.coordinator.assert_ready_for_prose()
+
+    def test_history_uses_only_an_adopted_actor_candidate(self):
+        self.coordinator.execute(self.request, self.invoke)
+        followup = replace(self.request, cue="有人追问信去了哪", character_card=None)
+        self.coordinator.execute(followup, self.invoke)
+        self.assertEqual(self.calls[1].history, ())
 
     def test_different_card_rejected_and_original_card_available_to_creator(self):
         self.coordinator.execute(self.request, self.invoke)

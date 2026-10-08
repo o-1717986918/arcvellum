@@ -161,6 +161,7 @@ class SceneCreatorV2MaterialCoordinator:
     def execute(
         self, request: SceneMaterialRequestV3,
         invoke: Callable[[MaterialInvocationV2], Mapping[str, Any]],
+        *, adopted_candidate_ids: set[str] | frozenset[str] = frozenset(),
     ) -> list[dict[str, Any]]:
         if not (self.root / "material_plan.json").is_file():
             raise ValueError("scene creator must save a material plan before calling an agent")
@@ -180,8 +181,8 @@ class SceneCreatorV2MaterialCoordinator:
             material_attachments=selected_materials,
         )
         history_rows = self._history(request.kind, request.target)
-        history = (tuple(("角色此前呈现的台词与动作", row["answer"])
-                         for row in history_rows[-12:]) if request.kind == "actor" else ())
+        history = (_adopted_actor_history(history_rows, adopted_candidate_ids)
+                   if request.kind == "actor" else ())
         call = replace(call, history=history,
                        initialization_answer=(str(history_rows[-1].get("initialization_answer") or "")
                                               if history_rows else ""))
@@ -355,13 +356,41 @@ def _card_digest(card: ActorCharacterCardV1) -> str:
 
 
 def _candidate_text_focus(item: Mapping[str, Any], actor_fields: Mapping[str, str]) -> tuple[str, str]:
-    text = str(item.get("text") or "").strip() or "\n".join(
-        part for part in (actor_fields.get("first_person_action"), actor_fields.get("spoken")) if part
-    )
+    if actor_fields:
+        text = "\n".join(part for part in (
+            actor_fields.get("first_person_action"), actor_fields.get("spoken"),
+        ) if part)
+    else:
+        text = str(item.get("text") or "").strip()
     focus = str(item.get("focus") or "").strip()
     if not 5 <= len(text) <= 2400 or not 1 <= len(focus) <= 200:
         raise ValueError("material candidate needs bounded literary text and focus")
     return text, focus
+
+
+def _adopted_actor_history(
+    rows: list[dict[str, Any]], adopted_candidate_ids: set[str] | frozenset[str],
+) -> tuple[tuple[str, str], ...]:
+    if not adopted_candidate_ids:
+        return ()
+    history = []
+    for row in rows:
+        for candidate in row.get("candidates") or []:
+            if not isinstance(candidate, Mapping):
+                continue
+            if str(candidate.get("candidate_id") or "") not in adopted_candidate_ids:
+                continue
+            lines = []
+            for key, label in (
+                ("spoken", "台词"), ("first_person_action", "动作"),
+                ("private_impulse", "内心冲动"),
+            ):
+                value = str(candidate.get(key) or "").strip()
+                if value:
+                    lines.append(f"{label}：{value}")
+            if lines:
+                history.append(("主创选用的本角色上一轮表达", "\n".join(lines)))
+    return tuple(history[-12:])
 
 
 def _actor_fields(item: Mapping[str, Any]) -> dict[str, str]:

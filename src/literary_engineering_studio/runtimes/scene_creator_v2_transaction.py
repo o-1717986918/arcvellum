@@ -230,8 +230,14 @@ class SceneCreatorV2Mixin(NaturalCreatorMixin):
             return
         parser = parse_scene_material_requests_v4 if request_version == 4 else parse_scene_material_requests_v3
         pending = parser(memory.pending_request, list(brief.participants))
+        adopted_candidate_ids = {
+            item["candidate_id"] for item in memory.material_decisions if item["decision"] == "use"
+        }
         for request in pending:
-            coordinator.execute(request, lambda call: self._invoke_v2_material(call, transaction_id))
+            coordinator.execute(
+                request, lambda call: self._invoke_v2_material(call, transaction_id),
+                adopted_candidate_ids=adopted_candidate_ids,
+            )
         memory.pending_request = None
         memory.phase = "material-ready"
         memory.save(memory_path)

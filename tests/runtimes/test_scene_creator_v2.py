@@ -12,6 +12,7 @@ import unittest
 from literary_engineering_studio.application.creator_persona import CreatorPersonaStore
 from literary_engineering_studio.runtimes.scene_creator_briefing import build_scene_creator_briefing
 from literary_engineering_studio.runtimes.pi_scene_transaction import PiSceneTransactionRuntime
+from literary_engineering_studio.runtimes.scene_creator_memory import SceneCreatorMemoryV1
 from literary_engineering_studio.runtime.role_conversation import RoleConversationResult
 from literary_engineering_studio.runtimes.scene_creator_v2_materials import (
     SceneCreatorV2MaterialCoordinator, assert_v2_prompts_ready,
@@ -64,6 +65,50 @@ class SceneCreatorV2Tests(unittest.TestCase):
         with self.assertRaises(ValueError):
             workspace.write_scratch("../canon/world_rules.yaml", "改写")
         self.assertIn("雨会留下痕迹", (self.project / "canon/world_rules.yaml").read_text(encoding="utf-8"))
+
+    def test_actor_history_is_built_from_creator_adopted_material(self) -> None:
+        workspace = SceneCreatorWorkspace(self.project, self.studio)
+        layers = {key: "designed" for key in (
+            "scene.v2.material.shared.protocol", "scene.v2.material.output.protocol")}
+        layers["scene.v2.material.actor"] = prompt_layer_spec("scene.v2.material.actor").default_text
+        coordinator = SceneCreatorV2MaterialCoordinator(
+            self.root / "tx-history", workspace, layers, scene_id="s1")
+        coordinator.save_plan(parse_creator_material_plan({"material_plan": {
+            "required_kinds": ["actor"], "reason": "承接人物上一轮回应"}}))
+
+        request = parse_scene_material_requests_v3({"material_requests": [{
+            "kind": "actor", "target": "阿青", "purpose": "回应追问", "scene_moment": "她听见追问时",
+            "cue": "有人问信去了哪里", "author_prompt": "写出阿青当下的回应。",
+            "character_card": actor_card_payload(), "archive_attachments": [],
+        }]}, ["阿青"])[0]
+        first, = coordinator.execute(request, lambda _call: {
+            "candidates": [{"spoken": "信呢？", "first_person_action": "我捏住信封。",
+                            "private_impulse": "我怕她已经走了。", "focus": "迟疑"}],
+            "__answer": "我捏住信封。‘信呢？’我问。陶婶说：‘回家吧。’",
+        })
+        followup = parse_scene_material_requests_v3({"material_requests": [{
+            "kind": "actor", "target": "阿青", "purpose": "接住回应后的压力",
+            "scene_moment": "陶婶听见追问后停手时", "cue": "陶婶没有立刻回答",
+            "author_prompt": "从阿青听到停顿后的感受继续。", "archive_attachments": [],
+        }]}, ["阿青"])[0]
+        memory = SceneCreatorMemoryV1(
+            scene_id="s1", material_decisions=[{"candidate_id": first["candidate_id"],
+                "decision": "use", "reason": "让追问成为本轮已发生的来话"}],
+            pending_request={"material_requests": [followup.to_dict()]})
+        runtime = PiSceneTransactionRuntime({}, project_root=self.project, data_root=self.studio)
+        invoked = []
+        runtime._invoke_v2_material = lambda call, _transaction_id: invoked.append(call) or {
+            "candidates": [{"spoken": "我还没说完。", "focus": "迟疑"}],
+            "__answer": "我还没说完。",
+        }
+        brief = SceneBrief("s1", "寻找信", "让追问形成压力", ("阿青",), (), (), (),
+            RhythmDirective(), LengthTarget(), StyleMountRef(), SceneRisk(SceneRiskLevel.LOW), ())
+        runtime._fulfill_v2_pending(memory, self.root / "scene_creator_memory.json", brief,
+            coordinator, "tx-history")
+
+        self.assertEqual(len(invoked), 1)
+        self.assertEqual(invoked[0].history, (("主创选用的本角色上一轮表达",
+            "台词：信呢？\n动作：我捏住信封。\n内心冲动：我怕她已经走了。"),))
 
     def test_persona_version_and_briefing_provenance(self) -> None:
         store = CreatorPersonaStore(self.studio)
