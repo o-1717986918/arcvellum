@@ -7,7 +7,7 @@ from copy import deepcopy
 from typing import Any
 
 from literary_engineering_studio_engine.public.literary import (
-    parse_creator_material_plan, parse_scene_material_requests_v3,
+    parse_creator_material_plan, parse_scene_material_requests_v4,
     verify_creative_result,
     derive_scene_policy, SceneExecutionMode,
 )
@@ -42,7 +42,9 @@ class NaturalCreatorMixin:
         failures = 0
         replay = journal.feedback()
         for _ in range(16):
-            self._fulfill_v2_pending(memory, memory_path, brief, coordinator, transaction_id)
+            self._fulfill_v2_pending(
+                memory, memory_path, brief, coordinator, transaction_id, request_version=4,
+            )
             context = _creator_context(memory, coordinator, briefing, revision_context)
             context["actor_system_template"] = layers["scene.v2.material.actor"]
             if journal.feedback():
@@ -72,7 +74,7 @@ class NaturalCreatorMixin:
                 return creative_result_from_payload(payload)
         raise RuntimeError("natural scene creator exceeded its material turns")
     def _accept_natural_turn(self, payload, brief, coordinator, memory):
-        requests = parse_scene_material_requests_v3(payload, list(brief.participants))
+        requests = parse_scene_material_requests_v4(payload, list(brief.participants))
         if requests:
             if str(payload.get("prose") or "").strip():
                 raise ValueError("creator offered prose while requesting new materials")

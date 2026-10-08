@@ -56,7 +56,7 @@ class ActorCardRuntimeTests(unittest.TestCase):
         followup = replace(self.request, cue="有人追问信去了哪", character_card=None)
         self.coordinator.execute(followup, self.invoke)
         self.assertEqual(self.calls[0].initialization, self.calls[1].initialization)
-        self.assertEqual(self.calls[1].history, ((self.calls[0].prompt, "actor-answer"),))
+        self.assertEqual(self.calls[1].history, (("角色此前呈现的台词与动作", "actor-answer"),))
         self.assertEqual(self.calls[1].initialization_answer, "initialized")
         self.assertNotIn("LEGACY_SOURCE_ONLY", self.calls[0].initialization)
         self.assertNotIn("DIRECTOR_ONLY", self.calls[0].initialization)

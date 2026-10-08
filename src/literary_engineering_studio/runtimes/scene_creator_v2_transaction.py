@@ -13,6 +13,7 @@ from literary_engineering_studio_engine.public.prompting import (
 from literary_engineering_studio_engine.public.literary import (
     CreativeResult, ReviewResult, SceneBrief, VerificationReport,
     parse_creator_material_plan, parse_scene_material_requests_v3,
+    parse_scene_material_requests_v4,
 )
 
 from ..application.creator_persona import CreatorPersonaStore
@@ -220,10 +221,12 @@ class SceneCreatorV2Mixin(NaturalCreatorMixin):
     def _fulfill_v2_pending(
         self, memory: SceneCreatorMemoryV1, memory_path: Path, brief: SceneBrief,
         coordinator: SceneCreatorV2MaterialCoordinator, transaction_id: str,
+        *, request_version: int = 3,
     ) -> None:
         if memory.pending_request is None:
             return
-        pending = parse_scene_material_requests_v3(memory.pending_request, list(brief.participants))
+        parser = parse_scene_material_requests_v4 if request_version == 4 else parse_scene_material_requests_v3
+        pending = parser(memory.pending_request, list(brief.participants))
         for request in pending:
             coordinator.execute(request, lambda call: self._invoke_v2_material(call, transaction_id))
         memory.pending_request = None

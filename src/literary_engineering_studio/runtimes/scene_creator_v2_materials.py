@@ -9,11 +9,16 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 
 from literary_engineering_studio_engine.public.literary import (
-    CreatorMaterialPlanV1, SceneMaterialRequestV3, assert_required_material_calls,
+    CreatorMaterialPlanV1, SceneMaterialRequestV3, SceneMaterialRequestV4,
+    assert_required_material_calls,
     ActorCharacterCardV1, parse_actor_character_card, render_actor_character_card,
 )
 
 from .scene_creator_workspace import SceneCreatorWorkspace
+from .scene_creator_material_context import (
+    freeze_material_candidate, natural_material_invitation,
+    validate_material_context_budget,
+)
 from .scene_natural_output import NATURAL_RESPONSE_MODE, render_style
 from .event_material_provenance import event_fields as _event_fields
 
@@ -64,8 +69,10 @@ def assert_v2_prompts_ready(layers: Mapping[str, str]) -> None:
 def render_material_invocation(
     request: SceneMaterialRequestV3, attachments: list[dict[str, Any]],
     layers: Mapping[str, str], *, scene_id: str,
+    material_attachments: list[dict[str, Any]] | None = None,
 ) -> MaterialInvocationV2:
-    request_id = sha256(json.dumps([scene_id, request.to_dict(), attachments],
+    selected_materials = material_attachments or []
+    request_id = sha256(json.dumps([scene_id, request.to_dict(), attachments, selected_materials],
                                    ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()[:20]
     known = [entry for entry in attachments if entry.get("knowledge") == "known"]
     reference = [entry for entry in attachments if entry.get("knowledge") == "reference"]
@@ -87,12 +94,17 @@ def render_material_invocation(
         "director_reference_archive": reference,
         "other_archive": general,
     }
+    if isinstance(request, SceneMaterialRequestV4):
+        task["working_context"] = request.working_context
+        task["selected_materials"] = selected_materials
     manifest = tuple({key: entry.get(key) for key in (
         "path", "line_range", "status", "knowledge", "file_sha256", "content_sha256",
-    )} for entry in attachments)
+    )} for entry in attachments) + tuple({key: entry.get(key) for key in (
+        "candidate_id", "kind", "target", "status", "char_range", "content_sha256",
+    )} for entry in selected_materials)
     return MaterialInvocationV2(
         _KIND_ROLE[request.kind], system,
-        _natural_invitation(task) if natural else json.dumps(task, ensure_ascii=False), request_id, manifest,
+        natural_material_invitation(task) if natural else json.dumps(task, ensure_ascii=False), request_id, manifest,
         character_card_digest=card_digest,
         response_mode=NATURAL_RESPONSE_MODE if natural else "",
     )
@@ -161,9 +173,16 @@ class SceneCreatorV2MaterialCoordinator:
             saved = json.loads(record_path.read_text(encoding="utf-8"))
             return list(saved["candidates"])
         attachments = self._prepared_attachments(request, request_key)
-        call = render_material_invocation(request, attachments, self.layers, scene_id=self.scene_id)
+        selected_materials = self._prepared_material_attachments(request, request_key)
+        validate_material_context_budget(request, attachments, selected_materials)
+        call = render_material_invocation(
+            request, attachments, self.layers, scene_id=self.scene_id,
+            material_attachments=selected_materials,
+        )
         history_rows = self._history(request.kind, request.target)
-        call = replace(call, history=tuple((row["prompt"], row["answer"]) for row in history_rows[-12:]),
+        history = (tuple(("角色此前呈现的台词与动作", row["answer"])
+                         for row in history_rows[-12:]) if request.kind == "actor" else ())
+        call = replace(call, history=history,
                        initialization_answer=(str(history_rows[-1].get("initialization_answer") or "")
                                               if history_rows else ""))
         response = invoke(call)
@@ -174,7 +193,8 @@ class SceneCreatorV2MaterialCoordinator:
             "sequence": sequence,
             "request": request.to_dict(), "request_id": call.request_id, "role": call.role,
             "attachment_manifest": list(call.attachment_manifest),
-            "attachments": attachments, "prompt_sha256": sha256(call.prompt.encode("utf-8")).hexdigest(),
+            "attachments": attachments, "material_attachments": selected_materials,
+            "prompt_sha256": sha256(call.prompt.encode("utf-8")).hexdigest(),
             "initialization_sha256": sha256(call.initialization.encode("utf-8")).hexdigest(),
             "character_card_digest": call.character_card_digest,
             "prompt": call.prompt, "answer": str(response.get("__answer") or ""),
@@ -225,6 +245,32 @@ class SceneCreatorV2MaterialCoordinator:
         self._write(path, {"schema": "arcvellum/material-request-prepared/v1",
                            "request": request.to_dict(), "attachments": attachments})
         return attachments
+
+    def _prepared_material_attachments(
+        self, request: SceneMaterialRequestV3, request_key: str,
+    ) -> list[dict[str, Any]]:
+        refs = getattr(request, "material_attachments", ())
+        path = self.root / "prepared-material" / (request_key + ".json")
+        if path.is_file():
+            saved = json.loads(path.read_text(encoding="utf-8"))
+            if saved.get("request") != request.to_dict() or not isinstance(saved.get("attachments"), list):
+                raise ValueError("prepared material selection is inconsistent")
+            return saved["attachments"]
+        candidates = self._candidate_lookup() if refs else {}
+        attachments = [freeze_material_candidate(ref, candidates) for ref in refs]
+        self._write(path, {"schema": "arcvellum/material-selection-prepared/v1",
+                           "request": request.to_dict(), "attachments": attachments})
+        return attachments
+
+    def _candidate_lookup(self) -> dict[str, dict[str, Any]]:
+        found: dict[str, dict[str, Any]] = {}
+        for file in sorted((self.root / "calls").glob("*.json")):
+            record = json.loads(file.read_text(encoding="utf-8"))
+            for candidate in record.get("candidates") or []:
+                identifier = str(candidate.get("candidate_id") or "")
+                if identifier:
+                    found[identifier] = candidate
+        return found
 
     def completed_kinds(self) -> tuple[str, ...]:
         kinds = []
@@ -306,12 +352,6 @@ def _parse_candidates(response: Mapping[str, Any], request: SceneMaterialRequest
 
 def _card_digest(card: ActorCharacterCardV1) -> str:
     return sha256(json.dumps(card.to_dict(), ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
-
-
-def _natural_invitation(task: Mapping[str, Any]) -> str:
-    return (str(task["author_prompt"]) + "\n\n本次创作资料：\n"
-            + json.dumps({key: value for key, value in task.items() if key != "author_prompt"}, ensure_ascii=False)
-            + "\n\n请以自然的文学文字回应这次委托。")
 
 
 def _candidate_text_focus(item: Mapping[str, Any], actor_fields: Mapping[str, str]) -> tuple[str, str]:

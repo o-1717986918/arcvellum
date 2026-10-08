@@ -29,7 +29,7 @@ def restore_commission_source(answer, payload):
 
 
 def _fields(request):
-    fields = [(request, field, field) for field in ("author_prompt", "style_direction")]
+    fields = [(request, field, field) for field in ("author_prompt", "working_context", "style_direction")]
     card = request.get("character_card")
     sections = card.get("sections") if isinstance(card, dict) else None
     if isinstance(sections, dict):

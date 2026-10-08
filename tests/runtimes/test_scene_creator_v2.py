@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from hashlib import sha256
 from pathlib import Path
 import re
 from tempfile import TemporaryDirectory
@@ -19,6 +20,7 @@ from literary_engineering_studio.runtimes.scene_creator_workspace import SceneCr
 from literary_engineering_studio_engine.public.literary import (
     LengthTarget, RhythmDirective, SceneBrief, SceneRisk, SceneRiskLevel, StyleMountRef,
     parse_creator_material_plan, parse_scene_material_requests_v3,
+    parse_scene_material_requests_v4,
 )
 from literary_engineering_studio_engine.public.prompting import prompt_layer_spec
 from tests.actor_card_fixtures import actor_card_payload
@@ -163,6 +165,121 @@ class SceneCreatorV2Tests(unittest.TestCase):
             "candidates": [{"text": "被烧毁的信只剩下一个空信封。", "focus": "事件遗痕",
                             "basis": "attributed", "source_note": "人物档案转述"}]})
         self.assertIn("信已烧毁", seen[0]["other_archive"][0]["content"])
+
+    def test_selected_candidate_excerpt_is_frozen_into_later_natural_invitation(self):
+        workspace = SceneCreatorWorkspace(self.project, self.studio)
+        layers = {
+            "scene.v2.transport.extractor": "整理模板",
+            "scene.v2.material.actor": prompt_layer_spec("scene.v2.material.actor").default_text,
+            "scene.v2.material.scene-description": prompt_layer_spec(
+                "scene.v2.material.scene-description").default_text,
+        }
+        coordinator = SceneCreatorV2MaterialCoordinator(
+            self.root / "material-chain", workspace, layers, scene_id="s1")
+        coordinator.save_plan(parse_creator_material_plan({"material_plan": {
+            "required_kinds": ["actor", "scene-description"], "reason": "先听人物，再组织动作空间"}}))
+        actor, = parse_scene_material_requests_v4({"material_requests": [{
+            "kind": "actor", "target": "阿青", "purpose": "她怎样接住旧信的话题",
+            "scene_moment": "空信封落到掌心时", "cue": "信封是空的",
+            "author_prompt": "让阿青从自己的处境里回应这只空信封。",
+            "character_card": actor_card_payload(),
+            "archive_attachments": [{"path": "characters/阿青.yaml", "start_line": 1,
+                                    "end_line": 1, "knowledge": "known"}],
+        }]}, ["阿青"])
+        actor_material = coordinator.execute(actor, lambda _call: {
+            "candidates": [{"spoken": "信还在。", "first_person_action": "我把信封按在碗底。",
+                            "focus": "按住空信封"}],
+        })[0]
+        excerpt = actor_material["text"]
+        scene, = parse_scene_material_requests_v4({"material_requests": [{
+            "kind": "scene-description", "target": "碗边的这一刻",
+            "purpose": "让迟疑落在手和桌面的距离上",
+            "scene_moment": "信封被按在碗底之后", "cue": "人物尚未离开桌边",
+            "author_prompt": "沿着手、信封与桌面的距离写出这一刻。",
+            "working_context": "阿青已把信封按在碗底；这次沿着这个动作继续构图。",
+            "material_attachments": [{"candidate_id": actor_material["candidate_id"],
+                                     "start_char": 0, "end_char": len(excerpt)}],
+            "archive_attachments": [{"path": "canon/world_rules.yaml"}],
+        }]}, ["阿青"])
+        seen = []
+        def interrupted(call):
+            seen.append(call)
+            raise RuntimeError("temporary role failure")
+        with self.assertRaisesRegex(RuntimeError, "temporary role failure"):
+            coordinator.execute(scene, interrupted)
+        actor_record_path, = [path for path in (coordinator.root / "calls").glob("*.json")
+                              if json.loads(path.read_text(encoding="utf-8"))["request"]["kind"] == "actor"]
+        actor_record = json.loads(actor_record_path.read_text(encoding="utf-8"))
+        actor_record["candidates"][0]["text"] = "来源后来发生变化的候选文本。"
+        actor_record_path.write_text(json.dumps(actor_record, ensure_ascii=False), encoding="utf-8")
+        coordinator.execute(scene, lambda call: seen.append(call) or {
+            "candidates": [{"text": "碗底压着信封，阿青的手还留在上面。", "focus": "手未离开"}],
+        })
+
+        prompt = seen[-1].prompt
+        self.assertIn(scene.working_context, prompt)
+        self.assertIn(excerpt, prompt)
+        self.assertNotIn("来源后来发生变化", prompt)
+        self.assertIn(actor_material["candidate_id"], prompt)
+        self.assertIn("雨会留下痕迹", prompt)
+        self.assertNotIn('"kind"', prompt)
+        records = [json.loads(path.read_text(encoding="utf-8"))
+                   for path in (coordinator.root / "calls").glob("*.json")]
+        saved = next(record for record in records
+                     if record["request"]["kind"] == "scene-description")
+        selection = saved["material_attachments"][0]
+        self.assertEqual(selection["char_range"], [0, len(excerpt)])
+        self.assertEqual(selection["content_sha256"], sha256(excerpt.encode("utf-8")).hexdigest())
+
+    def test_material_attachment_must_resolve_within_current_transaction(self):
+        workspace = SceneCreatorWorkspace(self.project, self.studio)
+        layers = {"scene.v2.transport.extractor": "整理模板",
+                  "scene.v2.material.scene-description": "系统"}
+        coordinator = SceneCreatorV2MaterialCoordinator(
+            self.root / "missing-material", workspace, layers, scene_id="s1")
+        coordinator.save_plan(parse_creator_material_plan({"material_plan": {
+            "required_kinds": ["scene-description"], "reason": "把已发生动作放回空间"}}))
+        request, = parse_scene_material_requests_v4({"material_requests": [{
+            "kind": "scene-description", "target": "桌边", "purpose": "衔接动作",
+            "scene_moment": "放下碗以后", "cue": "碗已经放下",
+            "author_prompt": "沿着已经发生的动作安排空间。",
+            "material_attachments": [{"candidate_id": "v2:missing:1"}],
+        }]}, ["阿青"])
+
+        with self.assertRaisesRegex(ValueError, "unavailable in this transaction"):
+            coordinator.execute(request, lambda _call: self.fail("must resolve before the agent call"))
+
+    def test_each_nonactor_call_receives_only_its_selected_archive_material(self):
+        (self.project / "canon/alternate.yaml").write_text("另一条档案只用于第二次观察。\n", encoding="utf-8")
+        workspace = SceneCreatorWorkspace(self.project, self.studio)
+        layers = {"scene.v2.transport.extractor": "整理模板",
+                  "scene.v2.material.environment": prompt_layer_spec(
+                      "scene.v2.material.environment").default_text}
+        coordinator = SceneCreatorV2MaterialCoordinator(
+            self.root / "per-call-archive", workspace, layers, scene_id="s1")
+        coordinator.save_plan(parse_creator_material_plan({"material_plan": {
+            "required_kinds": ["environment"], "reason": "按场景需要观察不同物件"}}))
+
+        def request(path, moment):
+            value, = parse_scene_material_requests_v4({"material_requests": [{
+                "kind": "environment", "target": "", "purpose": "呈现物件的使用痕迹",
+                "scene_moment": moment, "cue": "人物仍在屋里",
+                "author_prompt": "从物件的质地和周围的光写出这一刻。",
+                "archive_attachments": [{"path": path}],
+            }]}, ["阿青"])
+            return value
+
+        coordinator.execute(request("canon/world_rules.yaml", "望向窗边时"), lambda _call: {
+            "candidates": [{"text": "窗沿留下几道雨水。", "focus": "水痕"}],
+        })
+        calls = []
+        coordinator.execute(request("canon/alternate.yaml", "回看桌面时"), lambda call: calls.append(call) or {
+            "candidates": [{"text": "桌面留下一圈淡淡的热痕。", "focus": "热痕"}],
+        })
+
+        self.assertEqual(calls[0].history, ())
+        self.assertIn("另一条档案只用于第二次观察", calls[0].prompt)
+        self.assertNotIn("雨会留下痕迹", calls[0].prompt)
 
     def test_prompt_placeholders_block_activation(self) -> None:
         with self.assertRaisesRegex(RuntimeError, "prompt design is incomplete"):

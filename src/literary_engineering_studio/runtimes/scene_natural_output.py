@@ -13,7 +13,9 @@ from .archive_partition_transport import normalize_archive_partitions
 from .natural_material_response import whole_material_response
 from .creator_delivery_labels import resolve_creator_targets
 from .event_material_provenance import event_fields, recover_event_source_status
-from literary_engineering_studio_engine.public.literary import ACTOR_CARD_SECTIONS, parse_scene_material_requests_v3
+from literary_engineering_studio_engine.public.literary import (
+    ACTOR_CARD_SECTIONS, parse_scene_material_requests_v4,
+)
 
 NATURAL_RESPONSE_MODE = "natural-v1"
 STYLE_TOKEN = "{{STYLE_DIRECTION}}"
@@ -23,10 +25,13 @@ _CREATOR_CONTRACT = {
         "target": "actor/character-description: exact participant name from context.briefing.scene_brief.participants; other kinds: commission subject",
         "purpose": "purpose", "scene_moment": "moment", "cue": "stimulus",
         "author_prompt": "verbatim contiguous creator invitation from source_text",
+        "working_context": "verbatim contiguous creator note describing this call's current context, or empty",
         "style_direction": "verbatim contiguous style from source_text, or empty when unstated",
         "archive_attachments": [{"path": "relative archive path", "start_line": None,
                                 "end_line": None,
                                 "knowledge": "known or reference for actor; empty for other kinds"}],
+        "material_attachments": [{"candidate_id": "an explicitly selected candidate ID from this transaction",
+                                  "start_char": None, "end_char": None}],
         "character_card": "actor only: schema arcvellum/actor-character-card/v1, target, sections mapping from the supplied sixteen template keys, source_refs list, notes"}],
     "prose": "exact contiguous source text of completed body, or empty during preparation",
     "decision_summary": "creator's working intention and decisions",
@@ -183,7 +188,7 @@ def _prepare_transport_payload(answer, payload, kind, context):
     validate_extracted_text(answer, payload, kind, context)
     if kind == "creator" and "briefing" in context:
         participants = (context["briefing"].get("scene_brief") or {}).get("participants") or []
-        parse_scene_material_requests_v3(payload, list(participants))
+        parse_scene_material_requests_v4(payload, list(participants))
     return payload
 
 
@@ -221,13 +226,16 @@ def _commission_provenance(answer: str, payload: Mapping[str, Any]) -> dict[str,
         if not isinstance(request, dict):
             raise ValueError("invalid creator invitation extraction")
         spans = {}
-        for key in ("author_prompt", "style_direction"):
+        for key in ("author_prompt", "working_context", "style_direction"):
             if key not in request or (key == "style_direction" and not request[key]):
                 continue
             value = request[key]
             _verbatim(answer, value, key)
             start = answer.index(value)
             spans[key] = {"start": start, "end": start + len(value)}
+        for attachment in request.get("material_attachments") or []:
+            if isinstance(attachment, dict):
+                _verbatim(answer, attachment.get("candidate_id"), "selected material candidate ID")
         rows.append({"request_index": index, "spans": spans})
     return {"source_sha256": sha256(answer.encode("utf-8")).hexdigest(), "requests": rows}
 
