@@ -9,11 +9,28 @@ class NaturalPromptContractTests(unittest.TestCase):
                      'material.event-narration','material.scene-description'):
             text=prompt_layer_spec('scene.v2.'+kind).default_text
             self.assertEqual(text.count('{{STYLE_DIRECTION}}'),1)
-            for phrase in ('你不能','你不是','不要','禁止','权限','JSON'):
+            for phrase in ('你不能','你不是','不要','禁止','不得','无权','没有权限','JSON'):
                 self.assertNotIn(phrase,text)
         actor=prompt_layer_spec('scene.v2.material.actor').default_text
         self.assertEqual(actor.count('【'),16)
         self.assertNotIn('STYLE_DIRECTION',actor)
+
+    def test_each_material_creator_has_its_own_literary_method_and_frozen_version(self):
+        markers = {
+            'environment': ('地方的时空', '身体里的感知', '空间给予的行动'),
+            'character-description': ('观察位置', '身体', '他人目光'),
+            'event-narration': ('因果脉络', '切入时刻', '讲述位置'),
+            'scene-description': ('空间框架', '动作的接续', '心中地图'),
+        }
+        texts = {}
+        for kind, phrases in markers.items():
+            spec = prompt_layer_spec('scene.v2.material.' + kind)
+            self.assertEqual(spec.package_version, 5)
+            self.assertTrue(all(phrase in spec.default_text for phrase in phrases))
+            self.assertEqual(spec.default_text.count('{{STYLE_DIRECTION}}'), 1)
+            texts[kind] = spec.default_text
+        self.assertEqual(len(set(texts.values())), 4)
+        self.assertEqual(prompt_layer_spec('scene.v2.material.actor').package_version, 3)
 
     def test_free_style_field_roundtrips(self):
         request={'kind':'environment','target':'雨巷','purpose':'让等待可感',
