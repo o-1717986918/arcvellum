@@ -15,7 +15,9 @@ from .pi_scene_payload import creative_result_from_payload, review_result_from_p
 from .scene_creator_memory import SceneCreatorMemoryV1
 from .scene_creator_material_policy import material_selection_error
 from .scene_material_library import SceneMaterialLibrary
-from .scene_natural_output import NaturalOutputProcessor, creator_style, render_style
+from .scene_natural_output import (
+    NaturalOutputProcessor, briefing_for_natural_context, creator_style, render_style,
+)
 from .natural_turn_store import NaturalTurnStore
 from .scene_review_continuity import formal_review_payload, record_review, review_continuity
 from ..infrastructure.project_scene_transactions import known_scene_refs
@@ -96,7 +98,7 @@ class NaturalCreatorMixin:
         memory_path = self._cache_path(transaction_id, "scene_creator_memory.json")
         memory = SceneCreatorMemoryV1.load(memory_path,
             brief.scene_id, request_limit_chars=160_000)
-        context = {"briefing": briefing, "prose": result.prose,
+        context = {"briefing": briefing_for_natural_context(briefing), "prose": result.prose,
                    "scene_delta": result.scene_delta.to_dict(), "verification": verification.to_dict(),
                    "material_index": index, "creator_memory": memory.to_dict(),
                    "review_continuity": review_continuity(memory_path.parent, result.prose)}
@@ -132,7 +134,7 @@ class NaturalCreatorMixin:
 def _creator_context(memory, coordinator, briefing, revision_context) -> dict[str, Any]:
     remembered = memory.to_dict()
     remembered.pop("public_stage", None)
-    return {"briefing": briefing, "creator_memory": remembered,
+    return {"briefing": briefing_for_natural_context(briefing), "creator_memory": remembered,
             "material_index": SceneMaterialLibrary(coordinator.root / "materials").index_prompt(),
             "frozen_material_plan": coordinator.plan_context(),
             "revision_context": revision_context, "actor_card_context": coordinator.creator_card_context()}

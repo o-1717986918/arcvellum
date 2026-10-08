@@ -9,7 +9,9 @@ from unittest.mock import patch
 from literary_engineering_studio.application.creator_persona import CreatorPersonaStore
 from literary_engineering_studio.application.style.stylometry_contracts import CreatorStyleSnapshot, LabDocument
 from literary_engineering_studio.runtimes.pi_scene_transaction import PiSceneTransactionRuntime
-from literary_engineering_studio.runtimes.scene_natural_output import creator_style
+from literary_engineering_studio.runtimes.scene_natural_output import (
+    briefing_for_natural_context, creator_style,
+)
 from tests.runtimes.test_less_ai_tone_experiment import brief
 from tests.runtimes.test_scene_natural_output import NaturalGateway
 from literary_engineering_studio_engine.public.literary import CreativeResult, SceneDelta
@@ -56,6 +58,25 @@ class CreatorStylometryTests(unittest.TestCase):
         self.adapter._creator_style_briefing("observe", untouched)
         self.assertEqual(untouched, {"style": {}})
 
+    def test_natural_context_keeps_style_provenance_without_copying_style_body(self):
+        briefing = {"scene_id": "s1", "style": {
+            "mounted": {"status": "mounted", "content": "正式文风", "source_paths": ["style/author.md"]},
+            "author_directive": {"status": "active", "content": "作者指令", "revision": 4},
+            "stylometry": {"version_id": "version-3", "content_sha256": "digest",
+                           "combine": "append", "content": "计量指导"},
+        }}
+
+        projected = briefing_for_natural_context(briefing)
+
+        self.assertEqual(briefing["style"]["mounted"]["content"], "正式文风")
+        self.assertEqual(projected["scene_id"], "s1")
+        self.assertEqual(projected["style"]["mounted"], {
+            "status": "mounted", "source_paths": ["style/author.md"], "delivered_via": "system_prompt"})
+        self.assertEqual(projected["style"]["author_directive"]["revision"], 4)
+        self.assertEqual(projected["style"]["stylometry"]["version_id"], "version-3")
+        self.assertTrue(all("content" not in item for item in projected["style"].values()))
+        self.assertEqual(creator_style(briefing), "作者指令\n\n正式文风\n\n计量指导")
+
     def test_actual_natural_v2_main_receives_style_material_does_not(self):
         self.adapter._config = {"application": {"scene_creator_v2": {"enabled": True}}}
         CreatorPersonaStore(self.directory / "data").save(self.root,
@@ -65,6 +86,7 @@ class CreatorStylometryTests(unittest.TestCase):
         self.assertIn(self.mount.fragment_text, systems[0])
         material = [text for text in systems if text.startswith("你是一位以地方")]
         self.assertTrue(result.prose)
+        self.assertNotIn(self.mount.fragment_text, json.dumps(self.adapter._gateway.context, ensure_ascii=False))
         self.assertTrue(material)
         self.assertTrue(all(self.mount.fragment_text not in text for text in material))
 

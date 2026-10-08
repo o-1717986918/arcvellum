@@ -92,6 +92,26 @@ def creator_style(briefing: Mapping[str, Any]) -> str:
                         if isinstance((item := style.get(key)), dict) and item.get("content"))
 
 
+def briefing_for_natural_context(briefing: Mapping[str, Any]) -> dict[str, Any]:
+    """Keep style provenance in request context; its full text travels in system_prompt."""
+    result = dict(briefing)
+    style = briefing.get("style")
+    if not isinstance(style, Mapping):
+        return result
+    projected: dict[str, Any] = {}
+    for key, value in style.items():
+        if not isinstance(value, Mapping):
+            projected[key] = value
+            continue
+        item = dict(value)
+        if str(item.get("content") or "").strip():
+            item.pop("content", None)
+            item["delivered_via"] = "system_prompt"
+        projected[key] = item
+    result["style"] = projected
+    return result
+
+
 class NaturalOutputProcessor:
     def __init__(self, root: Path, system_prompt: str, invoke: Callable[[str, str], str], validate_payload=None):
         self.root, self.system_prompt, self.invoke = root, system_prompt, invoke
