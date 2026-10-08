@@ -53,6 +53,29 @@ class SceneMaterialRequestV3:
 
 
 @dataclass(frozen=True)
+class MaterialCandidateAttachmentRefV1:
+    candidate_id: str
+    start_char: int | None = None
+    end_char: int | None = None
+
+    def to_dict(self) -> dict[str, str | int | None]:
+        return {"candidate_id": self.candidate_id,
+                "start_char": self.start_char, "end_char": self.end_char}
+
+
+@dataclass(frozen=True)
+class SceneMaterialRequestV4(SceneMaterialRequestV3):
+    working_context: str = ""
+    material_attachments: tuple[MaterialCandidateAttachmentRefV1, ...] = ()
+
+    def to_dict(self) -> dict[str, Any]:
+        result = super().to_dict()
+        result["working_context"] = self.working_context
+        result["material_attachments"] = [item.to_dict() for item in self.material_attachments]
+        return result
+
+
+@dataclass(frozen=True)
 class CreatorMaterialPlanV1:
     required_kinds: tuple[str, ...]
     reason: str
@@ -83,6 +106,53 @@ def parse_scene_material_requests_v3(
     if not isinstance(raw, list) or len(raw) > 8:
         raise ValueError("material_requests must have at most eight requests")
     return tuple(_parse_request(item, set(participants)) for item in raw)
+
+
+def parse_scene_material_requests_v4(
+    payload: Mapping[str, Any], participants: tuple[str, ...] | list[str],
+) -> tuple[SceneMaterialRequestV4, ...]:
+    raw = payload.get("material_requests", [])
+    if not isinstance(raw, list) or len(raw) > 8:
+        raise ValueError("material_requests must have at most eight requests")
+    return tuple(_parse_request_v4(item, set(participants)) for item in raw)
+
+
+def _parse_request_v4(raw: Any, participants: set[str]) -> SceneMaterialRequestV4:
+    request = _parse_request(raw, participants)
+    if not isinstance(raw, Mapping):
+        raise ValueError("material request must be an object")
+    working_context = str(raw.get("working_context") or "").strip()
+    if len(working_context) > 6000:
+        raise ValueError("working_context exceeds 6000 characters")
+    material_refs = raw.get("material_attachments", [])
+    if not isinstance(material_refs, list) or len(material_refs) > 10:
+        raise ValueError("material_attachments must have at most ten entries")
+    attachments = tuple(_parse_material_attachment(item) for item in material_refs)
+    if len(set(attachments)) != len(attachments):
+        raise ValueError("material_attachments must not repeat the same candidate range")
+    return SceneMaterialRequestV4(
+        request.kind, request.target, request.purpose, request.scene_moment, request.cue,
+        request.author_prompt, request.archive_attachments, request.beat_id, request.scene_change,
+        request.character_card, request.style_direction, working_context, attachments,
+    )
+
+
+def _parse_material_attachment(raw: Any) -> MaterialCandidateAttachmentRefV1:
+    if not isinstance(raw, Mapping):
+        raise ValueError("material attachment must be an object")
+    candidate_id = str(raw.get("candidate_id") or "").strip()
+    start, end = raw.get("start_char"), raw.get("end_char")
+    if not candidate_id or len(candidate_id) > 240:
+        raise ValueError("material attachment needs a candidate_id")
+    if (start is None) != (end is None):
+        raise ValueError("material attachment needs both character endpoints")
+    if start is not None and (
+        not isinstance(start, int) or isinstance(start, bool)
+        or not isinstance(end, int) or isinstance(end, bool)
+        or start < 0 or end <= start
+    ):
+        raise ValueError("material attachment character range must be a non-empty half-open range")
+    return MaterialCandidateAttachmentRefV1(candidate_id, start, end)
 
 
 def _parse_request(raw: Any, participants: set[str]) -> SceneMaterialRequestV3:
@@ -175,6 +245,7 @@ def assert_required_material_calls(
 
 __all__ = [
     "ArchiveAttachmentRefV1", "CreatorMaterialPlanV1", "MATERIAL_KINDS_V3",
-    "SceneMaterialRequestV3", "assert_required_material_calls",
-    "parse_creator_material_plan", "parse_scene_material_requests_v3",
+    "MaterialCandidateAttachmentRefV1", "SceneMaterialRequestV3", "SceneMaterialRequestV4",
+    "assert_required_material_calls", "parse_creator_material_plan",
+    "parse_scene_material_requests_v3", "parse_scene_material_requests_v4",
 ]

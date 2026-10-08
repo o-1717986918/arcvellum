@@ -109,10 +109,13 @@ from ..literary.scene.roleplay.interaction import (
 from ..literary.scene.roleplay.creator_v2 import (
     ArchiveAttachmentRefV1,
     CreatorMaterialPlanV1,
+    MaterialCandidateAttachmentRefV1,
     SceneMaterialRequestV3,
+    SceneMaterialRequestV4,
     assert_required_material_calls,
     parse_creator_material_plan,
     parse_scene_material_requests_v3,
+    parse_scene_material_requests_v4,
 )
 from ..literary.scene.roleplay.character_card import (
     ACTOR_CARD_SCHEMA,
