@@ -25,5 +25,20 @@ class NaturalPromptContractTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             parse_scene_material_requests_v3({'material_requests':[request]},[])
 
+    def test_review_and_revision_prompts_separate_repairs_from_optional_exploration(self):
+        review = prompt_layer_spec('scene.v2.review').default_text
+        protocol = prompt_layer_spec('scene.v2.review.protocol').default_text
+        revision = prompt_layer_spec('scene.v2.creator.revise').default_text
+
+        for phrase in ('已经成立的文学经验', '影响本场成立的主要问题', '可选探索', '正文证据'):
+            self.assertIn(phrase, review)
+        for phrase in ('已经改正', '仍在', '变成新问题', '无法判断'):
+            self.assertIn(phrase, protocol)
+        for phrase in ('优先处理真正损害阅读的地方', '保留前稿已经形成', '完整审读信'):
+            self.assertIn(phrase, revision)
+        for text in (review, protocol, revision):
+            for phrase in ('你不能', '你不是', '不要', '不得', '无权', '没有权限'):
+                self.assertNotIn(phrase, text)
+
 if __name__=='__main__': unittest.main()
 
