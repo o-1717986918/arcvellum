@@ -15,6 +15,15 @@ class NaturalPromptContractTests(unittest.TestCase):
         self.assertEqual(actor.count('【'),16)
         self.assertNotIn('STYLE_DIRECTION',actor)
 
+    def test_actor_invitation_centers_the_named_character_turn(self):
+        spec = prompt_layer_spec('scene.v2.creator.delegation')
+        self.assertEqual(spec.package_version, 6)
+        for phrase in ('目标人物', '具体来话', '本轮', '台词、第一人称动作与内心冲动',
+                       '对话里其他人的声音由他们各自的轮次生长', '变换节奏、措辞、停顿与动作重心'):
+            self.assertIn(phrase, spec.default_text)
+        for phrase in ('你不能', '你不是', '不要', '禁止', '不得', '无权', '没有权限'):
+            self.assertNotIn(phrase, spec.default_text)
+
     def test_each_material_creator_has_its_own_literary_method_and_frozen_version(self):
         markers = {
             'environment': ('地方的时空', '身体里的感知', '空间给予的行动'),

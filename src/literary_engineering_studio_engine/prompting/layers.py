@@ -70,7 +70,7 @@ _LAYER_METADATA = (
     ("scene.v2.creator.bootstrap", "stage", "必达信息包与来源使用", True, "Studio", 4),
     ("scene.v2.creator.create", "stage", "场景成稿与自主取材", True, "Studio", 4),
     ("scene.v2.creator.revise", "stage", "场景修订与再取材", True, "Studio", 5),
-    ("scene.v2.creator.delegation", "stage", "主创编写五类委托", True, "Studio", 5),
+    ("scene.v2.creator.delegation", "stage", "主创编写五类委托", True, "Studio", 6),
     ("scene.v2.creator.actor-card", "stage", "主创填写强风格化角色系统卡", True, "Studio", 4),
     ("scene.v2.creator.archive", "stage", "作品档案读取与挂载", True, "Studio", 4),
     ("scene.v2.creator.sandbox", "stage", "持久沙盒工作方式", True, "Studio", 4),
