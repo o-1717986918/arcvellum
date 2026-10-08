@@ -137,10 +137,15 @@ class ToneExperimentTests(unittest.TestCase):
             self.assertEqual(resumed["prompt_snapshot"]["layers"][0]["version"], 3)
 
     def test_positive_template_keeps_one_style_field_and_eleven_rules(self):
-        text = prompt_layer_spec(EDITOR).default_text
+        spec = prompt_layer_spec(EDITOR)
+        text = spec.default_text
+        self.assertEqual(spec.package_version, 2)
         self.assertEqual(text.count("{{STYLE_DIRECTION}}"), 1)
         for number in range(1, 12):
             self.assertIn(f"{number} ·", text)
+        for phrase in ("人物动作与移动", "人物如何经过空间", "依据原句已经写明的动作与移动路径",
+                       "经历本身保持可读", "动作是否完整"):
+            self.assertIn(phrase, text)
         for wording in ("你不是", "你不能", "不得", "不要", "没有权限"):
             self.assertNotIn(wording, text)
 

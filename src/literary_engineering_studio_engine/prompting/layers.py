@@ -49,7 +49,7 @@ class ResolvedPromptLayer:
 
 
 _LAYER_METADATA = (
-    ("experiment.less_ai_tone.editor", "stage", "实验 · 主创局部去 AI 味编辑", True, "Studio", 1),
+    ("experiment.less_ai_tone.editor", "stage", "实验 · 主创局部去 AI 味编辑", True, "Studio", 2),
     ("scene.protocol", "protocol", "角色权限、事实边界与正式交付结构", False, "Engine", 1),
     ("scene.creator.identity", "identity", "主创文学使命", True, "Studio", 3),
     ("scene.creator.create", "stage", "成稿与取材", True, "Studio", 4),
