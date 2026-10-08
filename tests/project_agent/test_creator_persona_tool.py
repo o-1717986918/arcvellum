@@ -10,10 +10,22 @@ from literary_engineering_studio.project_agent.contracts import (
 )
 from literary_engineering_studio.project_agent.creator_persona_actions import creator_persona_update_action
 from literary_engineering_studio.project_agent.prompt_policy import creator_persona_guidance
-from literary_engineering_studio.project_agent.tools import ProjectAgentToolDispatcher
+from literary_engineering_studio.project_agent.tools import (
+    ACTION_TOOLS, READ_TOOLS, ProjectAgentToolDispatcher,
+)
+from literary_engineering_studio_engine.public.prompting import prompt_layer_spec
 
 
 class CreatorPersonaToolTests(unittest.TestCase):
+    def test_persona_prompt_names_the_registered_read_and_update_tools(self) -> None:
+        prompt = prompt_layer_spec("project_agent.creator_persona.v2").default_text
+
+        self.assertIn("project_creator_persona_read", prompt)
+        self.assertIn("project_creator_persona_update", prompt)
+        self.assertIn("project_creator_persona_read", READ_TOOLS)
+        self.assertIn("project_creator_persona_update", ACTION_TOOLS)
+        self.assertNotRegex(prompt, r"(?<!project_)creator_persona_(?:read|update)")
+
     def test_top_agent_can_save_and_read_versioned_creator_persona(self) -> None:
         with TemporaryDirectory() as temporary:
             root = Path(temporary) / "work"

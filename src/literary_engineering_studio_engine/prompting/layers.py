@@ -84,7 +84,7 @@ _LAYER_METADATA = (
     ("scene.v2.material.event-narration", "identity", "事件叙述委托模板", True, "Engine literary", 5),
     ("scene.v2.material.scene-description", "identity", "场面描写委托模板", True, "Engine literary", 5),
     ("scene.v2.material.output.protocol", "protocol", "历史 JSON 候选层（自然链路已退出）", False, "Engine literary", 2),
-    ("project_agent.creator_persona.v2", "stage", "顶层生成或更新主创人格", True, "Studio", 4),
+    ("project_agent.creator_persona.v2", "stage", "顶层生成或更新主创人格", True, "Studio", 5),
     ("scene.v2.transport.extractor", "protocol", "后置整理合同（技术步骤）", True, "Studio", 1),
     ("project_agent.v2.creative_direction", "stage", "自然交流 · creative_direction", True, "Studio", 1),
     ("project_agent.v2.system.read.protocol", "stage", "自然交流 · system.read.protocol", True, "Studio", 1),
