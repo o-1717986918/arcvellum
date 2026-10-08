@@ -100,6 +100,8 @@ class NaturalSceneTests(unittest.TestCase):
             self.assertEqual(revised.prose, PROSE)
             self.assertEqual(gateway.context["revision_context"]["previous_prose"], PROSE)
             self.assertIn("信封压在碗底这个动作", gateway.context["revision_context"]["review_original"]["content"])
+            self.assertEqual(gateway.context["revision_context"]["review_continuity"]["current"]
+                             ["review"]["decision"], "pass")
             self.assertEqual(gateway.material_calls, 1)
             runtime.revise_scene("tx-natural", brief, result,
                 VerificationReport("s1", len(PROSE)), review, attempt=1)
@@ -235,6 +237,25 @@ class NaturalSceneTests(unittest.TestCase):
         request["material_attachments"][0]["candidate_id"] = "v2:invented:1"
         with self.assertRaisesRegex(ValueError, "selected material candidate ID"):
             validate_extracted_text(source, payload, "creator")
+
+    def test_review_findings_and_progress_quote_the_current_prose(self):
+        from literary_engineering_studio.runtimes.scene_natural_output import validate_extracted_text
+        quoted = "阿青的手悬在碗口上方。"
+        issue_id = "issue-123"
+        payload = {"decision": "revise", "summary": "手的动作与等待相连。",
+            "strengths": [{"claim": "手势让迟疑可感", "evidence": quoted}],
+            "major_issues": [{"title": "碗的状态没有接上", "evidence": quoted,
+                "reader_effect": "读者难以判断人物是否拿稳碗", "direction": "写清手与碗的接触。",
+                "prior_issue_id": issue_id}],
+            "optional_explorations": [],
+            "issue_progress": [{"issue_id": issue_id, "status": "persists", "evidence": quoted}],
+            "revision_instructions": [], "evidence": [quoted]}
+        context = {"prose": PROSE + quoted, "review_continuity": {"open_issues": [{"issue_id": issue_id}]}}
+        validate_extracted_text("正文中的手势让迟疑可感。", payload, "review", context)
+
+        payload["major_issues"][0]["evidence"] = "从未出现在正文的引文。"
+        with self.assertRaisesRegex(ValueError, "quote the current prose exactly"):
+            validate_extracted_text("审读意见。", payload, "review", context)
 
 if __name__=="__main__": unittest.main()
 

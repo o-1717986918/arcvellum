@@ -17,7 +17,7 @@ from .scene_creator_material_policy import material_selection_error
 from .scene_material_library import SceneMaterialLibrary
 from .scene_natural_output import NaturalOutputProcessor, creator_style, render_style
 from .natural_turn_store import NaturalTurnStore
-from .scene_review_continuity import review_continuity
+from .scene_review_continuity import formal_review_payload, record_review, review_continuity
 from ..infrastructure.project_scene_transactions import known_scene_refs
 
 
@@ -108,14 +108,17 @@ class NaturalCreatorMixin:
         answer = self._preserved_natural_answer(transaction_id, "review", system + prompt, lambda:
             self._run_natural_text(system, prompt, transaction_id, "reviewer"))
         try:
-            review = review_result_from_payload(self._natural_processor(transaction_id, layers).process(
-                answer, kind="review", context=context))
+            extracted = self._natural_processor(transaction_id, layers).process(
+                answer, kind="review", context=context)
+            review_payload = formal_review_payload(extracted)
+            review = review_result_from_payload(review_payload)
         except ValueError as error:
             journal.reject(system + prompt, error)
             raise
         journal.accept()
         path = self._cache_path(transaction_id,"review_original_v2_"+sha256(result.prose.encode('utf-8')).hexdigest()+'.md')
         path.write_text(answer,encoding='utf-8')
+        record_review(memory_path.parent, result.prose, extracted, review_payload, path.name)
         return review
 
     def _preserved_natural_answer(self, transaction_id, phase, prompt, invoke):

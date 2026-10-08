@@ -29,6 +29,7 @@ from .scene_creator_workspace import SceneCreatorWorkspace
 from .scene_material_library import SceneMaterialLibrary
 from .scene_creator_natural import NaturalCreatorMixin
 from .scene_natural_output import NATURAL_RESPONSE_MODE, creator_style, render_style
+from .scene_review_continuity import review_continuity
 
 
 class SceneCreatorV2Mixin(NaturalCreatorMixin):
@@ -149,6 +150,8 @@ class SceneCreatorV2Mixin(NaturalCreatorMixin):
         coordinator = self._v2_coordinator(transaction_id, brief, snapshot["texts"], workspace)
         context = {"previous_prose": result.prose, "previous_scene_delta": result.scene_delta.to_dict(),
                    "verification": verification.to_dict(),
+                   "review_continuity": review_continuity(
+                       self._cache_path(transaction_id, "scene_creator_memory.json").parent, result.prose),
                    "review": ({"decision": review.decision.value, "summary": review.summary,
                                "revision_instructions": list(review.revision_instructions)}
                               if review is not None else None)}

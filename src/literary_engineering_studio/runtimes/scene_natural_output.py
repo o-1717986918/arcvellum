@@ -13,6 +13,7 @@ from .archive_partition_transport import normalize_archive_partitions
 from .natural_material_response import whole_material_response
 from .creator_delivery_labels import resolve_creator_targets
 from .event_material_provenance import event_fields, recover_event_source_status
+from .scene_review_validation import validate_review_extraction
 from literary_engineering_studio_engine.public.literary import (
     ACTOR_CARD_SECTIONS, parse_scene_material_requests_v4,
 )
@@ -49,8 +50,19 @@ _MATERIAL_CONTRACT = {
         "source_note": "event only: source or author's proposal note"}],
     "no_material_reason": "reason if creator offers no material",
 }
-_REVIEW_CONTRACT = {"decision": "pass/revise/escalate", "summary": "editor's judgment",
-                    "revision_instructions": [], "evidence": []}
+_REVIEW_CONTRACT = {
+    "decision": "pass/revise/escalate", "summary": "editor's judgment",
+    "strengths": [{"claim": "literary quality already working", "evidence": "verbatim excerpt from context.prose"}],
+    "major_issues": [{"title": "reading problem", "evidence": "verbatim excerpt from context.prose",
+        "reader_effect": "what the reader loses", "direction": "repair exploration",
+        "prior_issue_id": "matching open issue ID or empty when newly observed"}],
+    "optional_explorations": [{"question": "aesthetic possibility", "evidence": "verbatim current passage or empty",
+        "direction": "possible reader experience"}],
+    "issue_progress": [{"issue_id": "open issue ID from context.review_continuity",
+        "status": "resolved/persists/changed/uncertain",
+        "evidence": "verbatim current passage when it supports the status, otherwise empty"}],
+    "revision_instructions": [], "evidence": [],
+}
 CONTRACTS = {"creator": _CREATOR_CONTRACT, "material": _MATERIAL_CONTRACT, "review": _REVIEW_CONTRACT}
 CONTRACTS["tone"] = {"edits": [{"rule_id": "1 through 11", "before": "exact original fragment",
     "after": "verbatim proposed replacement", "reason": "editor's stated literary reason"}],
@@ -216,6 +228,8 @@ def validate_extracted_text(answer: str, payload: Mapping[str, Any], kind: str,
         if (context or {}).get("role") == "event-narrator":
             for candidate in payload["candidates"]:
                 event_fields(candidate)
+    if kind == "review":
+        validate_review_extraction(payload, context or {})
     if kind == "tone":
         _validate_tone_text(answer, payload)
 
