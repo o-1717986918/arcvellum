@@ -136,16 +136,18 @@ class ToneExperimentTests(unittest.TestCase):
             self.assertIn("原有文风", resumed["style"])
             self.assertEqual(resumed["prompt_snapshot"]["layers"][0]["version"], 3)
 
-    def test_positive_template_keeps_one_style_field_and_eleven_rules(self):
+    def test_contextual_template_keeps_one_style_field_and_eleven_rules(self):
         spec = prompt_layer_spec(EDITOR)
         text = spec.default_text
-        self.assertEqual(spec.package_version, 2)
+        self.assertEqual(spec.package_version, 3)
         self.assertEqual(text.count("{{STYLE_DIRECTION}}"), 1)
         for number in range(1, 12):
             self.assertIn(f"{number} ·", text)
-        for phrase in ("人物动作与移动", "人物如何经过空间", "依据原句已经写明的动作与移动路径",
-                       "经历本身保持可读", "动作是否完整"):
+        for phrase in ("路线可以让接近、阻碍、迟疑或关系距离变得可感",
+                       "路线只重复这个信息时，可以直接落在动作结果",
+                       "完整行动线、物件状态或故事衔接", "动作结果"):
             self.assertIn(phrase, text)
+        self.assertNotIn("已写明的人物动作与移动、方向、物件位置、发生时点、事实、关系、判断强弱和事件先后在替换后仍能逐项读出", text)
         for wording in ("你不是", "你不能", "不得", "不要", "没有权限"):
             self.assertNotIn(wording, text)
 
