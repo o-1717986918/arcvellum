@@ -3,6 +3,7 @@ import tempfile
 import threading
 import unittest
 
+from literary_engineering_studio.application.creator_persona import CreatorPersonaStore
 from literary_engineering_studio.persistence.job_store import JobStore
 from literary_engineering_studio.application.prompt_workbench import PromptWorkbenchService
 from literary_engineering_studio.persistence.prompt_layers import FilePromptLayerRepository
@@ -13,6 +14,8 @@ from literary_engineering_studio.project_agent import (
     ProjectAgentToolCall,
     ProjectAgentTurnResult,
 )
+from literary_engineering_studio.project_agent.creator_persona_actions import creator_persona_update_action
+from literary_engineering_studio_engine.public.prompting import prompt_layer_spec
 
 
 class _Runtime:
@@ -53,6 +56,29 @@ class _ActionRuntime:
             request.turn_id,
             0,
             1,
+        )
+
+
+class _CreatorPersonaRuntime:
+    def __init__(self, persona_text: str):
+        self.persona_text = persona_text
+        self.request = None
+        self.initial_read = None
+        self.saved = None
+
+    def run_turn(self, request, tool_handler, **_kwargs):
+        self.request = request
+        turn_id = request.turn_id
+        self.initial_read = tool_handler(ProjectAgentToolCall(
+            "persona-read", turn_id, "project_creator_persona_read", {}))
+        self.saved = tool_handler(ProjectAgentToolCall(
+            "persona-update", turn_id, "project_creator_persona_update", {
+                "persona_text": self.persona_text,
+                "reason": "依据用户刚刚明确的作品方向建立人格",
+            }))
+        return ProjectAgentTurnResult(
+            "completed", f"已保存场景主创人格 v{self.saved['persona']['version']}。",
+            turn_id, 0, 2,
         )
 
 
@@ -111,6 +137,57 @@ class _CheckpointRuntime:
 
 
 class ProjectAgentServiceTests(unittest.TestCase):
+    def test_v2_creator_persona_initialization_uses_prompt_tools_and_version_store(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            folder = Path(temporary)
+            root = folder / "project"
+            root.mkdir()
+            (root / "project.yaml").write_text("title: 雨信\n", encoding="utf-8")
+            direction = "让等待通过人物各自使用旧物的方式发生，语言克制，感情从行动之间显出。"
+            workflow = root / "workflow" / "studio"
+            workflow.mkdir(parents=True)
+            (workflow / "user_directions.jsonl").write_text(
+                '{"message": "' + direction + '"}\n', encoding="utf-8")
+
+            store = JobStore(folder / "studio.sqlite3")
+            personas = CreatorPersonaStore(folder / "data")
+            runtime = _CreatorPersonaRuntime(
+                "一位留心器物被反复使用后留下的细痕、人物不肯说完的话，以及帮助与亏欠如何改变关系的小说家。"
+            )
+            dependencies = _dependencies()
+            dependencies = ProjectAgentDependencies(
+                dependencies.project_overview, dependencies.project_search, dependencies.creation_observe,
+                creator_persona=lambda project, _arguments: personas.read_current(project),
+            )
+            service = ProjectAgentService(
+                {"application": {"data_root": str(folder / "data"), "scene_creator_v2": {"enabled": True}}},
+                sessions=store.sessions,
+                jobs=store,
+                dependencies=dependencies,
+                actions=ProjectAgentActionDependencies(
+                    record_direction=lambda _root, _arguments: {},
+                    creation_control=lambda _root, _arguments: {},
+                    update_creator_persona=creator_persona_update_action(personas.save),
+                ),
+                runtime_factory=lambda _config, _root: runtime,
+                prompt_resolver=lambda layer_id, _project: prompt_layer_spec(layer_id).default_text,
+            )
+            session = service.create_session(root)
+
+            result = service.run_turn(session["session_id"], "请按这个方向建立本作品的场景主创人格：" + direction)
+
+            self.assertEqual(runtime.initial_read["status"], "missing")
+            self.assertIn(direction, runtime.request.prompt)
+            self.assertIn(prompt_layer_spec("project_agent.creator_persona.v2").default_text,
+                          runtime.request.system_prompt)
+            self.assertIn("project_creator_persona_read", runtime.request.allowed_tools)
+            self.assertIn("project_creator_persona_update", runtime.request.allowed_tools)
+            self.assertEqual(runtime.saved["persona"]["version"], 1)
+            self.assertEqual(result["answer"], "已保存场景主创人格 v1。")
+            current = personas.read_current(root)
+            self.assertEqual(current["active_version"], 1)
+            self.assertIn("器物", current["active"]["text"])
+
     def test_turn_persists_messages_job_and_stream_events(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "project"
