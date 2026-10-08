@@ -85,6 +85,58 @@ class ActorCardRuntimeTests(unittest.TestCase):
         self.coordinator.execute(followup, self.invoke)
         self.assertEqual(self.calls[1].history, ())
 
+    def test_actor_cache_is_bound_to_adopted_history_without_reinvoking(self):
+        first, = self.coordinator.execute(self.request, self.invoke)
+        followup = replace(self.request, cue="有人追问信去了哪", character_card=None)
+        saved, = self.coordinator.execute(followup, self.invoke)
+        self.assertEqual(len(self.calls), 2)
+
+        with self.assertRaisesRegex(ValueError, "已采用的角色经历或初始化回答发生变化"):
+            self.coordinator.execute(
+                followup, self.invoke, adopted_candidate_ids={first["candidate_id"]})
+        self.assertEqual(len(self.calls), 2)
+
+        records = [json.loads(path.read_text(encoding="utf-8"))
+                   for path in (self.coordinator.root / "calls").glob("*.json")]
+        followup_record = next(row for row in records if row["request"]["cue"] == followup.cue)
+        self.assertEqual(len(followup_record["role_context_sha256"]), 64)
+        self.assertEqual(followup_record["role_context"]["history"], [])
+        self.assertEqual(saved["candidate_id"], followup_record["candidates"][0]["candidate_id"])
+
+    def test_actor_cache_hits_when_adopted_history_is_unchanged(self):
+        first, = self.coordinator.execute(self.request, self.invoke)
+        followup = replace(self.request, cue="阿婶停下手里的活", character_card=None)
+        original, = self.coordinator.execute(
+            followup, self.invoke, adopted_candidate_ids={first["candidate_id"]})
+        call_count = len(self.calls)
+
+        cached, = self.coordinator.execute(
+            followup, self.invoke, adopted_candidate_ids={first["candidate_id"]})
+
+        self.assertEqual(len(self.calls), call_count)
+        self.assertEqual(cached, original)
+
+    def test_legacy_actor_cache_without_role_digest_remains_recoverable(self):
+        first, = self.coordinator.execute(self.request, self.invoke)
+        followup = replace(self.request, cue="阿婶停下手里的活", character_card=None)
+        original, = self.coordinator.execute(followup, self.invoke)
+        records_dir = self.coordinator.root / "calls"
+        followup_path = next(
+            path for path in records_dir.glob("*.json")
+            if json.loads(path.read_text(encoding="utf-8"))["request"]["cue"] == followup.cue
+        )
+        record = json.loads(followup_path.read_text(encoding="utf-8"))
+        record.pop("role_context_sha256")
+        record.pop("role_context")
+        followup_path.write_text(json.dumps(record, ensure_ascii=False), encoding="utf-8")
+        call_count = len(self.calls)
+
+        cached, = self.coordinator.execute(
+            followup, self.invoke, adopted_candidate_ids={first["candidate_id"]})
+
+        self.assertEqual(len(self.calls), call_count)
+        self.assertEqual(cached, original)
+
     def test_different_card_rejected_and_original_card_available_to_creator(self):
         self.coordinator.execute(self.request, self.invoke)
         value = deepcopy(actor_card_payload())

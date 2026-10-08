@@ -170,9 +170,14 @@ class SceneCreatorV2MaterialCoordinator:
         request_key = sha256(json.dumps([self.scene_id, request.to_dict()],
                                         ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()[:20]
         record_path = self.root / "calls" / (request_key + ".json")
-        if record_path.is_file():
-            saved = json.loads(record_path.read_text(encoding="utf-8"))
-            return list(saved["candidates"])
+        if request.kind == "actor":
+            history, initialization_answer, role_context, role_context_sha256 = (
+                self._actor_role_context(request, adopted_candidate_ids))
+        else:
+            history, initialization_answer, role_context, role_context_sha256 = (), "", None, ""
+        cached = self._cached_candidates(record_path, request.kind, role_context_sha256)
+        if cached is not None:
+            return cached
         attachments = self._prepared_attachments(request, request_key)
         selected_materials = self._prepared_material_attachments(request, request_key)
         validate_material_context_budget(request, attachments, selected_materials)
@@ -180,12 +185,8 @@ class SceneCreatorV2MaterialCoordinator:
             request, attachments, self.layers, scene_id=self.scene_id,
             material_attachments=selected_materials,
         )
-        history_rows = self._history(request.kind, request.target)
-        history = (_adopted_actor_history(history_rows, adopted_candidate_ids)
-                   if request.kind == "actor" else ())
         call = replace(call, history=history,
-                       initialization_answer=(str(history_rows[-1].get("initialization_answer") or "")
-                                              if history_rows else ""))
+                       initialization_answer=initialization_answer)
         response = invoke(call)
         candidates = _parse_candidates(response, request, call.request_id)
         sequence = len(list((self.root / "calls").glob("*.json"))) + 1
@@ -201,9 +202,45 @@ class SceneCreatorV2MaterialCoordinator:
             "prompt": call.prompt, "answer": str(response.get("__answer") or ""),
             "initialization_answer": str(response.get("__initialization_answer") or ""),
             "invoked": True, "candidates": candidates,
+            **({"role_context_sha256": role_context_sha256, "role_context": role_context}
+               if role_context is not None else {}),
         })
         self._write_candidate_library()
         return candidates
+
+    def _actor_role_context(
+        self, request: SceneMaterialRequestV3,
+        adopted_candidate_ids: set[str] | frozenset[str],
+    ) -> tuple[tuple[tuple[str, str], ...], str, dict[str, Any], str]:
+        history_rows = self._history(request.kind, request.target, exclude_request=request.to_dict())
+        history = _adopted_actor_history(history_rows, adopted_candidate_ids)
+        initialization_answer = (
+            str(history_rows[-1].get("initialization_answer") or "") if history_rows else ""
+        )
+        context = {
+            "history": [{"prompt": prompt, "answer": answer} for prompt, answer in history],
+            "initialization_answer": initialization_answer,
+        }
+        digest = sha256(json.dumps(context, ensure_ascii=False, sort_keys=True)
+                        .encode("utf-8")).hexdigest()
+        return history, initialization_answer, context, digest
+
+    @staticmethod
+    def _cached_candidates(
+        record_path: Path, kind: str, role_context_sha256: str,
+    ) -> list[dict[str, Any]] | None:
+        if not record_path.is_file():
+            return None
+        saved = json.loads(record_path.read_text(encoding="utf-8"))
+        saved_role_context = str(saved.get("role_context_sha256") or "")
+        if (kind == "actor" and saved_role_context
+                and saved_role_context != role_context_sha256):
+            raise ValueError(
+                "角色委托已有候选，但本轮已采用的角色经历或初始化回答发生变化。"
+                "请在委托正文或工作语境中写明新的来话与刺激，再提交一份新的角色委托；"
+                "原候选仍保留在交易记录中。"
+            )
+        return list(saved["candidates"])
 
     def _resolve_actor_card(self, request: SceneMaterialRequestV3) -> ActorCharacterCardV1:
         filename = sha256(request.target.encode("utf-8")).hexdigest()[:24] + ".json"
@@ -281,12 +318,15 @@ class SceneCreatorV2MaterialCoordinator:
                 kinds.append(str(record.get("request", {}).get("kind") or ""))
         return tuple(kinds)
 
-    def _history(self, kind: str, target: str) -> list[dict[str, Any]]:
+    def _history(
+        self, kind: str, target: str, *, exclude_request: Mapping[str, Any] | None = None,
+    ) -> list[dict[str, Any]]:
         rows = []
         for file in sorted((self.root / "calls").glob("*.json")):
             record = json.loads(file.read_text(encoding="utf-8"))
             request = record.get("request") or {}
-            if request.get("kind") == kind and request.get("target") == target and record.get("answer"):
+            if (request.get("kind") == kind and request.get("target") == target
+                    and request != exclude_request and record.get("answer")):
                 rows.append(record)
         return sorted(rows, key=lambda row: int(row.get("sequence") or 0))
 
