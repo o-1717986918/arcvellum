@@ -179,6 +179,8 @@ class LeanSceneRunCoordinator:
             )
             accepted = self.service.accept_revision(transaction.transaction_id, revised)
         except Exception as exc:
+            if _source_invalidated(str(exc)):
+                return self._reprepare(transaction)
             return self._blocked(transaction, str(exc))
         return self._step("revised", accepted)
 
@@ -201,15 +203,14 @@ class LeanSceneRunCoordinator:
     def _resume_blocked(self, transaction) -> LeanSceneStep:
         if transaction.review is not None and transaction.review.decision is ReviewDecision.ESCALATE:
             return self._blocked(transaction, transaction.last_error or "review escalated")
-        if ("scene source revision changed:" in transaction.last_error or transaction.last_error.startswith((
-                "frozen Canon, continuity or user direction changed;", "frozen scene brief changed;"))):
-            refreshed = self.service.prepare(
-                self.project,
-                transaction.scene_id,
-                mode=transaction.mode,
-            )
-            return self._step("reprepared", refreshed)
+        if _source_invalidated(transaction.last_error):
+            return self._reprepare(transaction)
         return self._step("resumed", self.service.resume(transaction.transaction_id))
+
+    def _reprepare(self, transaction) -> LeanSceneStep:
+        refreshed = self.service.prepare(self.project, transaction.scene_id, mode=transaction.mode)
+        self._bind_plan(refreshed)
+        return self._step("reprepared", refreshed)
 
     def _next_scene_id(self) -> str:
         for scene_id in self._ordered_scene_ids():
@@ -354,6 +355,11 @@ class LeanSceneRunCoordinator:
             message=message,
             blocked=True,
         )
+
+
+def _source_invalidated(message: str) -> bool:
+    return message.startswith(("scene source revision changed:",
+        "frozen Canon, continuity or user direction changed;", "frozen scene brief changed;"))
 
 
 def _read_json(path: Path) -> dict:

@@ -318,6 +318,7 @@ class LeanAutopilotLoopTests(unittest.TestCase):
         coordinator = object.__new__(LeanSceneRunCoordinator)
         coordinator.project = Path("project").resolve()
         coordinator.service = MagicMock()
+        coordinator._bind_plan = MagicMock()
         stale = MagicMock(
             review=None,
             last_error="scene source revision changed: old -> current",
@@ -346,12 +347,31 @@ class LeanAutopilotLoopTests(unittest.TestCase):
     def test_legacy_frozen_source_error_starts_a_new_transaction_without_retrying_stale_input(self):
         coordinator=object.__new__(LeanSceneRunCoordinator)
         coordinator.project=Path('project').resolve();coordinator.service=MagicMock()
+        coordinator._bind_plan=MagicMock()
         fresh=MagicMock(scene_id='scene_0001',transaction_id='new',status=SceneTransactionStatus.PREPARED,last_error='')
         coordinator.service.prepare.return_value=fresh
         stale=MagicMock(review=None,last_error='frozen Canon, continuity or user direction changed; create a new transaction',
                         scene_id='scene_0001',mode=SceneExecutionMode.STANDARD)
         self.assertEqual(coordinator._resume_blocked(stale).transaction_id,'new')
         coordinator.service.resume.assert_not_called()
+
+    def test_revision_source_invalidation_prepares_and_binds_current_snapshot(self):
+        coordinator=object.__new__(LeanSceneRunCoordinator)
+        coordinator.project=Path('project').resolve();coordinator.service=MagicMock()
+        coordinator._bind_plan=MagicMock();coordinator.revision_runtime=MagicMock()
+        coordinator.revision_runtime.revise_scene.side_effect=ValueError(
+            'scene source revision changed: frozen Canon, continuity or user direction changed; create a new transaction')
+        stale=MagicMock(scene_id='scene_0001',mode=SceneExecutionMode.STANDARD,revision_attempts=0)
+        fresh=MagicMock(scene_id='scene_0001',transaction_id='new',status=SceneTransactionStatus.PREPARED,last_error='')
+        coordinator.service.prepare.return_value=fresh
+        step=coordinator._revise(stale)
+        self.assertEqual(step.action,'reprepared')
+        coordinator._bind_plan.assert_called_once_with(fresh)
+        coordinator.service.accept_revision.assert_not_called()
+        coordinator.revision_runtime.revise_scene.side_effect=ValueError('metadata repair failed')
+        coordinator.service.prepare.reset_mock()
+        self.assertTrue(coordinator._revise(stale).blocked)
+        coordinator.service.prepare.assert_not_called()
 
     def test_revision_count_does_not_stop_effective_model_revisions(self):
         with tempfile.TemporaryDirectory() as temporary:
