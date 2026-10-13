@@ -58,6 +58,7 @@ class CacheSessionIntegrityTests(unittest.TestCase):
             from literary_engineering_studio.automation.lean_scene_loop import LeanSceneRunCoordinator
             from literary_engineering_studio_engine.public.literary import SceneExecutionMode, SceneTransactionStatus
             coordinator=object.__new__(LeanSceneRunCoordinator);coordinator.project=root;coordinator.service=MagicMock()
+            coordinator.data_root=root/'studio-data'
             coordinator.service.prepare.return_value=MagicMock(scene_id='one',transaction_id='new',
                                                                status=SceneTransactionStatus.PREPARED,last_error='')
             stale=MagicMock(review=None,last_error=str(caught.exception),scene_id='one',mode=SceneExecutionMode.STANDARD)
