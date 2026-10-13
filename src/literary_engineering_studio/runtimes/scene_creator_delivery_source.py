@@ -2,6 +2,7 @@
 from hashlib import sha256
 import json
 import re
+from pathlib import Path
 from .source_repair_budget import SourceRepairBudget
 
 
@@ -35,24 +36,27 @@ def recover_saved_creator_delivery(answer,prompt,data_root,archive_root):
     if _has_body(answer) and len(answer)!=20_000:
         return answer
     key=_input_key(prompt)
+    matches=[]
     for record in (data_root/'pi-conversations/worker/runs').glob('*/conversation.prompt.md'):
         try:
-            value=_same_run_delivery(record,key,answer)
+            value=_same_run_delivery(record,key,answer,archive_root.parent)
             if value is None:
                 continue
-            recovered,completed=value
-            _archive_recovery(archive_root,answer,recovered,completed,record.parent/'runtime.output.log')
-            SourceRepairBudget(archive_root.parent,'creator',sha256(answer.encode()).hexdigest()).alias(
-                sha256(recovered.encode()).hexdigest())
-            return recovered
+            matches.append((*value,record.parent/'runtime.output.log'))
         except (ValueError,KeyError,TypeError,FileNotFoundError):
             continue
-    return answer
+    if len({match[0] for match in matches})!=1:
+        return answer
+    recovered,completed,source=matches[0]
+    _archive_recovery(archive_root,answer,recovered,completed,source)
+    SourceRepairBudget(archive_root.parent,'creator',sha256(answer.encode()).hexdigest()).alias(
+        sha256(recovered.encode()).hexdigest())
+    return recovered
 
 
-def _same_run_delivery(record,key,answer):
+def _same_run_delivery(record,key,answer,scope_root):
     envelope=json.loads(record.read_text(encoding='utf-8'))
-    if not _matching_creator_input(envelope,key):
+    if not _matching_creator_input(envelope,key) or not _same_material_scope(envelope,scope_root):
         return None
     events=[json.loads(line) for line in (record.parent/'runtime.output.log').read_text(encoding='utf-8').splitlines() if line.strip()]
     delivery=_completed_run_delivery(events)
@@ -74,6 +78,11 @@ def _completed_run_delivery(events):
     completed=[e['data']['text'] for e in events if e.get('event')=='agent.message.completed' and isinstance(e.get('data',{}).get('text'),str)]
     finals=[e.get('data',{}).get('answer') for e in events if e.get('event')=='runner.conversation.result']
     return completed,finals
+
+
+def _same_material_scope(envelope,scope_root):
+    path=envelope.get('material_root')
+    return isinstance(path,str) and bool(path) and Path(path).resolve().parent==scope_root.resolve()
 
 
 def _matching_creator_input(envelope,key):

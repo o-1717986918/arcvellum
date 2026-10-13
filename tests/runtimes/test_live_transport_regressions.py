@@ -612,16 +612,31 @@ class LiveTransportRegressions(unittest.TestCase):
         prompt='固定合同\n本次创作资料：\n'+json.dumps({'prose':'旧正文','style':'原文风'},ensure_ascii=False)
         with TemporaryDirectory() as temporary:
             root=Path(temporary);run=root/'pi-conversations/worker/runs/one';run.mkdir(parents=True)
-            (run/'conversation.prompt.md').write_text(json.dumps({'schema':'arcvellum/scene-creator/v2','call_purpose':'revision','prompt':prompt}),encoding='utf-8')
+            frame={'schema':'arcvellum/scene-creator/v2','call_purpose':'revision','prompt':prompt,
+                'material_root':str(root/'materials')}
+            (run/'conversation.prompt.md').write_text(json.dumps(frame),encoding='utf-8')
             events=[{'event':'agent.message.completed','data':{'text':body}},
                 {'event':'agent.message.completed','data':{'text':final}},
-                {'event':'runner.conversation.result','data':{'answer':final}}]
+                {'event':'runner.conversation.result','data':{'answer':final}},
+                {'event':'runner.worker.result','data':{'status':'completed','answer':final}}]
             (run/'runtime.output.log').write_text('\n'.join(json.dumps(event) for event in events),encoding='utf-8')
             answer=recover_saved_creator_delivery(final,prompt,root,root/'originals')
             self.assertIn(body,answer)
             self.assertIn(final,answer)
             self.assertEqual(recover_saved_creator_delivery(final,prompt.replace('旧正文','新正文'),root,root/'originals'),final)
             self.assertEqual(recover_saved_creator_delivery('别的结论',prompt,root,root/'originals'),'别的结论')
+            events[-1]['data']['status']='blocked'
+            (run/'runtime.output.log').write_text('\n'.join(json.dumps(event) for event in events),encoding='utf-8')
+            self.assertEqual(recover_saved_creator_delivery(final,prompt,root,root/'originals'),final)
+            events[-1]['data']['status']='completed'
+            (run/'runtime.output.log').write_text('\n'.join(json.dumps(event) for event in events),encoding='utf-8')
+            other=run.parent/'two';other.mkdir()
+            (other/'conversation.prompt.md').write_text(json.dumps({**frame,'material_root':str(root/'foreign/materials')}),encoding='utf-8')
+            alternative=json.loads(json.dumps(events));alternative[0]['data']['text']=body.replace('名字','姓氏')
+            (other/'runtime.output.log').write_text('\n'.join(json.dumps(event) for event in alternative),encoding='utf-8')
+            self.assertIn(body,recover_saved_creator_delivery(final,prompt,root,root/'originals'))
+            (other/'conversation.prompt.md').write_text(json.dumps(frame),encoding='utf-8')
+            self.assertEqual(recover_saved_creator_delivery(final,prompt,root,root/'originals'),final)
         self.assertEqual(combine_creator_delivery(final,[body,body.replace('名字','姓氏')]),final)
         self.assertEqual(combine_creator_delivery(body,[body]),body)
 

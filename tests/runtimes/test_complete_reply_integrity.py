@@ -36,7 +36,7 @@ class CompleteReplyIntegrityTests(unittest.TestCase):
         with TemporaryDirectory() as temporary:
             root=Path(temporary);run=root/'pi-conversations/worker/runs/run';run.mkdir(parents=True)
             (run/'conversation.prompt.md').write_text(json.dumps({'schema':'arcvellum/scene-creator/v2',
-                'call_purpose':'creator','prompt':prompt}),encoding='utf-8')
+                'call_purpose':'creator','prompt':prompt,'material_root':str(root/'materials')}),encoding='utf-8')
             events=[{'event':'runner.conversation.result','data':{'answer':answer}},
                     {'event':'runner.worker.result','data':{'status':'completed','answer':answer}}]
             output=run/'runtime.output.log';output.write_text('\n'.join(json.dumps(e) for e in events),encoding='utf-8')
