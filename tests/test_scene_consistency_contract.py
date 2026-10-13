@@ -99,9 +99,25 @@ class SceneConsistencyContractTests(unittest.TestCase):
         message=str(caught.exception)
         self.assertIn('"delta_summary": "桌子修稳"',message)
         self.assertIn('"summary": "桌子修稳。"',message)
-        self.assertEqual(caught.exception.fields,('/consistency_record','/scene_delta'))
+        self.assertEqual(caught.exception.fields,('/consistency_record/facts/0/delta_group',
+            '/consistency_record/facts/0/delta_target','/consistency_record/facts/0/delta_summary',
+            '/scene_delta/continuity_changes'))
         fact['delta_summary']='桌子修稳。'
         validate_creator_consistency(row)
+
+    def test_independent_bad_links_share_one_author_feedback_without_reopening_valid_facts(self):
+        row=creator()
+        fact={'subject':'桌子','predicate':'状态','value':'修稳','evidence':row['prose'],
+              'source_state':'new','durable':True,'delta_group':'continuity_changes',
+              'delta_target':'workflow/continuity/current.json','delta_summary':'桌子修稳'}
+        row['consistency_record']['facts']=[dict(fact),dict(fact,subject='椅子',delta_summary='椅子修稳'),
+            dict(fact,source_state='unchanged')]
+        with self.assertRaises(SceneConsistencyError) as caught:
+            validate_creator_consistency(row)
+        self.assertIn('"subject": "桌子"',str(caught.exception))
+        self.assertIn('"subject": "椅子"',str(caught.exception))
+        self.assertFalse(any('/facts/2/' in path for path in caught.exception.fields))
+        self.assertNotIn('/consistency_record',caught.exception.fields)
 
     def test_unlinked_canon_diagnostic_names_proposal_and_count(self):
         row=creator();row['consistency_record']['canon_change']=True

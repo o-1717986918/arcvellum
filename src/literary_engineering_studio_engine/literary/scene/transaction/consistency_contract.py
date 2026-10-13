@@ -57,8 +57,15 @@ def _facts(record, prose, delta):
     facts = record.get('facts')
     if not isinstance(facts, list) or not facts and not _text(record.get('no_persistent_facts_reason')):
         raise SceneConsistencyError('列出本稿持续事实；确实没有时说明理由。', ['/consistency_record'])
-    for fact in facts:
-        _fact(fact, prose, delta)
+    issues, fields = [], []
+    for index, fact in enumerate(facts):
+        try:
+            _fact(fact, prose, delta, f'/consistency_record/facts/{index}')
+        except SceneConsistencyError as error:
+            issues.append(str(error))
+            fields.extend(error.fields)
+    if issues:
+        raise SceneConsistencyError('\n'.join(issues), list(dict.fromkeys(fields)))
     _canon_fact_coverage(facts, delta)
 
 
@@ -76,14 +83,14 @@ def _canon_fact_coverage(facts, delta):
                                         ['/consistency_record', '/scene_delta'])
 
 
-def _fact(fact, prose, delta):
+def _fact(fact, prose, delta, path):
     fields = ('subject', 'predicate', 'value', 'evidence', 'source_state')
     if not isinstance(fact, dict) or any(not _text(fact.get(key)) for key in fields):
-        raise SceneConsistencyError('事实记录须包含对象、属性、值、当前正文引句和来源状态。', ['/consistency_record'])
+        raise SceneConsistencyError('事实记录须包含对象、属性、值、当前正文引句和来源状态。', [path])
     if fact['evidence'] not in prose or fact['source_state'] not in {'new', 'changed', 'unchanged', 'attributed', 'pending'}:
-        raise SceneConsistencyError('事实引句须来自当前稿，来源状态须明确。', ['/consistency_record'])
+        raise SceneConsistencyError('事实引句须来自当前稿，来源状态须明确。', [path+'/evidence', path+'/source_state'])
     if not isinstance(fact.get('durable'), bool):
-        raise SceneConsistencyError('由主创明确声明事实是否持续 durable。', ['/consistency_record'])
+        raise SceneConsistencyError('由主创明确声明事实是否持续 durable。', [path+'/durable'])
     if fact['durable'] and fact['source_state'] in {'new', 'changed'}:
         group = fact.get('delta_group')
         matching = [row for row in delta.get(group) or [] if row.get('target_ref') == fact.get('delta_target')
@@ -91,7 +98,12 @@ def _fact(fact, prose, delta):
         if group not in DELTA_GROUPS or not matching:
             raise SceneConsistencyError('新建或改变的持续事实须指向本稿SceneDelta中的准确提案。'
                                         + _fact_diagnostic(fact, delta),
-                                        ['/consistency_record', '/scene_delta'])
+                                        _fact_link_paths(path, group))
+
+
+def _fact_link_paths(path, group):
+    target='/scene_delta/'+group if group in DELTA_GROUPS else '/scene_delta'
+    return [path+'/delta_group', path+'/delta_target', path+'/delta_summary', target]
 
 
 def _fact_diagnostic(fact, delta):
