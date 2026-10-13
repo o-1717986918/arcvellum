@@ -6,6 +6,7 @@ import unittest
 from literary_engineering_studio.runtimes.pi_worker_protocol import last_worker_result, public_event_data
 from literary_engineering_studio.runtimes.natural_local_delivery import local_creator_fields
 from literary_engineering_studio.runtimes.scene_creator_delivery_source import recover_saved_creator_delivery
+from literary_engineering_studio.runtimes.source_repair_budget import SourceRepairBudget,text_digest
 
 
 class CompleteReplyIntegrityTests(unittest.TestCase):
@@ -40,7 +41,12 @@ class CompleteReplyIntegrityTests(unittest.TestCase):
                     {'event':'runner.worker.result','data':{'status':'completed','answer':answer}}]
             output=run/'runtime.output.log';output.write_text('\n'.join(json.dumps(e) for e in events),encoding='utf-8')
             short=answer[:20_000]
+            for index in range(4):
+                SourceRepairBudget(root,'creator',text_digest(short)).claim('source-author',str(index))
             self.assertEqual(recover_saved_creator_delivery(short,prompt,root,root/'archive'),answer)
+            self.assertEqual(recover_saved_creator_delivery(short,prompt,root,root/'archive'),answer)
+            with self.assertRaisesRegex(ValueError,'budget exhausted'):
+                SourceRepairBudget(root,'creator',text_digest(answer)).claim('source-author','again')
             self.assertEqual(recover_saved_creator_delivery(short,'其他任务',root,root/'archive'),short)
             events[-1]['data']['status']='blocked'
             output.write_text('\n'.join(json.dumps(e) for e in events),encoding='utf-8')

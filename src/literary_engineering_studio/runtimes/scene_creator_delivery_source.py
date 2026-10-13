@@ -2,6 +2,7 @@
 from hashlib import sha256
 import json
 import re
+from .source_repair_budget import SourceRepairBudget
 
 
 def _has_body(text):
@@ -41,6 +42,8 @@ def recover_saved_creator_delivery(answer,prompt,data_root,archive_root):
                 continue
             recovered,completed=value
             _archive_recovery(archive_root,answer,recovered,completed,record.parent/'runtime.output.log')
+            SourceRepairBudget(archive_root.parent,'creator',sha256(answer.encode()).hexdigest()).alias(
+                sha256(recovered.encode()).hexdigest())
             return recovered
         except (ValueError,KeyError,TypeError,FileNotFoundError):
             continue
@@ -52,14 +55,25 @@ def _same_run_delivery(record,key,answer):
     if not _matching_creator_input(envelope,key):
         return None
     events=[json.loads(line) for line in (record.parent/'runtime.output.log').read_text(encoding='utf-8').splitlines() if line.strip()]
-    completed=[e['data']['text'] for e in events if e.get('event')=='agent.message.completed' and isinstance(e.get('data',{}).get('text'),str)]
-    finals=[e.get('data',{}).get('answer') for e in events if e.get('event')=='runner.conversation.result']
+    delivery=_completed_run_delivery(events)
+    if delivery is None:
+        return None
+    completed,finals=delivery
     if len(finals)==1 and _complete_preview_prefix(answer,finals[0],events):
         return finals[0],completed
     if finals!=[answer] or not completed or completed[-1]!=answer:
         return None
     recovered=combine_creator_delivery(answer,completed)
     return (recovered,completed) if recovered!=answer else None
+
+
+def _completed_run_delivery(events):
+    terminal=[e.get('data',{}) for e in events if e.get('event')=='runner.worker.result']
+    if not terminal or terminal[-1].get('status')!='completed':
+        return None
+    completed=[e['data']['text'] for e in events if e.get('event')=='agent.message.completed' and isinstance(e.get('data',{}).get('text'),str)]
+    finals=[e.get('data',{}).get('answer') for e in events if e.get('event')=='runner.conversation.result']
+    return completed,finals
 
 
 def _matching_creator_input(envelope,key):

@@ -11,6 +11,19 @@ from literary_engineering_studio.runtimes.natural_field_repair import field_repa
 
 
 class CacheSessionIntegrityTests(unittest.TestCase):
+    def test_adopting_existing_recovered_claims_is_idempotent_and_refreshes_stale_instances(self):
+        with TemporaryDirectory() as tmp:
+            root=Path(tmp);old=SourceRepairBudget(root,'creator','clipped');full=SourceRepairBudget(root,'creator','full')
+            old.claim('transport','old');full.claim('source-author','full')
+            full.alias('full-with-patch')
+            old.alias('full');old.alias('full')
+            nested=SourceRepairBudget(root,'creator','full-with-patch')
+            self.assertEqual(nested.origin,'clipped')
+            full.claim('transport','third');nested.claim('source-author','fourth')
+            with self.assertRaisesRegex(ValueError,'budget exhausted'):
+                old.claim('source-author','fifth')
+            self.assertEqual(len(json.loads(full._path('full').read_text())['calls']),1)
+            self.assertEqual(json.loads(old.path.read_text())['lineage_members'],['full'])
     def test_restarts_and_combined_sources_share_the_original_four_call_budget(self):
         with TemporaryDirectory() as tmp:
             root=Path(tmp); source="original author source"
