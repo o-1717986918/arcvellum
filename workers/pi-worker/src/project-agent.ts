@@ -689,7 +689,7 @@ function safeError(error: unknown): string {
 	return (error instanceof Error ? error.message : String(error))
 		.replace(/sk-[A-Za-z0-9_-]{12,}/g, "<redacted-secret>")
 		.replace(/Bearer\s+[^\s'",;]+/gi, "Bearer <redacted-secret>")
-		.replace(/\b(api[_-]?key|token|authorization)\s*[:=]\s*['"]?[^\s,'"]+/gi, "$1=<redacted-secret>")
+		.replace(/\b(api[_-]?key|token|authorization)['"]?\s*[:=]\s*['"]?[^\s,'"]+/gi, "$1=<redacted-secret>")
 		.slice(0, 2000);
 }
 

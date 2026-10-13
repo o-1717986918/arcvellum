@@ -15,7 +15,7 @@ describe("Project Agent bridge protocol", () => {
 			const faux = createFauxCore({ provider: `arcvellum-faux-failure-${stopReason}`,
 				models: [{ id: "project-agent-failure", reasoning: false }] });
 			faux.setResponses([fauxAssistantMessage("partial text", { stopReason,
-				errorMessage: "402 Payment Required; Bearer sensitive-value; api_key=private-value" })]);
+				errorMessage: '402 Payment Required; Bearer sensitive-value; api_key=private-value; {"token":"private-json-token"}' })]);
 			const write = (_value: BridgeEnvelope) => {};
 			const bridge = new ProjectToolBridge("turn-failed", write, 1000);
 			const result = await runProjectAgentTurn({ sessionId: "session-failed", turnId: "turn-failed",
@@ -26,6 +26,7 @@ describe("Project Agent bridge protocol", () => {
 			expect(result.message).toContain("402 Payment Required");
 			expect(result.message).not.toContain("sensitive-value");
 			expect(result.message).not.toContain("private-value");
+			expect(result.message).not.toContain("private-json-token");
 			expect(faux.state.callCount).toBe(1);
 		}
 	});
