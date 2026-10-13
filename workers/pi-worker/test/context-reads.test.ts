@@ -6,6 +6,19 @@ import { ActiveContextReads } from "../src/active-context-reads.ts";
 import { createSceneArchiveTool, workArchiveOperation } from "../src/scene-creator-workspace-tool.ts";
 
 describe("active context source delivery", () => {
+  it("restores receipts only from successful full deliveries retained in model history", () => {
+    const value={path:"canon.md",knowledge:"known",text:"完整资料"};
+    const message=(row:unknown,isError=false)=>({role:"toolResult",toolCallId:"original",isError,
+      content:[{type:"text",text:JSON.stringify(row)}]});
+    const restored=new ActiveContextReads();
+    restored.restore([message({reads:[value]})]);
+    expect(restored.receipt(value,"repeat")).toHaveProperty("content_receipt.source_tool_call_id","original");
+    for (const history of [[message(value,true)],
+      [message({path:"canon.md",content_receipt:{source_tool_call_id:"absent"}})],[]]) {
+      const fresh=new ActiveContextReads();fresh.restore(history);
+      expect(fresh.receipt(value,"new")).toEqual(value);
+    }
+  });
   it("ignores object-key order but preserves array order, versions and knowledge", () => {
     const context = new ActiveContextReads();
     const first = { path: "facts", knowledge: "known", file_sha256: "v1",

@@ -130,6 +130,8 @@ function parseOptions(args: string[]): RunnerOptions {
 		},
 		mode,
 		conversationRole: conversationRole as WorkerOptions["conversationRole"],
+		conversationStoreRoot: single(values, "--conversation-store-root") || undefined,
+		conversationMaxTokens: single(values, "--conversation-max-tokens") ? positiveInteger(single(values, "--conversation-max-tokens"), 512) : undefined,
 		repairTargets,
 		repairReferences,
 	};

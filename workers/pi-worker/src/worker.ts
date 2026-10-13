@@ -4,6 +4,7 @@ import type { RuntimeEventSink, WorkerOptions, WorkerState } from "./contracts.t
 import { ReadOnlyJsonCredentialStore } from "./credential-store.ts";
 import { WorkerEventAdapter } from "./event-adapter.ts";
 import { observeSdkFetch } from "./request-observation.ts";
+import { RequestShapeObserver } from "./cache-observation.ts";
 import { ArtifactPreviewExtractor } from "./artifact-preview.ts";
 import {
 	providerBudgetSupport,
@@ -134,6 +135,8 @@ export async function runWorker(options: WorkerOptions, prompt: string, emit: Ru
 	}
 	const artifactPreview = new ArtifactPreviewExtractor(context, emit);
 	const eventAdapter = new WorkerEventAdapter(sessionId, state, emit, artifactPreview);
+	const shapeObserver = new RequestShapeObserver(emit, () => ({ session_id: sessionId,
+		model_request_id: eventAdapter.currentModelRequestId, provider, model: modelId }));
 	const tools = createWorkerTools(context, options, state, emit);
 	let requiredToolLease = "";
 	let agent!: Agent;
@@ -166,7 +169,9 @@ export async function runWorker(options: WorkerOptions, prompt: string, emit: Ru
 			);
 			eventAdapter.providerRequest(provider, modelId);
 			requiredToolLease = desiredWorkerTool(options, context, repairSources, state);
-			return requiredToolLease ? bindRequiredTool(payload, model.api, requiredToolLease) : payload;
+			const bound = requiredToolLease ? bindRequiredTool(payload, model.api, requiredToolLease) : payload;
+			shapeObserver.observe(bound);
+			return bound;
 		},
 		onResponse: (response) => reliability.observeResponse(response.status),
 		beforeToolCall: async ({ toolCall }) => {

@@ -46,6 +46,8 @@ export interface WorkerOptions {
 	providerReliability: ProviderReliabilityPolicy;
 	mode: "task" | "repair" | "conversation";
 	conversationRole?: "default" | "character-actor" | "environment-writer" | "character-describer" | "event-narrator" | "scene-describer" | "scene-creator";
+	conversationStoreRoot?: string;
+	conversationMaxTokens?: number;
 	repairTargets: string[];
 	repairReferences: string[];
 }

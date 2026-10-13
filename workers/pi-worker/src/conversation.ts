@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { isAbsolute } from "node:path";
 import { Agent } from "@earendil-works/pi-agent-core";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
@@ -11,6 +11,9 @@ import { classifyProviderFailure, providerStreamControls } from "./provider-reli
 import defaultConversationProfile from "../profiles/conversation-system.md?raw";
 import { createSceneMaterialTool } from "./scene-material-tool.ts";
 import { observeSdkFetch } from "./request-observation.ts";
+import { RequestShapeObserver } from "./cache-observation.ts";
+import { ConversationReplay, sessionRef } from "./conversation-replay.ts";
+import { ActiveContextReads } from "./active-context-reads.ts";
 import { createSceneArchiveTool, createSceneScratchTool } from "./scene-creator-workspace-tool.ts";
 
 export function assertConversationToolBudget(state: Pick<WorkerState, "toolCalls">, limit: number): void {
@@ -82,7 +85,7 @@ export async function runConversation(
 		: conversationMessages(options.conversationRole ?? "default", prompt);
 	const initializedEnvironment = options.conversationRole === "environment-writer" && messages.length === 2;
 	const state = emptyState();
-	const sessionId = `arcvellum-conversation-${createHash("sha256").update(prompt).digest("hex").slice(0, 20)}`;
+	const sessionId = `arcvellum-conversation-${randomUUID()}`;
 	let messageIndex = 0;
 	const eventAdapter = new WorkerEventAdapter(sessionId, state, (event, data) => {
 		if (actorConversation || roleTurn || initializedEnvironment) {
@@ -97,67 +100,84 @@ export async function runConversation(
 		? defaultConversationEnvelope(prompt) : null;
 	const systemPrompt = sceneCreator?.systemPrompt ?? actorTurn?.initialization ?? defaultEnvelope?.systemPrompt
 		?? conversationSystemPrompt(options.conversationRole ?? "default");
+	const delivered = new ActiveContextReads();
+	const onRead = () => assertConversationToolBudget(state, options.maxToolCalls);
+	const tools = sceneCreator && sceneCreatorV2?.toolPolicy !== "none" ? [
+		createSceneMaterialTool(sceneCreator.materialRoot, onRead, delivered),
+		...(sceneCreatorV2 && sceneCreatorV2.toolPolicy === "full" ? [
+			createSceneArchiveTool(sceneCreatorV2.archiveRoot, onRead, delivered),
+			createSceneScratchTool(sceneCreatorV2.scratchRoot, onRead),
+		] : []),
+	] : [];
+	const ref = sessionRef(prompt);
+	if (ref && !options.conversationStoreRoot) throw new Error("conversation session requires a private store");
+	const seed = actorTurn?.history.length ? actorHistoryMessages(actorTurn, model) : [];
+	const currentPrompt = actorTurn?.prompt ?? messages[messages.length - 1];
+	const replay = ref ? await ConversationReplay.open(options.conversationStoreRoot!, options.workspace, ref,
+		{ provider, model: modelId, api: model.api, endpoint: model.baseUrl, thinking: effectiveThinking,
+			maxTokens: options.conversationMaxTokens,
+			systemPrompt, tools: tools.map(({name,description,parameters})=>({name,description,parameters})),
+			roots: sceneCreator ? [sceneCreator.materialRoot, sceneCreatorV2?.archiveRoot, sceneCreatorV2?.scratchRoot] : [],
+			access_scope: options.authPath }, currentPrompt, seed, Boolean(actorTurn),
+		Math.max(1, model.contextWindow - model.maxTokens), emit) : null;
+	delivered.restore(replay?.messages ?? []);
+	const shapeObserver = new RequestShapeObserver(emit, () => ({ session_id: sessionId,
+		request_series_id: replay?.requestSeriesId, model_request_id: eventAdapter.currentModelRequestId, provider, model: modelId }));
 	const agent = new Agent({
 		initialState: {
 			systemPrompt,
 			model,
 			thinkingLevel: effectiveThinking,
-			tools: sceneCreator && sceneCreatorV2?.toolPolicy !== "none" ? [
-				createSceneMaterialTool(sceneCreator.materialRoot, () => {
-					assertConversationToolBudget(state, options.maxToolCalls);
-				}),
-				...(sceneCreatorV2 && sceneCreatorV2.toolPolicy === "full" ? [
-					createSceneArchiveTool(sceneCreatorV2.archiveRoot, () => {
-						assertConversationToolBudget(state, options.maxToolCalls);
-					}),
-					createSceneScratchTool(sceneCreatorV2.scratchRoot, () => {
-						assertConversationToolBudget(state, options.maxToolCalls);
-					}),
-				] : []),
-			] : [],
-			...(actorTurn?.history.length ? { messages: actorHistoryMessages(actorTurn, model) } : {}),
+			tools,
+			...((replay?.messages.length || seed.length) ? { messages: replay?.messages ?? seed } : {}),
 		},
 		streamFn: (streamModel, streamContext, streamOptions = {}) => models.streamSimple(
 			streamModel,
 			streamContext,
-			{ ...streamOptions, ...providerStreamControls(options.providerReliability),
-				fetch: observeSdkFetch(emit, () => ({ session_id: sessionId,
+			{ ...streamOptions, ...(options.conversationMaxTokens ? {maxTokens:Math.min(options.conversationMaxTokens,model.maxTokens)} : {}), ...providerStreamControls(options.providerReliability),
+				fetch: observeSdkFetch(emit, () => ({ session_id: sessionId, request_series_id: replay?.requestSeriesId,
 					model_request_id: eventAdapter.currentModelRequestId, provider, model: modelId }), streamOptions.fetch) },
 		),
-		sessionId,
+		sessionId: replay?.requestSeriesId ?? `arcvellum-conversation-${createHash("sha256").update(prompt).digest("hex").slice(0, 20)}`,
 		thinkingBudgets: reasoningThinkingBudgets(options.reasoningBudget)
 			?? { minimal: 128, low: 512, medium: 1024, high: 2048 },
 		shouldStopAfterTurn: ({ toolResults }) => !sceneCreator || toolResults.length === 0,
 		onPayload: (payload) => {
 			eventAdapter.providerRequest(provider, modelId);
+			shapeObserver.observe(payload);
 			return payload;
 		},
 	});
 	agent.subscribe((event) => eventAdapter.handle(event));
+	try {
 	let initializationAnswer = "";
 	let promptedCurrent = false;
 	let currentAnswer = "";
-	if (actorTurn) {
+	if (replay?.reusedAnswer !== null && replay?.reusedAnswer !== undefined) {
+		currentAnswer = replay.reusedAnswer;
+		promptedCurrent = true;
+	} else if (actorTurn) {
 		messageIndex = 1;
 		promptedCurrent = true;
 		const priorMessages = agent.state.messages.length;
-		await agent.prompt(actorTurn.prompt);
+		await agent.prompt(replay?.prompt ?? actorTurn.prompt);
 		currentAnswer = lastAssistantText((agent.state.messages as unknown[]).slice(priorMessages));
 	} else {
 		for (const [index, message] of messages.entries()) {
 			messageIndex = index;
 			const priorMessages = agent.state.messages.length;
-			await agent.prompt(message);
+			await agent.prompt(replay && index === messages.length - 1 ? replay.prompt : message);
 			const reply = lastAssistantText((agent.state.messages as unknown[]).slice(priorMessages));
 			if (initializedEnvironment && index === 0) initializationAnswer = reply;
 			if (index === messages.length - 1) currentAnswer = reply;
 			if (agent.state.errorMessage) break;
 		}
 	}
-	const answer = actorTurn || initializedEnvironment ? currentAnswer : lastAssistantText(agent.state.messages as unknown[]);
+	const answer = replay?.reusedAnswer ?? (actorTurn || initializedEnvironment ? currentAnswer : lastAssistantText(agent.state.messages as unknown[]));
 	const completionError = agent.state.errorMessage || conversationStopError(agent.state.messages as unknown[]);
 	const outcome = conversationOutcome(answer, completionError, !actorTurn || promptedCurrent);
 	const { status } = outcome;
+	if (replay && replay.reusedAnswer === null) await replay.finish(agent.state.messages, answer, status === "completed");
 	const providerError = status === "completed" ? "" : String(completionError || "").trim();
 	const providerFailure = providerError ? classifyProviderFailure(providerError) : null;
 	const result: ConversationResult = {
@@ -181,6 +201,7 @@ export async function runConversation(
 	};
 	emit("runner.conversation.result", { session_id: sessionId, status, answer });
 	return result;
+	} finally { await replay?.close(); }
 }
 
 export interface ActorTurnEnvelope {

@@ -3,6 +3,19 @@ import { createHash } from "node:crypto";
 /** Lifetime is one Agent context. A later invocation always starts with full content. */
 export class ActiveContextReads {
     private readonly delivered = new Map<string, string>();
+    restore(messages: unknown[]): void {
+        for (const message of messages as any[]) {
+            if (message?.role !== "toolResult" || message.isError || !Array.isArray(message.content)) continue;
+            for (const block of message.content) {
+                if (block.type !== "text") continue;
+                try {
+                    const value = JSON.parse(block.text);
+                    const rows = value.materials ?? value.reads ?? [value];
+                    for (const row of rows) if (row && !row.content_receipt) this.receipt(row, message.toolCallId);
+                } catch { /* Only exact retained successful source deliveries seed receipts. */ }
+            }
+        }
+    }
     receipt(value: Record<string, unknown>, toolCallId: string): Record<string, unknown> {
         const field = value.content !== undefined ? "content" : typeof value.text === "string" ? "text" : null;
         if (!field) return value;

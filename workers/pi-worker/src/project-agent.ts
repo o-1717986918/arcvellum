@@ -7,6 +7,7 @@ import type { ProjectAgentOptions } from "./contracts.ts";
 import { ReadOnlyJsonCredentialStore } from "./credential-store.ts";
 import { providerStreamControls } from "./provider-reliability.ts";
 import { observeSdkFetch } from "./request-observation.ts";
+import { RequestShapeObserver } from "./cache-observation.ts";
 import {
 	encodeEnvelope,
 	envelope,
@@ -111,6 +112,8 @@ export async function runProjectAgentTurn(
 	let modelRequestId = "";
 	const observation = (event: string, data: Record<string, unknown> = {}) =>
 		emit(envelope("agent.event", start.turnId, { event, ...data }));
+	const shapeObserver = new RequestShapeObserver(observation, () => ({ session_id: start.sessionId,
+		model_request_id: modelRequestId, call_purpose: "project-control" }));
 	const tools = createProjectAgentTools(start, bridge, () => {
 		toolCalls += 1;
 	});
@@ -129,6 +132,7 @@ export async function runProjectAgentTurn(
 			modelRequestId = `${start.turnId}-request-${++modelTurns}`;
 			observation("runner.provider.request.started", { model_request_id: modelRequestId,
 				session_id: start.sessionId, count_unit: "model-turn", call_purpose: "project-control" });
+			shapeObserver.observe(payload);
 			return payload;
 		},
 		sessionId: start.sessionId,
