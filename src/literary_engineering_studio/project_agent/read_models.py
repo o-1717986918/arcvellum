@@ -43,6 +43,8 @@ def dependencies_from_read_models(
                 if query in " ".join(str(item.get(key) or "") for key in ("title", "genre", "premise")).casefold()
             ]
         current = str(payload.get("current_project") or "").strip()
+        if (_root / "project.yaml").is_file():
+            current = str(_root.resolve())
         return _fit_payload({
             "count": len(items),
             "current_work_id": work_id_for_root(current) if current else "",

@@ -9,6 +9,7 @@ from typing import Any, Callable
 from literary_engineering_studio_engine.public.prompting import prompt_layer_spec, render_prompt_template, render_prompt_text
 
 from .delegated_goal import goal_snapshot
+from .scope import work_id_for_root
 from ..application.creative_configuration import effective_creative_config
 
 
@@ -58,6 +59,9 @@ def turn_prompt(message: str, session: dict[str, Any], *, natural: bool = False,
         if text:
             speaker = "用户" if item.get("role") == "user" else "ArcVellum"
             history.append(f"{speaker}：{text[:1500]}")
+    anchor=Path(str(session.get("project_root") or ""))
+    if session.get("project_root") and (anchor / "project.yaml").is_file():
+        message = "本会话绑定作品 work_id=" + work_id_for_root(anchor) + "。未明确切换作品时，所有工具使用这一 work_id。\n\n" + message
     recent = "\n".join(history) or "（这是本次会话的第一条消息。）"
     return _render_project("project_agent.turn.protocol", (
         recent,

@@ -232,6 +232,8 @@ def _handle_tool_call(
     result = _execute_tool(call, tool_handler)
     _write_envelope(process, result.envelope(_message_id()))
     finished: dict[str, Any] = {"name": call.name, "request_id": call.request_id, "ok": result.ok}
+    if not result.ok:
+        finished["error"] = result.error[:2000]
     if result.ok and isinstance(result.result, Mapping):
         receipt = result.result.get("receipt")
         if isinstance(receipt, Mapping):

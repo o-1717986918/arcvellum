@@ -6,6 +6,16 @@ from literary_engineering_studio.project_agent.prompt_policy import (
 )
 from literary_engineering_studio_engine.public.prompting import prompt_layer_spec
 class NaturalTopPromptTests(unittest.TestCase):
+    def test_turn_identifies_the_bound_work_even_when_another_title_matches_the_request(self):
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        from literary_engineering_studio.project_agent.scope import work_id_for_root
+        with TemporaryDirectory() as temporary:
+            root=Path(temporary);(root/'project.yaml').write_text('title: 同名作品\n',encoding='utf-8')
+            text=turn_prompt('继续当前作品',{'project_root':str(root)},natural=True)
+            self.assertIn('work_id='+work_id_for_root(root),text)
+            self.assertIn('未明确切换作品',text)
+
     def test_optin_uses_separate_versioned_prompts(self):
         self.assertFalse(natural_prompts_enabled({}))
         self.assertTrue(natural_prompts_enabled({"application":{"scene_creator_v2":{"enabled":True}}}))

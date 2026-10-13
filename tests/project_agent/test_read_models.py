@@ -75,6 +75,16 @@ class _ReadModels:
 
 
 class ProjectAgentReadModelTests(unittest.TestCase):
+    def test_bound_session_catalog_does_not_switch_to_the_last_opened_other_work(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary)/'bound';root.mkdir();(root/'project.yaml').write_text('title: 同名作品\n',encoding='utf-8')
+            other=Path(temporary)/'other';other.mkdir();(other/'project.yaml').write_text('title: 同名作品\n',encoding='utf-8')
+            dependencies=dependencies_from_read_models(_ReadModels(),project_catalog=lambda:{
+                'current_project':str(other),'projects':[{'path':str(root),'title':'同名作品'},
+                                                        {'path':str(other),'title':'同名作品'}]})
+            self.assertEqual(dependencies.workspace_catalog(root,{})['current_work_id'],work_id_for_root(root))
+            self.assertEqual(dependencies.workspace_catalog(Path(temporary),{})['current_work_id'],work_id_for_root(other))
+
     def setUp(self):
         self.dependencies = dependencies_from_read_models(_ReadModels())
 
