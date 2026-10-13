@@ -16,6 +16,19 @@ from literary_engineering_studio.config import (
 
 
 class ConfigTests(unittest.TestCase):
+    def test_fresh_and_upgraded_defaults_select_current_creative_path_and_preserve_explicit_legacy(self):
+        from literary_engineering_studio.application.creative_configuration import effective_creative_config
+        from literary_engineering_studio.project_agent.prompt_policy import project_prompt_options
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary); (root/'project.yaml').write_text('title: 默认路径\n',encoding='utf-8')
+            path=root/'config.json';path.write_text('{"schema":"literary-engineering-studio/config/v0.9"}',encoding='utf-8')
+            for config in (default_config(),load_config(path)):
+                self.assertTrue(effective_creative_config(config,root)['application']['scene_creator_v2']['enabled'])
+                self.assertTrue(project_prompt_options(config,None,root)['natural'])
+                self.assertEqual(config['agent_runners']['pi-worker']['conversation_cache_layout'],'stable-prefix-v2')
+            path.write_text('{"application":{"scene_creator_v2":{"enabled":false}}}',encoding='utf-8')
+            self.assertFalse(load_config(path)['application']['scene_creator_v2']['enabled'])
+
     def test_default_pi_worker_uses_deepseek_v4_flash_for_every_role(self):
         config = default_config()
         pi_worker = config["agent_runners"]["pi-worker"]
