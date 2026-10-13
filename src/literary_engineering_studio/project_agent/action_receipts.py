@@ -25,7 +25,7 @@ def goal_result(
 ) -> dict[str, Any]:
     presented = present_run(dict(run))
     value = {
-        "ok": True,
+        "ok": status != "checkpoint_changed",
         "operation": f"goal_{operation}",
         "status": status,
         "work_id": work_reference(root)["work_id"],
@@ -38,6 +38,9 @@ def goal_result(
         work_id=str(value["work_id"]),
         goal_status=status,
     )
+    if status == "checkpoint_changed":
+        value["current_stop_reason"] = str(presented.get("stop_reason") or "")
+        value["message"] = "恢复未执行：expected_stop_reason 须逐字使用 run.stop_reason，不能使用 last_error。请读取最新诊断核对停止原因后再决定恢复。"
     return {**value, "receipt": receipt}
 
 

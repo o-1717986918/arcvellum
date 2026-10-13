@@ -455,6 +455,9 @@ class ProjectAgentActionTests(unittest.TestCase):
         })
 
         self.assertEqual(result["status"], "checkpoint_changed")
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["current_stop_reason"], "controller-error")
+        self.assertIn("run.stop_reason", result["message"])
         self.assertEqual(autopilot.current_policy["limits"]["stop_after_formal_units"], 5)
         self.assertIsNone(autopilot.authorized)
 
