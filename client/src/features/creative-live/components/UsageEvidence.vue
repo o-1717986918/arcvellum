@@ -13,6 +13,11 @@ defineProps<{ accounting?: UsageAccounting; tokens: number; catalog: number }>()
       <p v-else>公开价格估算尚缺依据</p>
       <p>{{ accounting?.outer_invocations ?? '未知' }} 次角色调用 · {{ accounting?.recorded_model_turns ?? '未知' }} 个模型轮次 · {{ accounting?.observed_http_attempts ?? '未知' }} 次可观测 HTTP 尝试</p>
       <p>未知用量 {{ accounting?.unknown_usage_updates ?? '未知' }} 条 · 目录费用缺失 {{ accounting?.unknown_catalog_cost_updates ?? '未知' }} 条</p>
+      <p v-if="accounting?.server_cache?.totals.hit_ratio != null">服务端输入缓存命中 {{ (Number(accounting.server_cache.totals.hit_ratio) * 100).toFixed(1) }}% · 已报告 {{ accounting.server_cache.totals.reported_responses }} / {{ accounting.server_cache.totals.responses }} 次</p>
+      <p v-else>服务端输入缓存命中率未知</p>
+      <p v-if="accounting?.server_cache">缓存字段未报告 {{ accounting.server_cache.totals.unreported_responses }} 次 · 字段冲突 {{ accounting.server_cache.totals.inconsistent_responses }} 次</p>
+      <details v-if="accounting?.server_cache?.groups.length"><summary>按模型与阶段查看</summary><p v-for="(group, index) in accounting.server_cache.groups" :key="index">{{ group.provider }} / {{ group.model }} · {{ group.call_purpose }}：{{ group.hit_ratio == null ? '未知' : (Number(group.hit_ratio) * 100).toFixed(1) + '%' }}</p></details>
+      <p>本地结果复用与资料重复读取回执单独核对，不计入服务端命中率。</p>
       <p v-if="accounting?.unknown_usage_invocations">另有 {{ accounting.unknown_usage_invocations }} 次调用尚未返回用量</p>
       <p v-if="accounting?.actual_charge">独立扣款记录：{{ accounting.actual_charge.currency }} {{ accounting.actual_charge.amount }}</p>
       <p v-else>实际扣款尚未核验</p>

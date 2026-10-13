@@ -1,4 +1,5 @@
 import type { CreativeLiveEvent, CreativeLiveSnapshot, UsageAccounting } from "./types";
+import { addServerCache } from "./serverCacheAccounting";
 
 export function usageIdentity(event: CreativeLiveEvent): string {
   const id = String(event.data.usage_id || "");
@@ -10,6 +11,10 @@ export function reduceAccounting(snapshot: CreativeLiveSnapshot, event: Creative
   const previous = snapshot.usage_accounting || emptyAccounting(snapshot);
   const data = event.data;
   const result = { ...previous };
+  if (event.event === "runner.cache.usage.observed") {
+    result.cache_observations = {...previous.cache_observations, [String(data.model_request_id)]: data};
+    return result;
+  }
   for (const [name, field, id] of [
     ["role.invocation.started", "invocation_ids", "invocation_id"],
     ["runner.provider.request.started", "model_request_ids", "model_request_id"],
@@ -24,10 +29,13 @@ export function reduceAccounting(snapshot: CreativeLiveSnapshot, event: Creative
     !(result.usage_invocation_ids || []).includes(id)).length;
   result.public_estimate_complete = (previous.unknown_public_price_updates || 0) === 0
     && previous.updates > 0 && result.unknown_usage_invocations === 0;
-  if (event.channel !== "usage") return result;
+  if (event.channel !== "usage" || event.event.startsWith("runner.cache.")) return result;
   const identity = usageIdentity(event);
   if (previous.usage_ids.includes(identity)) return result;
   result.usage_ids = [...previous.usage_ids, identity];
+  result.server_cache = addServerCache(previous.server_cache, data, previous.cache_observations?.[String(data.model_request_id)]);
+  result.cache_observations = {...previous.cache_observations};
+  delete result.cache_observations[String(data.model_request_id)];
   result.updates += 1;
   if (data.invocation_id) result.usage_invocation_ids = [...new Set([...(previous.usage_invocation_ids || []),String(data.invocation_id)])];
   result.unknown_usage_invocations = (result.invocation_ids || []).filter((id) =>
@@ -61,7 +69,7 @@ function emptyAccounting(snapshot: CreativeLiveSnapshot): UsageAccounting {
     observed_http_attempts: null, unknown_usage_updates: 0, unknown_catalog_cost_updates: 0,
     catalog_estimate_usd: snapshot.usage.cost_usd, public_estimate_cny: null, public_estimate_complete: false,
     price_sources: [], actual_charge: null, cost_source: "runtime-model-catalog-estimate",
-    usage_ids: snapshot.events.filter((event) => event.channel === "usage").map(usageIdentity) };
+    usage_ids: snapshot.events.filter((event) => event.channel === "usage" && !event.event.startsWith("runner.cache.")).map(usageIdentity) };
 }
 
 function number(value: unknown): number {

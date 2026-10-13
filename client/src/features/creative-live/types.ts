@@ -236,6 +236,8 @@ export interface CreativeLiveSnapshot {
 }
 
 export interface UsageAccounting {
+  server_cache?: ServerCacheAccounting;
+  cache_observations?: Record<string, Record<string, unknown>>;
   total_tokens: number; cost_usd: number; updates: number;
   token_details: Record<string, number>;
   outer_invocations: number; recorded_model_turns: number; observed_http_attempts: number | null;
@@ -246,6 +248,12 @@ export interface UsageAccounting {
   price_sources: Array<{ source?: string; observed_at?: string; currency?: string; kind?: string }>;
   actual_charge: { amount: number; currency: string; source?: string } | null;
   cost_source: string; usage_ids: string[]; invocation_ids?: string[]; model_request_ids?: string[]; http_attempt_ids?: string[];
+}
+
+export interface ServerCacheAccounting {
+  schema: string;
+  totals: Record<string, number | null>;
+  groups: Array<Record<string, unknown>>;
 }
 
 export interface ArtifactRevisionSummary {

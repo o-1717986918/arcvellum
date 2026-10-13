@@ -23,6 +23,10 @@ class AcceptanceGateway:
         self.usage_ids = set()
         self.phase = "create"
 
+    @property
+    def supports_conversation_sessions(self):
+        return getattr(self.gateway, "supports_conversation_sessions", False)
+
     def run(self, *args, **kwargs):
         return self._invoke("run", args, kwargs)
 
@@ -42,7 +46,8 @@ class AcceptanceGateway:
         sink = kwargs.get("event_sink")
         def observe(event, data):
             if event in {'role.invocation.started','runner.provider.request.started',
-                         'runner.http.attempt.started','runner.http.attempt.completed','runner.http.attempt.failed','usage.updated'}:
+                         'runner.http.attempt.started','runner.http.attempt.completed','runner.http.attempt.failed','usage.updated',
+                         'runner.cache.usage.observed','runner.cache.request.shape','runner.conversation.replay'}:
                 runtime_events.append({'event':event,'data':data,'at':data.get('created_at','')})
             if event == "usage.updated":
                 events.append(data)
@@ -128,6 +133,8 @@ def _distinct_accounting_events(events,seen):
         name=event["event"];data=event["data"]
         if name=="usage.updated":
             identity=(name,usage_identity(data,event.get("event_id","")))
+        elif name == "runner.cache.usage.observed":
+            identity=(name,data.get("model_request_id"),data.get("http_attempt_id"))
         elif name in call_fields:
             identity=(name,data.get(call_fields[name]))
         else:
