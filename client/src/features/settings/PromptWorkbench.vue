@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CreativeConfiguration from "./CreativeConfiguration.vue";
 import { computed, onMounted, ref, watch } from "vue";
 import { Check, ChevronDown, ChevronRight, FileJson, Layers3 } from "lucide-vue-next";
 import { settingsClient, type PromptCatalog, type PromptFlowNode, type PromptHistory, type PromptPreview } from "./services/settingsClient";
@@ -144,6 +145,7 @@ async function previewAssembly(): Promise<void> {
 </script>
 
 <template>
+  <CreativeConfiguration :project-root="projectRoot" />
   <section class="settings-section prompt-workbench">
     <header><span class="section-icon iris"><FileJson :size="18" /></span><div><h2>提示词工作台</h2><p>沿创作流程查看文学指引与固定结构；可编辑层按作品或全局保存版本。</p></div></header>
     <p v-if="feedback" class="inline-feedback">{{ feedback }}</p>

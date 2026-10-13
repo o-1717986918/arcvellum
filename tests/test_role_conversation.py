@@ -41,6 +41,22 @@ class _ConversationRuntime:
 
 
 class RoleConversationGatewayTests(unittest.TestCase):
+    def test_transport_disables_thinking_and_inherits_review_model(self):
+        from literary_engineering_studio.runtimes import _runtime_settings
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            runtime = _ConversationRuntime()
+            config = {'agent_runners': {'pi-worker': {'model': 'fixture/default', 'thinking': 'high',
+                'models': {'reviewer': 'fixture/review'}}}}
+            with patch('literary_engineering_studio.runtime.role_conversation.build_runtime', return_value=runtime):
+                result = RoleConversationGateway(config, data_root=root).run(root, '技术整理', role='transport', timeout=30)
+            self.assertEqual(runtime.options['reasoning_policy'], 'off')
+            self.assertEqual(result.model, 'fixture/review')
+            self.assertEqual(_runtime_settings(config, 'pi-worker', role='transport')['model'], 'fixture/review')
+            with patch('literary_engineering_studio.runtime.role_conversation.build_runtime', return_value=runtime):
+                RoleConversationGateway(config, data_root=root).run(root, '文学审读', role='reviewer', timeout=30)
+            self.assertEqual(runtime.options['reasoning_policy'], 'high')
+
     def test_partial_failure_preserves_provider_cause_and_run_evidence(self):
         from dataclasses import replace
         class FailedRuntime(_ConversationRuntime):
@@ -106,7 +122,7 @@ class RoleConversationGatewayTests(unittest.TestCase):
         envelope = json.loads(runtime.prompt)
         self.assertEqual(envelope["schema"], "arcvellum/default-conversation/v1")
         self.assertEqual(envelope["prompt"], "只读回答这个问题")
-        self.assertIn("no project write access", envelope["system_prompt"])
+        self.assertIn("requested role, voice and form", envelope["system_prompt"])
         self.assertEqual(runtime.options["worker_mode"], "conversation")
         self.assertEqual(runtime.options["max_turns"], 1)
         self.assertEqual(runtime.options["max_tool_calls"], 1)

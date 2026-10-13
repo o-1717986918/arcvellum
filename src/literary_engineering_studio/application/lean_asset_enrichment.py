@@ -96,7 +96,7 @@ def _enrichment_prompt(
     return "\n".join([
         "# 人物隐性背景与世界规则细化",
         "你是作品主创。初始人物档案已建立；现在让人物的过去、欲望、关系和误判形成因果，让已有世界事实变成会影响场景选择的规则。语言声音下一轮单独创作。只返回 JSON 对象。",
-        "characters 中每人含 name, summary, formative_events(字符串数组), hidden_wound, behavior_influences(字符串数组), reveal_policy, appearance, clothing, beliefs(字符串数组), intentions(字符串数组), fears(字符串数组), secrets(字符串数组), public_private_contrast, moral_line, relationships(字符串数组；每条可写‘对象｜公开关系｜私下张力’)。经历能在此刻选择中留下痕迹；人物底色也容得下新的亲近、争执、玩笑和出人意料的长谈。尚无根据的心理或行动字段可用空数组，尤其是不在场人物。reveal_policy 为 implicit_only 或 delayed_reveal。",
+        "characters 中每人含 name, summary, formative_events(字符串数组), hidden_wound, behavior_influences(字符串数组), reveal_policy, appearance, clothing, beliefs(字符串数组), intentions(字符串数组), fears(字符串数组), secrets(字符串数组), public_private_contrast, moral_line, relationships(字符串数组；每条可写‘对象｜公开关系｜私下张力’)。从作者意图与题材中发展人物的兴致、嗜好、欲望、奇特信念、思维习惯、幽默和生活方式，让人物具有鲜明而多样的精神底色。hidden_wound 按人物需要填写，平稳经历可填空字符串；fears、secrets 可填空数组。reveal_policy 自由说明这位人物的经历怎样进入作品，可选 open、as_needed、implicit_only 或 delayed_reveal。",
         "world 含 rules(数组), constraints(数组), open_questions(数组)；rules 可为字符串，或含 rule, condition, boundary, consequence 的对象。只深化已有世界事实，未确定的事写进 open_questions。",
         "每次只处理待补人物或世界事实：无待补人物时 characters 为 []，没有待补世界事实时 world 为 {}。",
         "## 待补人物\n" + json.dumps([row for row in characters if str(row["name"]) in eligible], ensure_ascii=False),
@@ -173,16 +173,15 @@ def _validated_rows(payload: dict[str, Any], eligible: dict[str, Path]) -> list[
         raise ValueError("asset enrichment contains duplicate character names")
     for row in selected:
         _require_text(
-            row, "summary", "hidden_wound", "appearance", "clothing",
+            row, "summary", "appearance", "clothing",
             "public_private_contrast", "moral_line",
         )
         row["relationships"] = _normalize_relationships(row.get("relationships"))
         for key in ("formative_events", "behavior_influences", "beliefs", "intentions", "fears", "relationships"):
             _string_array(row, key, allow_empty=True)
         _string_array(row, "secrets", allow_empty=True)
-        policy = row.get("reveal_policy")
-        if policy not in {"implicit_only", "delayed_reveal"}:
-            raise ValueError("background reveal_policy must be implicit_only or delayed_reveal")
+        row["hidden_wound"] = str(row.get("hidden_wound") or "")
+        row["reveal_policy"] = str(row.get("reveal_policy") or "as_needed")
     return selected
 
 

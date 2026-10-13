@@ -3,12 +3,29 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { readSceneMaterial } from "../src/scene-material-tool.ts";
+import { readSceneMaterial, readSceneMaterials } from "../src/scene-material-tool.ts";
 
 const roots: string[] = [];
 afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
 
 describe("scene creator material permission", () => {
+	it("reads multiple full candidates in one call and rejects unknown IDs", async () => {
+		const root = await mkdtemp(join(tmpdir(), "arcvellum-material-"));
+		roots.push(root);
+		const entries = [];
+		for (const id of ["event:1", "environment:1"]) {
+			const file = createHash("sha256").update(id).digest("hex").slice(0, 24) + ".json";
+			await writeFile(join(root, file), JSON.stringify({ schema: "arcvellum/scene-material/v1", candidate_id: id,
+				content: { text: "长过程".repeat(3000) } }));
+			entries.push({ candidate_id: id, file });
+		}
+		await writeFile(join(root, "index.json"), JSON.stringify({ schema: "arcvellum/scene-material-library/v1", entries }));
+		const result = JSON.parse(await readSceneMaterials(root, ["event:1", "environment:1"]));
+		expect(result.materials).toHaveLength(2);
+		expect(result.materials[1].content.text).toBe("长过程".repeat(3000));
+		await expect(readSceneMaterials(root, ["event:1", "missing"])).rejects.toThrow("unknown scene material ID");
+		await expect(readSceneMaterials(root, Array(9).fill("event:1"))).rejects.toThrow("one to eight");
+	});
 	it("explains that an empty library needs a creator request", async () => {
 		const root = await mkdtemp(join(tmpdir(), "arcvellum-material-"));
 		roots.push(root);

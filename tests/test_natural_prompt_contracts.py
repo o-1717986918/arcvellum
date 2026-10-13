@@ -12,34 +12,36 @@ class NaturalPromptContractTests(unittest.TestCase):
             for phrase in ('你不能','你不是','不要','禁止','不得','无权','没有权限','JSON'):
                 self.assertNotIn(phrase,text)
         actor=prompt_layer_spec('scene.v2.material.actor').default_text
-        self.assertEqual(actor.count('【'),16)
+        self.assertEqual(actor.count('【'),11)
         self.assertNotIn('STYLE_DIRECTION',actor)
 
     def test_actor_invitation_centers_the_named_character_turn(self):
         spec = prompt_layer_spec('scene.v2.creator.delegation')
-        self.assertEqual(spec.package_version, 6)
-        for phrase in ('目标人物', '具体来话', '本轮', '台词、第一人称动作与内心冲动',
-                       '对话里其他人的声音由他们各自的轮次生长', '变换节奏、措辞、停顿与动作重心'):
+        self.assertEqual(spec.package_version, 12)
+        self.assertIn("【需求与挂载依据 v1】", spec.default_text)
+        self.assertIn("existing_material_evidence", spec.default_text)
+        for phrase in ('角色 Agent 就是作品中的这个人', '第二人称', '当轮', '第一人称动作',
+                       '已经发生的言行', '文学目的'):
             self.assertIn(phrase, spec.default_text)
         for phrase in ('你不能', '你不是', '不要', '禁止', '不得', '无权', '没有权限'):
             self.assertNotIn(phrase, spec.default_text)
 
     def test_each_material_creator_has_its_own_literary_method_and_frozen_version(self):
         markers = {
-            'environment': ('地方的时空', '身体里的感知', '空间给予的行动'),
-            'character-description': ('观察位置', '身体', '他人目光'),
-            'event-narration': ('因果脉络', '切入时刻', '讲述位置'),
-            'scene-description': ('空间框架', '动作的接续', '心中地图'),
+            'environment': ('地方的尺度', '世界的性情', '时间与感受'),
+            'character-description': ('肖像的组织', '题材中的身体', '距离与语言'),
+            'event-narration': ('世界与风俗', '事件与长过程', '讲述的声音'),
+            'scene-description': ('全局构图', '注意与节奏', '素材的形状'),
         }
         texts = {}
         for kind, phrases in markers.items():
             spec = prompt_layer_spec('scene.v2.material.' + kind)
-            self.assertEqual(spec.package_version, 5)
+            self.assertEqual(spec.package_version, 7)
             self.assertTrue(all(phrase in spec.default_text for phrase in phrases))
             self.assertEqual(spec.default_text.count('{{STYLE_DIRECTION}}'), 1)
             texts[kind] = spec.default_text
         self.assertEqual(len(set(texts.values())), 4)
-        self.assertEqual(prompt_layer_spec('scene.v2.material.actor').package_version, 3)
+        self.assertEqual(prompt_layer_spec('scene.v2.material.actor').package_version, 4)
 
     def test_free_style_field_roundtrips(self):
         request={'kind':'environment','target':'雨巷','purpose':'让等待可感',
@@ -60,7 +62,7 @@ class NaturalPromptContractTests(unittest.TestCase):
             self.assertIn(phrase, review)
         for phrase in ('已经改正', '仍在', '变成新问题', '无法判断'):
             self.assertIn(phrase, protocol)
-        for phrase in ('优先处理真正损害阅读的地方', '保留前稿已经形成', '完整审读信'):
+        for phrase in ('优先处理真正损害阅读的地方', '保留前稿已经形成', '完整阅读审读信'):
             self.assertIn(phrase, revision)
         for text in (review, protocol, revision):
             for phrase in ('你不能', '你不是', '不要', '不得', '无权', '没有权限'):

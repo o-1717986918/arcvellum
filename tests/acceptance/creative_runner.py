@@ -1,6 +1,7 @@
 """Two-scene batches through the production composition, with durable evidence."""
 from copy import deepcopy
 from dataclasses import asdict
+from hashlib import sha256
 import json
 from pathlib import Path
 import subprocess
@@ -16,8 +17,11 @@ from literary_engineering_studio_engine.public.prompting import prompt_layer_spe
 from literary_engineering_studio_engine.public.literary import SceneExecutionMode
 
 from .creative_cases import CASES, prepare_case
+from literary_engineering_studio.application.style.initial_presets import initialize_style_presets
+from literary_engineering_studio_engine.public.literary import ensure_default_style_mount
 from .creative_ledger import AcceptanceGateway, summarize_calls
 from .creative_lease import case_lease
+from .creative_measurement import configure_targets
 
 SCHEMA = "arcvellum/creative-acceptance/v1"
 REPOSITORY = Path(__file__).resolve().parents[2]
@@ -43,18 +47,33 @@ def ensure_persona(container, gateway, project, folder, case_id):
     store = CreatorPersonaStore(Path(container.config["application"]["data_root"]))
     if store.read_current(project)["active"]:
         return
-    source = folder.parent / "persona.json"
+    spec = prompt_layer_spec("project_agent.creator_persona.v2")
+    source_key = sha256((spec.default_text + json.dumps(CASES[case_id], ensure_ascii=False, sort_keys=True)).encode()).hexdigest()
+    source = folder.parent / ("persona-" + source_key + ".json")
     if source.is_file():
         text = json.loads(source.read_text(encoding="utf-8"))["text"]
     else:
         gateway.phase = "persona"
         answer = gateway.run(project, json.dumps({"schema": "arcvellum/default-conversation/v1",
-            "system_prompt": prompt_layer_spec("project_agent.creator_persona.v2").default_text,
-            "prompt": "请为这部作品给出可直接保存的人格正文。\n" + json.dumps(CASES[case_id], ensure_ascii=False)}, ensure_ascii=False),
+            "call_purpose":"persona",
+            "system_prompt": spec.default_text,
+            "prompt": "本次交付一份小说家人格正文，直接供主创初始化加载。\n" + json.dumps(CASES[case_id], ensure_ascii=False)}, ensure_ascii=False),
             role="worker", timeout=180)
         text = answer.answer
         write_json(source, {"text": text, "run_id": answer.run_id, "model": answer.model,
-                            "origin": "real model using top-level persona template"})
+                            "origin": "real model using top-level persona template",
+                            "template_version": spec.package_version, "source_key": source_key})
+    if len(text.strip()) > 4000:
+        gateway.phase = "persona-revision"
+        revised = gateway.run(project, json.dumps({"schema": "arcvellum/default-conversation/v1",
+            "call_purpose":"persona",
+            "system_prompt": prompt_layer_spec("project_agent.creator_persona.v2").default_text,
+            "prompt": "把这份人格发展成直接加载的创作者指令，以鲜明的志趣与表达力量直陈。发展概述、省略、长时段、世界认识和情感伸展的讲述欲望。\n作品方向：" + json.dumps(CASES[case_id], ensure_ascii=False) + "\n原人格：\n" + text}, ensure_ascii=False), role="worker", timeout=180)
+        write_json(source.with_name(source.stem + "-original-before-revision.json"), {"text": text})
+        text = revised.answer
+        write_json(source, {"text": text, "run_id": revised.run_id, "model": revised.model,
+                            "origin": "real top-persona template revision",
+                            "template_version": spec.package_version, "source_key": source_key})
     store.save(project, text, reason="隔离验收按同一作者方向初始化主创人格")
 
 
@@ -69,13 +88,15 @@ def configure_measurement(container, project, folder, profile_path=None):
 
 
 def run_batch(config_path, directory, case_id, *, variant="baseline", tone=False, profile_path=None,
-              max_calls=80, max_minutes=45, max_revisions=3):
+              max_calls=80, max_minutes=45, max_revisions=3, measurement_config=None):
     with case_lease(directory / case_id / variant):
         return _run_batch(config_path,directory,case_id,variant=variant,tone=tone,profile_path=profile_path,
-            max_calls=max_calls,max_minutes=max_minutes,max_revisions=max_revisions)
+            max_calls=max_calls,max_minutes=max_minutes,max_revisions=max_revisions,
+            measurement_config=measurement_config)
 
 
-def _run_batch(config_path, directory, case_id, *, variant, tone, profile_path, max_calls,max_minutes,max_revisions):
+def _run_batch(config_path, directory, case_id, *, variant, tone, profile_path, max_calls,max_minutes,max_revisions,
+               measurement_config=None):
     folder = directory / case_id / variant
     project = prepare_case(folder, case_id)
     container = configured_container(config_path, folder, tone=tone)
@@ -91,8 +112,20 @@ def _run_batch(config_path, directory, case_id, *, variant, tone, profile_path, 
         "literary_revision_limit": max_revisions, "technical_revision_limit": 6})
     try:
         report.pop('error',None)
+        report['status'] = 'running'
+        write_json(report_path, report)
+        if CASES[case_id].get("literary_acceptance"):
+            if not tone: raise ValueError("literary acceptance requires the optional tone editor enabled in this isolated instance")
+            ensure_default_style_mount(project)
+            catalog = initialize_style_presets(container.services.stylometry, project)
+            if not catalog["enabled"] or any(not row["snapshot"]["enabled"] or row["snapshot"]["usage"] != "guide" for row in catalog["presets"]):
+                raise ValueError("literary acceptance requires measured guidance on every eligible preset")
+            report["measured"] = True; report["preset_catalog"] = catalog
+            report['measurement_configuration'] = configure_targets(container.services.stylometry, project, folder, measurement_config)
+            report['preset_catalog'] = container.services.stylometry.preset_catalog(project)
+        else:
+            configure_measurement(container, project, folder, profile_path)
         ensure_persona(container, gateway, project, folder, case_id)
-        configure_measurement(container, project, folder, profile_path)
         repository = SceneTransactionRepository(container.ports.persistence.unit_of_work)
         bundle = build_lean_scene_runtime(container.config, project_root=project, data_root=data, repository=repository)
         bundle.runtime._gateway = gateway
@@ -140,6 +173,8 @@ def run_scene(bundle, repository, gateway, project, folder, report, scene_id, ma
         row["steps"].append(asdict(step))
         if step.blocked:
             row["failure_reason"] = step.message or "协调器保留了失败状态，请读取运行证据。"
+        elif not step.waiting_human:
+            row.pop('failure_reason', None)
         state = repository.load(tx.transaction_id)
         row.update(status=state.status.value, revisions=state.revision_attempts, error=state.last_error)
         row.pop('test_stop',None)
@@ -169,8 +204,24 @@ def record_scene(bundle, state, folder, row):
 
 
 def literary_revisions(folder,scene_id,attempts):
-    return sum(1 for path in (folder/'evidence'/scene_id).glob('review-*.json')
-        if int(path.stem.split('-')[-1]) < attempts and json.loads(path.read_text(encoding='utf-8')).get('decision')=='revise')
+    revisions = set()
+    root = folder / 'evidence' / scene_id
+    for path in root.glob('review-*.json'):
+        index = int(path.stem.split('-')[-1])
+        if index < attempts and json.loads(path.read_text(encoding='utf-8')).get('decision') == 'revise':
+            revisions.add(index)
+    for path in root.glob('verify-*.json'):
+        index = int(path.stem.split('-')[-1])
+        record = json.loads(path.read_text(encoding='utf-8'))
+        if index < attempts and any(_literary_gate_issue(issue) for issue in record.get('issues') or []):
+            revisions.add(index)
+    return len(revisions)
+
+
+def _literary_gate_issue(issue):
+    code = str(issue.get('code') or '')
+    return issue.get('severity') == 'hard' and (
+        code.startswith('style-') or code in {'punctuation-dash-overuse', 'punctuation-staccato-period-overuse'})
 
 
 def source_version():

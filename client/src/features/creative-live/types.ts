@@ -153,6 +153,53 @@ export interface SceneRehearsalDetail extends SceneRehearsalSummary {
   environment: Array<{ beat_id: string; description: string }>;
 }
 
+export interface SceneMaterial {
+  usage_evidence?: { source_excerpt?: string; prose_excerpt?: string; prose_location?: string;
+    indirect_use?: string; usage_evidence_status?: string; source_excerpt_verified?: boolean; prose_excerpt_verified?: boolean };
+  candidate_id: string;
+  call_id: string;
+  kind: string;
+  target: string;
+  purpose: string;
+  scene_moment: string;
+  text: string;
+  spoken: string;
+  first_person_action: string;
+  private_impulse: string;
+  focus: string;
+  basis: string;
+  source_note: string;
+  decision: string;
+  decision_reason: string;
+  complete: boolean;
+  attachments: Array<Record<string, unknown>>;
+}
+
+export interface SceneMaterialInspection {
+  schema: string;
+  transaction_id: string;
+  scene_id: string;
+  intent: Record<string, unknown> | null;
+  candidate_count: number;
+  materials: SceneMaterial[];
+  calls: Array<{
+    call_id: string;
+    runtime: string;
+    sequence: number;
+    request: Record<string, string>;
+    attachments: Array<Record<string, unknown>>;
+    raw_response: string;
+  }>;
+  warnings: string[];
+  transport?: {
+    model_calls: number;
+    reuse_count: number;
+    local_records: number;
+    records: Array<{ record_id: string; operation: string; mode: string; model_calls: number;
+      reuse_count: number; requested_thinking: string | null; error?: string }>;
+  } | null;
+}
+
 export interface StyleProvenance {
   source: "lean-runtime" | "formal-manifest";
   scene_id: string;
@@ -179,12 +226,26 @@ export interface CreativeLiveSnapshot {
   activity: CreativeActivity[];
   reviews: CreativeReview[];
   usage: { total_tokens: number; cost_usd: number; updates: number };
+  usage_accounting?: UsageAccounting;
   active_scene_transaction: SceneTransactionSummary | null;
   scene_transactions: SceneTransactionSummary[];
   style_provenance: StyleProvenance | null;
   events: CreativeLiveEvent[];
   cursor: number;
   live_cursor?: number;
+}
+
+export interface UsageAccounting {
+  total_tokens: number; cost_usd: number; updates: number;
+  token_details: Record<string, number>;
+  outer_invocations: number; recorded_model_turns: number; observed_http_attempts: number | null;
+  unknown_usage_updates: number; unknown_catalog_cost_updates: number;
+  unknown_usage_invocations?: number;
+  unknown_public_price_updates?: number; usage_invocation_ids?: string[];
+  catalog_estimate_usd: number; public_estimate_cny: number | null; public_estimate_complete: boolean;
+  price_sources: Array<{ source?: string; observed_at?: string; currency?: string; kind?: string }>;
+  actual_charge: { amount: number; currency: string; source?: string } | null;
+  cost_source: string; usage_ids: string[]; invocation_ids?: string[]; model_request_ids?: string[]; http_attempt_ids?: string[];
 }
 
 export interface ArtifactRevisionSummary {
@@ -201,4 +262,12 @@ export interface ArtifactRevisionSummary {
 export interface ArtifactRevision extends ArtifactRevisionSummary {
   content: string;
   diff: string;
+}
+
+export interface CreatorPersonaState {
+  status: string; active_version: number;
+  active: null | { text: string; version: number; reason: string };
+  last_generated?: null | { text: string; version: number; reason: string };
+  literary_review?: { reason?: string; evidence?: string[]; decision?: string };
+  history: { version: number; created_at: string; source_digest: string; text?: string; reason?: string }[];
 }

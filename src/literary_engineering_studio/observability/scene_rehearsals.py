@@ -9,13 +9,18 @@ import re
 from typing import Any, Iterable
 
 from ..application.scene_transaction import SceneTransaction
+from .scene_materials import material_directory
 
 
 def scene_rehearsal_index(data_root: Path, transactions: Iterable[SceneTransaction]) -> list[dict[str, Any]]:
     result = []
     for transaction in transactions:
         path = _session_path(data_root, transaction.transaction_id)
-        if path is None and transaction.status.value != "creating":
+        directory = material_directory(data_root, transaction.transaction_id)
+        has_materials = ((directory / "materials" / "index.json").is_file()
+                         or any((directory / "v2" / "calls").glob("*.json"))
+                         or any(directory.glob("describer-*.received.json")))
+        if path is None and not has_materials and transaction.status.value != "creating":
             continue
         state = _read_session(path, transaction.scene_id) if path else None
         result.append(_summary(transaction, path, state))

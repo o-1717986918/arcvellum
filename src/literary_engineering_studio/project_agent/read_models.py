@@ -162,14 +162,15 @@ def dependencies_from_read_models(
     def read_actor_personas(root: Path, arguments: Mapping[str, Any]) -> Mapping[str, Any]:
         if actor_personas is None:
             raise RuntimeError("Project Agent actor persona service is unavailable")
-        payload = actor_personas(root)
+        payload = {**actor_personas(root), "initialization_source": "character_card", "usage": "historical_persona_tags"}
         character_id = str(arguments.get("character_id") or "").strip()
         if not character_id:
             return _fit_payload(payload)
         matches = [item for item in payload["characters"] if item["character_id"] == character_id]
         if not matches:
             raise ValueError("actor persona character_id is not in this work")
-        return {"schema": payload["schema"], "default_language_style": payload["default_language_style"], "character": matches[0]}
+        return {"schema": payload["schema"], "default_language_style": payload["default_language_style"],
+                "initialization_source": payload["initialization_source"], "usage": payload["usage"], "character": matches[0]}
 
     def read_style_versions(root: Path, arguments: Mapping[str, Any]) -> Mapping[str, Any]:
         if style_versions is None:

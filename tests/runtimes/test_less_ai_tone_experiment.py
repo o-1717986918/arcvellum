@@ -59,25 +59,29 @@ class ToneExperimentTests(unittest.TestCase):
             adapter = runtime(Path(tmp), gateway=gateway, sink=lambda *event: events.append(event))
             delta = SceneDelta(continuity_changes=(ChangeProposal("continuity", "等待", "阿青等了3天。"),))
             original = CreativeResult(RAW, "等待", delta)
+            focus = adapter._cache_path("tone-tx","editor-focus/"+__import__("hashlib").sha256(RAW.encode()).hexdigest()+".json")
+            focus.parent.mkdir(parents=True,exist_ok=True)
+            focus.write_text(json.dumps({"focus":[{"issue":"开头的解释是否重复","excerpt":RAW}]}),encoding="utf-8")
             with patch.object(adapter, "_create_scene", return_value=original):
                 cleaned = adapter.create_scene("tone-tx", brief())
-                self.assertEqual(cleaned.prose, CLEAN)
+                self.assertEqual(cleaned.prose, RAW)
                 self.assertIs(cleaned.scene_delta, delta)
-                self.assertIn("less-ai-tone-edited-prose-review", cleaned.escalation_reasons)
+                self.assertEqual(cleaned.escalation_reasons, original.escalation_reasons)
                 adapter.create_scene("tone-tx", brief())
             self.assertEqual(len(gateway.calls), 2)
-            self.assertEqual([role for role, _ in gateway.calls], ["worker", "reviewer"])
+            self.assertEqual([role for role, _ in gateway.calls], ["worker", "transport"])
             self.assertEqual(gateway.calls[0][1]["schema"], "arcvellum/default-conversation/v1")
             self.assertNotIn("{{STYLE_DIRECTION}}", gateway.calls[0][1]["system_prompt"])
             with patch.object(adapter, "_revise_scene", return_value=original):
                 adapter.revise_scene("tone-tx", brief(), original, None, None, attempt=1)
-            self.assertEqual(len(gateway.calls), 4)
+            self.assertEqual(len(gateway.calls), 2)
             reports = list((Path(tmp) / "data/scene-transactions/tone-tx/less-ai-tone").glob("*/report.json"))
-            self.assertEqual(len(reports), 2)
+            self.assertEqual(len(reports), 1)
             report = json.loads(reports[0].read_text(encoding="utf-8"))
-            self.assertEqual((report["original"], report["cleaned"]), (RAW, CLEAN))
+            self.assertEqual((report["original"], report["cleaned"]), (RAW, RAW))
+            self.assertEqual(len(report["candidates"]),1)
             self.assertEqual((reports[0].parent / "original.md").read_text(encoding="utf-8"), RAW)
-            self.assertEqual(events[0][0], "scene.less-ai-tone.completed")
+            self.assertEqual(events[0][0], "scene.less-ai-tone.candidates")
 
     def test_off_and_existing_scene_snapshot_remain_frozen(self):
         with TemporaryDirectory() as tmp:
@@ -115,7 +119,7 @@ class ToneExperimentTests(unittest.TestCase):
             adapter._config["application"]["scene_creator_v2"] = {"enabled": True}
             CreatorPersonaStore(Path(tmp) / "data").save(adapter._project_root, "沿人物的迟疑与生活中的物件组织故事，让等待具有具体的声音。", reason="本次作者初始意图")
             result = adapter.create_scene("v2-tone", brief())
-            self.assertEqual(result.prose, PROSE.replace("最后一滴水落下来时，", "水滴落尽，"))
+            self.assertEqual(result.prose, PROSE)
             adapter.review_scene("v2-tone", brief(), result, VerificationReport("s1", len(result.prose)))
             self.assertIn(result.prose, gateway.review_prompt)
 

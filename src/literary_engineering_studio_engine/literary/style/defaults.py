@@ -24,7 +24,7 @@ DEFAULT_STYLE_PRESET_ID = "clear-plain-zh"
 DEFAULT_STYLE_ID = "arcvellum-clear-plain-prose"
 DEFAULT_STYLE_AUTHOR_ID = "arcvellum"
 DEFAULT_STYLE_PROFILE_ID = "clear-plain-prose"
-DEFAULT_STYLE_DISPLAY_NAME = "弹性叙事"
+DEFAULT_STYLE_DISPLAY_NAME = "小说语言的创作展开"
 DEFAULT_STYLE_TARGET_ID = "style-atelier-arcvellum-clear-plain-prose"
 DEFAULT_STYLE_CONFIG_SCHEMA = "arcvellum/default-style-mount/v1"
 
@@ -99,7 +99,8 @@ def refresh_default_style_mount(project_root: Path) -> DefaultStyleBootstrapResu
     current_profile = current_prompt.parent / "style-profile.md" if current_prompt else None
     if (current_prompt and current_profile and current_profile.is_file()
             and current_prompt.read_text(encoding="utf-8").strip() == _template_text(template / "prompt.md")
-            and current_profile.read_text(encoding="utf-8").startswith(_template_text(template / "profile.md"))):
+            and current_profile.read_text(encoding="utf-8").startswith(_template_text(template / "profile.md"))
+            and json.loads((current_prompt.parent / "style_metrics.json").read_text(encoding="utf-8")) == _default_metrics()):
         return DefaultStyleBootstrapResult(root, str(active["style_id"]), str(active["version_id"]),
                                            str(active["content_hash"]), root / "style" / "active_style_skill.json",
                                            config_path, False, "bundled default is already current")
@@ -164,6 +165,8 @@ def _materialize_curated_profile(root: Path) -> Path:
         + "\n\n## 完整参考语料\n\n"
         + "以下二十五个单元按 R01—R25 的顺序完整保留；先按上文索引选择机制，再读对应单元。\n\n"
         + training_text
+        + "\n\n## 出处核验的文学参照\n\n"
+        + "\n\n".join(_reference_heading(row) for row in json.loads((template / "literary-references.json").read_text(encoding="utf-8"))["units"])
     )
     (profile / "style-profile.md").write_text(full_profile + "\n", encoding="utf-8")
     (profile / "reference-index.json").write_text(
@@ -202,6 +205,12 @@ def _materialize_curated_profile(root: Path) -> Path:
     return profile
 
 
+def _reference_heading(row):
+    chapter = row['chapter']
+    locator = f'第{chapter}回' if isinstance(chapter, int) else str(chapter)
+    return f"### {row['unit_id']} 《{row['source_title']}》{locator} · {row['author']}\n\n{row['source_url']}\n\n{row['text']}"
+
+
 def _materialize_evaluation(
     root: Path,
     profile: Path,
@@ -236,7 +245,8 @@ def _materialize_evaluation(
         "risk_level": "acceptable",
         "candidate_sha256": generation["candidate_sha256"],
         "reference_sha256": reference_sha,
-        "assessment_scope": "executability-clarity-copy-risk",
+        "assessment_scope": "builtin-editorial-structure-readiness",
+        "evidence_kind": "static-editorial-curation", "generation_effect": "not-verified",
         "not_claimed": "author-similarity",
     }
     (evaluation / "style_eval_current.json").write_text(
@@ -260,13 +270,13 @@ def _complete_semantic_review(root: Path, profile: Path) -> None:
         "# 文风工程独立语义审查\n\n"
         "- 结论：`pass`\n\n"
         "## 审查摘要\n\n"
-        "提示词把清晰度与场景化语势落实为可执行的叙述距离、句法、细节、对白、标点和行为因果规则。\n\n"
+        "内置文风资产经编辑整理，提供讲述声音、感知位置、叙述时间、想象、抒情、人物声音与句群组织的创作资源。\n\n"
         "## 有效性与文学可用性\n\n"
-        "正向生成机制明确，允许有因果的语言起伏，适合作为可被题材文风替换的中文基础层。\n\n"
+        "这份记录描述内置资产的编辑结构检查。实际生成效果通过独立交易的正文、素材、计量与文学评审验证。\n\n"
         "## 来源与复用边界\n\n"
         "提示词、留出样例和评测候选由项目原创编写；训练语料是用户提供并声明为公版或原创的完整参考集。模型面向的语料不混入来源和权利说明，只按叙事机制分类使用。\n\n"
         "## 证据限制\n\n"
-        "本评测验证通用文学可用性，不主张特定作者相似度或覆盖所有题材。\n",
+        "本记录是静态编辑整理与工程就绪记录；真实文学表现尚待实际正文验收。\n",
         encoding="utf-8",
     )
     review = {
@@ -275,8 +285,8 @@ def _complete_semantic_review(root: Path, profile: Path) -> None:
             "summary": "默认文风可执行、低复制风险，并为题材化替换保留空间。",
             "findings": [],
             "required_changes": [],
-            "effectiveness_assessment": "正向机制覆盖清晰度、细节选择、叙述距离、场景化语言起伏、人物声音与行为因果。",
-            "copy_risk_assessment": "完整语料只作叙事机制证据，并明确禁止拼贴、续写、复用专名或连续表达。",
+            "effectiveness_assessment": "编辑结构覆盖讲述、想象、情感、时间、群体与人物经验；生成效果未验证。",
+            "copy_risk_assessment": "原 25 段用户样段与核验原文分别声明来源，完整保留片段与版本摘要。",
             "evidence_limitations": [
                 "未对单一作者相似度进行训练或主张。",
                 "具体题材仍应由用户挂载更合适的项目文风。",
@@ -345,27 +355,17 @@ def _default_metrics() -> dict[str, object]:
     return {
         "schema": "arcvellum/builtin-style-metrics/v1",
         "preset_id": DEFAULT_STYLE_PRESET_ID,
-        "sentence_length": {
-            "primary": "scene-responsive",
-            "variation": "pressure-shaped",
-            "short_sentence_use": "turns-consequences-emphasis",
-            "long_sentence_use": "continuous-action-layered-observation-complex-causality",
-        },
-        "narrative_distance": "scene-responsive",
-        "detail_density": "scene-responsive-informational-atmospheric-aesthetic",
-        "figurative_density": "scene-responsive-expression-bearing",
-        "psychology_mode": "behavior-choice-free-indirect-consequence",
-        "dialogue_mode": "character-specific-purposeful-subtext-capable",
-        "punctuation": {
-            "standard": "GB/T 15834-2011",
-            "dash_density": "exceptional-only",
-            "ellipsis": "semantic-only",
-        },
-        "anti_ai": {
-            "mechanical_contrast": "blocked",
-            "explanatory_aftertelling": "avoid-during-generation",
-            "template_density_limit": 0.02,
-        },
+        "evidence_kind": "editorial-qualitative-guidance",
+        "generation_effect": "not-verified",
+        "sentence_length": {"primary": "literary-task-responsive", "variation": "voice-time-thought-imagination",
+            "short_sentence_use": "speech-discovery-emphasis", "long_sentence_use": "storytelling-lyric-commentary-imagination"},
+        "narrative_distance": "narrator-focalization-time-selected-separately",
+        "detail_density": "literary-experience-and-scale",
+        "figurative_density": "genre-imagination-and-voice",
+        "psychology_mode": "thought-emotion-memory-desire-and-interior-speech",
+        "dialogue_mode": "character-desire-interest-and-distinctive-thinking",
+        "punctuation": {"role": "semantic-structure-musical-rhythm-and-voice"},
+        "measured_profiles": "computed-separately-by-narrative-mode",
     }
 
 

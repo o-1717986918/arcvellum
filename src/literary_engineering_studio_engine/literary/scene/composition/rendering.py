@@ -130,7 +130,7 @@ def _dialogue_section(payload: dict[str, Any]) -> list[str]:
                 f"  话语策略：{item['speech_strategy']}",
                 f"  稳定声音：{item.get('stable_voice', {})}",
                 f"  当下关系：{item.get('voice_state', {})}",
-                f"  禁区：{item['forbidden_exposition']}",
+                f"  声音发展：{item.get('voice_development', '')}",
             ]
         )
     return [*lines, ""]

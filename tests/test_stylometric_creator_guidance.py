@@ -92,14 +92,14 @@ class StylometricCreatorGuidanceTests(unittest.TestCase):
 
     def test_target_inside_source_range_keeps_neutral_observation_guidance(self):
         neutral = self._fragment("sentence_length_han", "within")
-        self.assertIn("让长短变化承接人物当下的注意力", neutral)
+        self.assertIn("让长短变化承接讲述、感知、思想或想象的流动", neutral)
         self.assertNotIn(LOWER_GUIDANCE["sentence_length_han"], neutral)
         self.assertNotIn(HIGHER_GUIDANCE["sentence_length_han"], neutral)
 
     def test_compiler_version_changes_and_prompt_uses_positive_whole_work_guidance(self):
         controls = default_creator_controls(self.profile)
         result = compile_creator_fragment(self.profile, controls)
-        self.assertEqual(result["compiler_version"], "creator-1.1")
+        self.assertEqual(result["compiler_version"], "creator-1.2")
         self.assertEqual(result["generation_effect"], "not-verified")
         for wording in ("你不是", "你不能", "不得", "不要", "没有权限", "逐句配额"):
             self.assertNotIn(wording, result["fragment_text"])

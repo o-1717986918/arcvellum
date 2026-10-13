@@ -93,11 +93,18 @@ def _answer_payload(answer: str) -> dict[str, Any]:
             value, end = json.JSONDecoder().raw_decode(text[start:])
         except json.JSONDecodeError as exc:
             raise ValueError("Pi scene response is not a JSON object") from exc
-        if text[start + end:].strip():
+        trailing = text[start + end:].strip()
+        fenced = _closing_json_fence(text[:start], trailing)
+        if trailing and not fenced:
             raise ValueError("Pi scene response contains text after its JSON object")
     if not isinstance(value, dict):
         raise ValueError("Pi scene response must be a JSON object")
     return value
+
+
+def _closing_json_fence(prefix: str, trailing: str) -> bool:
+    lines = prefix.rstrip().splitlines()
+    return trailing == "```" and bool(lines) and lines[-1].strip().lower() in {"```", "```json"}
 
 
 def creative_result_from_payload(payload: dict[str, Any]) -> CreativeResult:

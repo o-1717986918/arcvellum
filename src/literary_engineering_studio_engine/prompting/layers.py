@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from functools import lru_cache
+from dataclasses import dataclass, replace
+from contextlib import contextmanager
+from contextvars import ContextVar
 import hashlib
 import json
 import re
@@ -49,43 +50,47 @@ class ResolvedPromptLayer:
 
 
 _LAYER_METADATA = (
+    ("planning.v2.initial", "identity", "文学规划 · 全书初始化", True, "Studio", 1),
+    ("planning.v2.window", "identity", "文学规划 · 滚动章节", True, "Studio", 1),
+    ("planning.v2.future", "identity", "文学规划 · 未来重排", True, "Studio", 2),
     ("experiment.less_ai_tone.editor", "stage", "实验 · 主创局部去 AI 味编辑", True, "Studio", 3),
     ("scene.protocol", "protocol", "角色权限、事实边界与正式交付结构", False, "Engine", 1),
-    ("scene.creator.identity", "identity", "主创文学使命", True, "Studio", 3),
-    ("scene.creator.create", "stage", "成稿与取材", True, "Studio", 4),
-    ("scene.creator.revise", "stage", "修订", True, "Studio", 4),
-    ("scene.review", "stage", "独立文学审读", True, "Studio", 2),
+    ("scene.creator.identity", "identity", "主创文学使命", True, "Studio", 4),
+    ("scene.creator.create", "stage", "成稿与取材", True, "Studio", 5),
+    ("scene.creator.revise", "stage", "修订", True, "Studio", 5),
+    ("scene.review", "stage", "独立文学审读", True, "Studio", 3),
     ("scene.performance.plan", "stage", "主创表演规划", True, "Engine literary", 1),
     ("scene.actor.identity", "identity", "角色人格初始化附加指引", True, "Engine literary", 1),
     ("scene.actor.turn", "stage", "角色本轮回应", True, "Engine literary", 1),
-    ("scene.environment.identity", "identity", "环境观察方式", True, "Engine literary", 1),
-    ("scene.environment.turn", "stage", "环境本轮观察", True, "Engine literary", 1),
-    ("scene.describer.character", "identity", "人物可见描写", True, "Engine literary", 1),
-    ("scene.describer.event", "identity", "场外事件与世界说明叙述", True, "Engine literary", 1),
-    ("scene.describer.scene", "identity", "场面描写", True, "Engine literary", 1),
-    ("scene.description.turn", "stage", "描写器当轮任务", True, "Engine literary", 1),
-    ("scene.material.selection", "stage", "主创对角色与描写候选的取舍", True, "Engine literary", 2),
-    ("scene.v2.creator.identity", "identity", "作品级主创人格承接", True, "Studio", 4),
-    ("scene.v2.creator.protocol", "protocol", "主创自然创作交流", True, "Studio", 4),
-    ("scene.v2.creator.bootstrap", "stage", "必达信息包与来源使用", True, "Studio", 4),
-    ("scene.v2.creator.create", "stage", "场景成稿与自主取材", True, "Studio", 4),
-    ("scene.v2.creator.revise", "stage", "场景修订与再取材", True, "Studio", 5),
-    ("scene.v2.creator.delegation", "stage", "主创编写五类委托", True, "Studio", 6),
-    ("scene.v2.creator.actor-card", "stage", "主创填写强风格化角色系统卡", True, "Studio", 4),
-    ("scene.v2.creator.archive", "stage", "作品档案读取与挂载", True, "Studio", 4),
+    ("scene.environment.identity", "identity", "环境观察方式", True, "Engine literary", 2),
+    ("scene.environment.turn", "stage", "环境本轮观察", True, "Engine literary", 2),
+    ("scene.describer.character", "identity", "人物可见描写", True, "Engine literary", 2),
+    ("scene.describer.event", "identity", "场外事件与世界说明叙述", True, "Engine literary", 2),
+    ("scene.describer.scene", "identity", "场面描写", True, "Engine literary", 2),
+    ("scene.description.turn", "stage", "描写器当轮任务", True, "Engine literary", 2),
+    ("scene.material.selection", "stage", "主创对角色与描写候选的取舍", True, "Engine literary", 3),
+    ("scene.v2.creator.identity", "identity", "作品级主创人格承接", True, "Studio", 6),
+    ("scene.v2.creator.protocol", "protocol", "主创自然创作交流", True, "Studio", 5),
+    ("scene.v2.creator.bootstrap", "stage", "必达信息包与来源使用", True, "Studio", 6),
+    ("scene.v2.creator.create", "stage", "场景成稿与自主取材", True, "Studio", 5),
+    ("scene.v2.creator.revise", "stage", "场景修订与再取材", True, "Studio", 7),
+    ("scene.v2.creator.delegation", "stage", "主创编写扮演邀请与四类文学委托", True, "Studio", 12),
+    ("scene.v2.creator.actor-card", "stage", "主创填写十一块强风格化角色系统卡", True, "Studio", 6),
+    ("scene.v2.creator.archive", "stage", "作品档案读取与挂载", True, "Studio", 6),
     ("scene.v2.creator.sandbox", "stage", "持久沙盒工作方式", True, "Studio", 4),
-    ("scene.v2.creator.selection", "stage", "候选取舍与正文重组", True, "Studio", 4),
-    ("scene.v2.review", "stage", "新版场景独立审读", True, "Studio", 5),
-    ("scene.v2.review.protocol", "protocol", "自然审读信", True, "Studio", 5),
+    ("scene.v2.creator.selection", "stage", "候选取舍与正文重组", True, "Studio", 7),
+    ("scene.v2.review", "stage", "新版场景独立审读", True, "Studio", 8),
+    ("scene.v2.review.protocol", "protocol", "自然审读信", True, "Studio", 6),
     ("scene.v2.material.shared.protocol", "protocol", "历史共享层（自然链路已退出）", False, "Engine literary", 2),
-    ("scene.v2.material.actor", "identity", "角色卡系统提示词模板", True, "Engine literary", 3),
-    ("scene.v2.material.environment", "identity", "环境观察委托模板", True, "Engine literary", 5),
-    ("scene.v2.material.character-description", "identity", "人物描写委托模板", True, "Engine literary", 5),
-    ("scene.v2.material.event-narration", "identity", "事件叙述委托模板", True, "Engine literary", 5),
-    ("scene.v2.material.scene-description", "identity", "场面描写委托模板", True, "Engine literary", 5),
+    ("scene.v2.material.actor", "identity", "十一块角色卡系统提示词模板", True, "Engine literary", 4),
+    ("scene.v2.actor.turn", "stage", "人物当轮扮演邀请", True, "Studio", 1),
+    ("scene.v2.material.environment", "identity", "环境观察委托模板", True, "Engine literary", 7),
+    ("scene.v2.material.character-description", "identity", "人物描写委托模板", True, "Engine literary", 7),
+    ("scene.v2.material.event-narration", "identity", "事件叙述委托模板", True, "Engine literary", 7),
+    ("scene.v2.material.scene-description", "identity", "场面描写委托模板", True, "Engine literary", 7),
     ("scene.v2.material.output.protocol", "protocol", "历史 JSON 候选层（自然链路已退出）", False, "Engine literary", 2),
-    ("project_agent.creator_persona.v2", "stage", "顶层生成或更新主创人格", True, "Studio", 5),
-    ("scene.v2.transport.extractor", "protocol", "后置整理合同（技术步骤）", True, "Studio", 1),
+    ("project_agent.creator_persona.v2", "stage", "顶层生成或更新主创人格", True, "Studio", 10),
+    ("scene.v2.transport.extractor", "protocol", "后置整理合同（技术步骤）", True, "Studio", 3),
     ("project_agent.v2.creative_direction", "stage", "自然交流 · creative_direction", True, "Studio", 1),
     ("project_agent.v2.system.read.protocol", "stage", "自然交流 · system.read.protocol", True, "Studio", 1),
     ("project_agent.v2.system.write.protocol", "stage", "自然交流 · system.write.protocol", True, "Studio", 1),
@@ -98,13 +103,13 @@ _LAYER_METADATA = (
     ("scene.review.protocol", "protocol", "审读证据与交付模板", False, "Studio", 2),
     ("scene.performance.plan.protocol", "protocol", "人格化规划与输出合同模板", False, "Engine literary", 1),
     ("scene.actor.scene.protocol", "protocol", "角色场景回应模板", False, "Engine literary", 1),
-    ("scene.environment.turn.protocol", "protocol", "环境观察输出模板", False, "Engine literary", 1),
+    ("scene.environment.turn.protocol", "protocol", "环境观察输出模板", False, "Engine literary", 2),
     ("scene.actor.interaction.protocol", "protocol", "角色按需取材的逐轮回应模板", False, "Engine literary", 1),
-    ("scene.describer.initialization.protocol", "protocol", "描写器人格初始化结构模板", False, "Engine literary", 1),
-    ("scene.describer.character.protocol", "protocol", "人物描写的视角与行动边界", False, "Engine literary", 1),
-    ("scene.describer.event.protocol", "protocol", "事件说明的事实和读者知识边界", False, "Engine literary", 1),
-    ("scene.describer.scene.protocol", "protocol", "场面描写的行动边界", False, "Engine literary", 1),
-    ("scene.describer.turn.protocol", "protocol", "描写候选与 JSON 输出合同", False, "Engine literary", 1),
+    ("scene.describer.initialization.protocol", "protocol", "描写器人格初始化结构模板", False, "Engine literary", 2),
+    ("scene.describer.character.protocol", "protocol", "人物描写的视角与行动边界", False, "Engine literary", 2),
+    ("scene.describer.event.protocol", "protocol", "事件说明的事实和读者知识边界", False, "Engine literary", 2),
+    ("scene.describer.scene.protocol", "protocol", "场面描写的行动边界", False, "Engine literary", 2),
+    ("scene.describer.turn.protocol", "protocol", "描写候选与 JSON 输出合同", False, "Engine literary", 3),
     ("scene.actor.immersion.protocol", "protocol", "角色人格化沉浸约束", False, "Engine literary", 1),
     ("scene.environment.initialization.example", "protocol", "环境人格初始化六区块示例", False, "Engine literary", 1),
     ("advisor.conversation.protocol", "protocol", "只读顾问权限、证据与元数据模板", False, "Studio", 1),
@@ -120,7 +125,7 @@ _LAYER_METADATA = (
     ("project_agent.turn.protocol", "protocol", "项目总编对话交接", False, "Studio", 1),
     ("project_agent.goal_followup.protocol", "protocol", "长期目标终态交接", False, "Studio", 1),
     ("project_agent.scene_checkpoint.protocol", "protocol", "场间检查点交接", False, "Studio", 1),
-    ("pi.conversation.system", "protocol", "无工具角色会话的系统权限边界", False, "Pi Worker", 1),
+    ("pi.conversation.system", "protocol", "无工具角色会话的系统权限边界", False, "Pi Worker", 2),
     ("steward.identity", "identity", "自动决策顾问的文学取舍", True, "Studio", 1),
     ("steward.decision.protocol", "protocol", "自动决策选项权限、证据与 JSON 合同", False, "Studio", 1),
     ("steward.repair.protocol", "protocol", "自动决策 JSON 修复", False, "Studio", 1),
@@ -129,8 +134,8 @@ _LAYER_METADATA = (
     ("steward.scope.default.protocol", "protocol", "通用授权判断范围", False, "Studio", 1),
     ("scene.quantitative_detail.protocol", "protocol", "场景数词语义与来源核对规则", False, "Studio", 1),
     ("scene.creator.material-final-pass.protocol", "protocol", "主创对已取素材的正文取舍", False, "Studio", 1),
-    ("scene.creator.material-length-priority.protocol", "protocol", "素材较少时的叙述空间", False, "Studio", 1),
-    ("scene.creator.material-request.protocol", "protocol", "主创首次取材请求结构与角色续演示例", False, "Studio", 2),
+    ("scene.creator.material-length-priority.protocol", "protocol", "素材较少时的叙述空间", False, "Studio", 2),
+    ("scene.creator.material-request.protocol", "protocol", "主创首次取材请求结构与角色续演示例", False, "Studio", 4),
     ("scene.creator.material-choice-repair.protocol", "protocol", "主创无效独写理由的取材决策补救", False, "Studio", 1),
     ("scene.creator.material-selection-repair.protocol", "protocol", "主创候选取舍记录补救", False, "Studio", 1),
     ("scene.creator.revision-request.protocol", "protocol", "主创返修取材请求结构", False, "Studio", 1),
@@ -200,6 +205,17 @@ def _default_text(layer_id: str) -> str:
 _SPECS = tuple(PromptLayerSpec(layer_id, responsibility, purpose, _default_text(layer_id),
                                editable, owner, version)
                for layer_id, responsibility, purpose, editable, owner, version in _LAYER_METADATA)
+_FROZEN_TEXTS: ContextVar[dict[str, str]] = ContextVar("frozen_prompt_texts", default={})
+
+
+@contextmanager
+def prompt_layer_scope(texts: dict[str, str]):
+    """Render a transaction's frozen templates without changing package defaults."""
+    token = _FROZEN_TEXTS.set(dict(texts))
+    try:
+        yield
+    finally:
+        _FROZEN_TEXTS.reset(token)
 
 
 def list_prompt_layer_specs() -> tuple[PromptLayerSpec, ...]:
@@ -208,12 +224,12 @@ def list_prompt_layer_specs() -> tuple[PromptLayerSpec, ...]:
 
 def prompt_layer_spec(layer_id: str) -> PromptLayerSpec:
     try:
-        return next(spec for spec in _SPECS if spec.layer_id == layer_id)
+        spec = next(spec for spec in _SPECS if spec.layer_id == layer_id)
+        return replace(spec, default_text=_FROZEN_TEXTS.get().get(layer_id, spec.default_text))
     except StopIteration as exc:
         raise ValueError(f"unknown prompt layer: {layer_id}") from exc
 
 
-@lru_cache(maxsize=1)
 def _scene_fallbacks() -> dict[str, str]:
     raw = json.loads(prompt_layer_spec("scene.fallbacks.protocol").default_text)
     if not isinstance(raw, dict) or not all(isinstance(key, str) and isinstance(value, str) and value.strip()
@@ -238,7 +254,7 @@ def render_prompt_template(layer_id: str, values: tuple[object, ...]) -> str:
     spec = prompt_layer_spec(layer_id)
     if spec.responsibility != "protocol" or spec.editable:
         raise ValueError("prompt template must be a fixed protocol layer")
-    template = engine_path("templates", "prompt_layers", f"{layer_id}.md").read_text(encoding="utf-8")
+    template = spec.default_text + "\n"
     return render_prompt_text(template, values)
 
 

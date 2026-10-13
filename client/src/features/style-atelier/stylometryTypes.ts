@@ -32,7 +32,7 @@ export interface CreatorMount {
 }
 export interface StyloWorkbench {
   schema: string; profiles: ProfileSummary[]; versions: VersionSummary[]; mount: CreatorMount;
-  capabilities: { lab_version: string; dependency: string; ltp_generation: boolean; r_stylo: boolean };
+  capabilities: { lab_version: string; dependency: string; ltp_generation: boolean; r_stylo: boolean; preset_reference_recalculation?: boolean };
   style_context: { author_directive: string; formal: string };
 }
 export interface StyloCompiled { schema: string; fragment_text: string; artifact_sha256: string; [key: string]: unknown }

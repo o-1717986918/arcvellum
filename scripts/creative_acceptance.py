@@ -28,6 +28,7 @@ def main():
     parser.add_argument("--role-context",default='')
     parser.add_argument("--tone", action="store_true")
     parser.add_argument("--profile", type=Path)
+    parser.add_argument("--measurement-config", type=Path)
     parser.add_argument("--max-calls", type=int, default=80)
     parser.add_argument("--max-minutes", type=int, default=45)
     parser.add_argument("--max-revisions", type=int, default=3)
@@ -46,7 +47,8 @@ def main():
         print(json.dumps({'cost':report['cost'],'action':args.action},ensure_ascii=False));return 0
     report = run_batch(args.config.resolve(), args.output.resolve(), args.case, variant=args.variant,
         tone=args.tone, profile_path=args.profile, max_calls=args.max_calls,
-        max_minutes=args.max_minutes, max_revisions=args.max_revisions)
+        max_minutes=args.max_minutes, max_revisions=args.max_revisions,
+        measurement_config=args.measurement_config)
     print(json.dumps({"status": report["status"], "cost": report["cost"],
         "report": str(args.output.resolve() / args.case / args.variant / "acceptance.json")}, ensure_ascii=False))
     return 0 if report["status"] == "completed" else 2

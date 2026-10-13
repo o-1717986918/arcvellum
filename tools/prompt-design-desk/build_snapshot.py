@@ -47,6 +47,8 @@ def read_library() -> dict:
         }
     assert all("[PENDING_PROMPT_DESIGN:" not in sources[layer_id]["text"] for layer_id in expected)
     include_rebuild_history(slots, sources)
+    include_actor_repair_history(slots, sources)
+    include_transport_history(slots, sources)
     retired_intro = include_actor_history(slots, sources)
     return {
         "slots": slots, "sources": sources,
@@ -72,6 +74,34 @@ def include_rebuild_history(slots: list, sources: dict) -> None:
             "package_version": manifest["layers"][slot["id"]]["package_version"],
             "sha256": sha256(text.encode("utf-8")).hexdigest(), "purpose": "此次重写前的完整文案",
             "editable": False, "owner": "Historical builtin snapshot " + manifest["commit"]}
+
+
+def include_actor_repair_history(slots, sources):
+    directory = TOOL / 'history/2026-10-10-actor-repair'
+    manifest = json.loads((directory/'manifest.json').read_text(encoding='utf-8'))
+    for slot in slots:
+        if slot['id'] not in manifest:
+            continue
+        ident = slot['id'] + '@before-actor-repair'
+        content = (directory/(slot['id']+'.md')).read_text(encoding='utf-8').strip()
+        sources[ident] = {'id':ident, 'text':content, **manifest[slot['id']],
+            'purpose':'十一块角色卡与扮演委托修复前的完整稿', 'editable':False, 'owner':'Historical builtin snapshot'}
+        slot['refs'].append(ident)
+
+
+def include_transport_history(slots, sources):
+    ident = 'scene.v2.transport.extractor@before-source-references'
+    content = (TOOL/'history/2026-10-10-transport/scene.v2.transport.extractor.md').read_text(encoding='utf-8').strip()
+    sources[ident] = {'id':ident, 'text':content, 'package_version':1,
+        'sha256':sha256(content.encode()).hexdigest(), 'purpose':'原文引用与本地整理改造前的完整稿',
+        'editable':False, 'owner':'Historical builtin snapshot'}
+    next(slot for slot in slots if slot['id']=='scene.v2.transport.extractor')['refs'].append(ident)
+    ident = 'scene.v2.transport.extractor@before-real-verification'
+    content = (TOOL/'history/2026-10-10-transport/scene.v2.transport.extractor-v2.md').read_text(encoding='utf-8').strip()
+    sources[ident] = {'id':ident, 'text':content, 'package_version':2,
+        'sha256':sha256(content.encode()).hexdigest(), 'purpose':'真实整理验收修复前的版本 2',
+        'editable':False, 'owner':'Historical builtin snapshot'}
+    next(slot for slot in slots if slot['id']=='scene.v2.transport.extractor')['refs'].append(ident)
 
 
 def render_html(library: dict) -> str:

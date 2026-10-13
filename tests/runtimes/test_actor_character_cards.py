@@ -7,6 +7,7 @@ from pathlib import Path
 import re
 from tempfile import TemporaryDirectory
 import unittest
+from tests.material_need_fixtures import with_need
 
 from literary_engineering_studio.application.creator_persona import CreatorPersonaStore
 from literary_engineering_studio.runtime.role_conversation import RoleConversationResult
@@ -116,7 +117,7 @@ class ActorCardRuntimeTests(unittest.TestCase):
         self.assertEqual(len(self.calls), call_count)
         self.assertEqual(cached, original)
 
-    def test_legacy_actor_cache_without_role_digest_remains_recoverable(self):
+    def test_legacy_actor_cache_without_role_digest_remains_historical_without_paid_reuse(self):
         first, = self.coordinator.execute(self.request, self.invoke)
         followup = replace(self.request, cue="阿婶停下手里的活", character_card=None)
         original, = self.coordinator.execute(followup, self.invoke)
@@ -131,11 +132,12 @@ class ActorCardRuntimeTests(unittest.TestCase):
         followup_path.write_text(json.dumps(record, ensure_ascii=False), encoding="utf-8")
         call_count = len(self.calls)
 
-        cached, = self.coordinator.execute(
-            followup, self.invoke, adopted_candidate_ids={first["candidate_id"]})
+        with self.assertRaisesRegex(ValueError,"历史角色回应缺少语境绑定"):
+            self.coordinator.execute(
+                followup,self.invoke,adopted_candidate_ids={first["candidate_id"]})
 
         self.assertEqual(len(self.calls), call_count)
-        self.assertEqual(cached, original)
+        self.assertEqual(json.loads(followup_path.read_text(encoding="utf-8"))["candidates"][0],original)
 
     def test_different_card_rejected_and_original_card_available_to_creator(self):
         self.coordinator.execute(self.request, self.invoke)
@@ -162,7 +164,7 @@ class ActorCardRuntimeTests(unittest.TestCase):
 
     def test_v2_memory_saves_whole_large_card_and_keeps_legacy_limit(self):
         value = actor_card_payload()
-        value["sections"] = {key: text + "文" * 520 for key, text in value["sections"].items()}
+        value["sections"] = {key: text + "文" * 850 for key, text in value["sections"].items()}
         request = replace(self.request, character_card=parse_actor_character_card(value, "阿青"))
         payload = {"material_requests": [request.to_dict()]}
         brief = self.brief()
@@ -221,6 +223,7 @@ class ActorGateway:
             if self.creator_calls == 1:
                 answer = "先听人物回应。" + self.request.author_prompt + "\n" + "\n".join(
                     self.request.character_card.to_dict()["sections"].values())
+                answer += "\n" + json.dumps(with_need(self.request.to_dict())["need_evidence"], ensure_ascii=False)
             else:
                 task = json.loads(envelope["prompt"].split("本次创作资料：\n", 1)[1])
                 self.creator_context = task["actor_card_context"]
@@ -233,7 +236,7 @@ class ActorGateway:
                     "first_person_action": "我捏住空信封。", "focus": "迟疑"}]}
             elif task["source_text"].startswith("先听"):
                 payload = {"material_plan": {"required_kinds": ["actor"], "reason": "人物先回应"},
-                           "material_requests": [self.request.to_dict()]}
+                           "material_requests": [with_need(self.request.to_dict())]}
             else:
                 identifier = re.search(r"v2:[a-f0-9]+:1", task["context"]["material_index"]).group()
                 payload = {"prose": "阿青捏住空信封，轻声问：‘信呢？’", "decision_summary": "保留迟疑。",

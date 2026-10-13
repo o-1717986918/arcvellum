@@ -2,14 +2,15 @@ import { createHash } from "node:crypto";
 import { isAbsolute } from "node:path";
 import { Agent } from "@earendil-works/pi-agent-core";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
-import { builtinModels } from "@earendil-works/pi-ai/providers/all";
+import { configuredModels } from "./configured-models.ts";
 import type { RuntimeEventSink, WorkerOptions, WorkerState } from "./contracts.ts";
 import { ReadOnlyJsonCredentialStore } from "./credential-store.ts";
 import { WorkerEventAdapter } from "./event-adapter.ts";
-import { reasoningThinkingBudgets, safeThinkingLevel } from "./reasoning-budget.ts";
+import { reasoningThinkingBudgets, safeThinkingLevel, withDeepSeekV4ThinkingSupport } from "./reasoning-budget.ts";
 import { classifyProviderFailure, providerStreamControls } from "./provider-reliability.ts";
 import defaultConversationProfile from "../profiles/conversation-system.md?raw";
 import { createSceneMaterialTool } from "./scene-material-tool.ts";
+import { observeSdkFetch } from "./request-observation.ts";
 import { createSceneArchiveTool, createSceneScratchTool } from "./scene-creator-workspace-tool.ts";
 
 export function assertConversationToolBudget(state: Pick<WorkerState, "toolCalls">, limit: number): void {
@@ -23,6 +24,17 @@ export function conversationOutcome(answer: string, error?: string, promptedCurr
 		message: completed ? "conversation completed" : (error || "conversation returned no answer"),
 		validationPassed: completed,
 	};
+}
+
+export function conversationStopError(messages: unknown[]): string | undefined {
+	const final = [...messages].reverse().find((message) => isRecord(message) && message.role === "assistant");
+	if (!isRecord(final)) return undefined;
+	if (final.stopReason === "length") return "provider response reached output limit before completing its answer";
+	if (final.stopReason === "toolUse") return "conversation ended before its tool turn produced a final answer";
+	if (final.stopReason === "error" || final.stopReason === "aborted") {
+		return String(final.errorMessage || "provider response did not complete");
+	}
+	return undefined;
 }
 
 export interface ConversationResult {
@@ -53,9 +65,10 @@ export async function runConversation(
 ): Promise<ConversationResult> {
 	const [provider, modelId] = parseModelId(options.model);
 	const credentials = new ReadOnlyJsonCredentialStore(options.authPath);
-	const models = builtinModels({ credentials });
-	const model = models.getModel(provider, modelId);
-	if (!model) throw new Error(`Pi AI model is not available: ${options.model}`);
+	const models = await configuredModels(credentials, options.authPath);
+	const catalogModel = models.getModel(provider, modelId);
+	if (!catalogModel) throw new Error(`Pi AI model is not available: ${options.model}`);
+	const model = withDeepSeekV4ThinkingSupport(catalogModel);
 	const auth = await models.getAuth(model);
 	if (!auth) throw new Error(`Pi AI provider is not authenticated: ${provider}`);
 
@@ -89,11 +102,11 @@ export async function runConversation(
 			systemPrompt,
 			model,
 			thinkingLevel: effectiveThinking,
-			tools: sceneCreator ? [
+			tools: sceneCreator && sceneCreatorV2?.toolPolicy !== "none" ? [
 				createSceneMaterialTool(sceneCreator.materialRoot, () => {
 					assertConversationToolBudget(state, options.maxToolCalls);
 				}),
-				...(sceneCreatorV2 ? [
+				...(sceneCreatorV2 && sceneCreatorV2.toolPolicy === "full" ? [
 					createSceneArchiveTool(sceneCreatorV2.archiveRoot, () => {
 						assertConversationToolBudget(state, options.maxToolCalls);
 					}),
@@ -107,7 +120,9 @@ export async function runConversation(
 		streamFn: (streamModel, streamContext, streamOptions = {}) => models.streamSimple(
 			streamModel,
 			streamContext,
-			{ ...streamOptions, ...providerStreamControls(options.providerReliability) },
+			{ ...streamOptions, ...providerStreamControls(options.providerReliability),
+				fetch: observeSdkFetch(emit, () => ({ session_id: sessionId,
+					model_request_id: eventAdapter.currentModelRequestId, provider, model: modelId }), streamOptions.fetch) },
 		),
 		sessionId,
 		thinkingBudgets: reasoningThinkingBudgets(options.reasoningBudget)
@@ -140,9 +155,10 @@ export async function runConversation(
 		}
 	}
 	const answer = actorTurn || initializedEnvironment ? currentAnswer : lastAssistantText(agent.state.messages as unknown[]);
-	const outcome = conversationOutcome(answer, agent.state.errorMessage, !actorTurn || promptedCurrent);
+	const completionError = agent.state.errorMessage || conversationStopError(agent.state.messages as unknown[]);
+	const outcome = conversationOutcome(answer, completionError, !actorTurn || promptedCurrent);
 	const { status } = outcome;
-	const providerError = status === "completed" ? "" : String(agent.state.errorMessage || "").trim();
+	const providerError = status === "completed" ? "" : String(completionError || "").trim();
 	const providerFailure = providerError ? classifyProviderFailure(providerError) : null;
 	const result: ConversationResult = {
 		...outcome,
@@ -196,6 +212,7 @@ export function sceneCreatorEnvelope(prompt: string): { systemPrompt: string; ma
 
 export function sceneCreatorV2Envelope(prompt: string): {
 	systemPrompt: string; materialRoot: string; archiveRoot: string; scratchRoot: string; prompt: string;
+	toolPolicy: "full" | "materials" | "none";
 } | null {
 	let value: unknown;
 	try { value = JSON.parse(prompt); } catch { return null; }
@@ -207,8 +224,12 @@ export function sceneCreatorV2Envelope(prompt: string): {
 		|| typeof value.prompt !== "string" || !value.prompt.trim()) {
 		throw new Error("scene creator v2 envelope needs identity, archive, scratch, material root, and prompt");
 	}
+	const toolPolicy = value.tool_policy ?? "full";
+	if (toolPolicy !== "full" && toolPolicy !== "materials" && toolPolicy !== "none") {
+		throw new Error("unknown scene creator tool policy");
+	}
 	return { systemPrompt: value.system_prompt, materialRoot: value.material_root,
-		archiveRoot: value.archive_root, scratchRoot: value.scratch_root, prompt: value.prompt };
+		archiveRoot: value.archive_root, scratchRoot: value.scratch_root, prompt: value.prompt, toolPolicy };
 }
 
 function parsedTurnEnvelope(prompt: string, schema: string): ActorTurnEnvelope | null {

@@ -348,7 +348,7 @@ class SceneCreatorV2Tests(unittest.TestCase):
         from literary_engineering_studio_engine.public.prompting import list_prompt_layer_specs
         layers = {spec.layer_id: spec.default_text for spec in list_prompt_layer_specs()
                   if spec.layer_id.startswith("scene.v2.") or spec.layer_id == "project_agent.creator_persona.v2"}
-        self.assertEqual(len(layers), 21)
+        self.assertEqual(len(layers), 22)
         assert_v2_prompts_ready(layers)
         runtime = PiSceneTransactionRuntime({}, project_root=self.project, data_root=self.studio)
         self.assertFalse(runtime._uses_creator_v2("tx-default"))
@@ -407,8 +407,9 @@ class SceneCreatorV2Tests(unittest.TestCase):
         frozen_path.parent.mkdir(parents=True)
         from literary_engineering_studio_engine.public.prompting import list_prompt_layer_specs
         frozen_path.write_text(json.dumps({"schema": "arcvellum/prompt-assembly/v1", "digest": "old-v2",
-            "texts": {spec.layer_id: "designed" for spec in list_prompt_layer_specs()
-                      if (spec.layer_id.startswith("scene.v2.") and spec.layer_id != "scene.v2.transport.extractor")
+            "texts": {spec.layer_id: (prompt_layer_spec(spec.layer_id).default_text
+                        if spec.layer_id == 'scene.v2.material.actor' else "designed") for spec in list_prompt_layer_specs()
+                      if (spec.layer_id.startswith("scene.v2.") and spec.layer_id not in {'scene.v2.transport.extractor','scene.v2.actor.turn'})
                       or spec.layer_id == "project_agent.creator_persona.v2"}}, ensure_ascii=False), encoding="utf-8")
         result = runtime.create_scene("tx-live", brief)
         self.assertIn("空信封", result.prose)

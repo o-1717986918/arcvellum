@@ -33,6 +33,7 @@ const TECHNICAL_ERROR = /(?:traceback|stack trace|exit code|enoent|spawn\s|stder
 export function sessionDisplayName(session?: CreativeSession | null, index = 0): string {
   if (!session) return "等待主创 Agent";
   const role = String(session.role || "").trim();
+  if (role === 'transport') return '技术整理';
   if (role && !["worker", "agent", "assistant"].includes(role.toLowerCase())) return role;
   const value = parseJsonObjects(String(session.transcript || "")).at(-1);
   if (value) {

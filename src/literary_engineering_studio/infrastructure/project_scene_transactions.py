@@ -31,6 +31,7 @@ from literary_engineering_studio_engine.public.literary import (
     project_committed_scene_delta,
 )
 
+from ..application.creative_configuration import read_creative_configuration
 from ..application.scene_transaction import PreparedScene, SceneCommitReceipt
 from ..orchestration.risk import SceneRiskFacts, build_scene_risk_profile
 
@@ -254,6 +255,7 @@ def _source_refs(root: Path, facts: SceneFacts) -> tuple[str, ...]:
     refs.extend(reference for reference in _CORE_CANON if (root / reference).is_file())
     _append_existing(refs, root, _USER_DIRECTIONS)
     refs.extend(_character_sources(root, facts.participants))
+    refs.extend(_v2_character_sources(root))
     refs.extend(reference for reference in facts.canon_refs if _safe_file(root, reference))
     refs.extend(_rel(path, root) for path in active_style_evidence_paths(root))
     for reference in (
@@ -490,3 +492,9 @@ __all__ = [
     "known_scene_refs",
     "scene_input_revision",
 ]
+
+
+def _v2_character_sources(root):
+    if not read_creative_configuration(root)["overrides"].get("scene_creator_v2"):
+        return []
+    return [path.relative_to(root).as_posix() for path in (root / "characters").glob("*.yaml") if not path.name.startswith("_")]

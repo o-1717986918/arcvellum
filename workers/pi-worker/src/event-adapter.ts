@@ -4,6 +4,7 @@ import type { RuntimeEventSink, WorkerState } from "./contracts.ts";
 import type { ArtifactPreviewExtractor } from "./artifact-preview.ts";
 
 export class WorkerEventAdapter {
+    currentModelRequestId = "";
     private readonly usageAttempt = randomUUID();
 	private pendingReasoningEvents = 0;
 	private pendingReasoningCharacters = 0;
@@ -92,7 +93,9 @@ export class WorkerEventAdapter {
 
 	providerRequest(provider: string, model: string): void {
 		this.state.providerRequests += 1;
-		this.emit("runner.provider.request.started", { session_id: this.sessionId, provider, model });
+		this.currentModelRequestId = `${this.sessionId}-${this.usageAttempt}-request-${this.state.providerRequests}`;
+		this.emit("runner.provider.request.started", { session_id: this.sessionId, provider, model,
+			model_request_id: this.currentModelRequestId, count_unit: "model-turn" });
 	}
 
 	private handleMessageUpdate(value: unknown): void {
@@ -171,6 +174,10 @@ export class WorkerEventAdapter {
 			usage_id: `${this.sessionId}-${this.usageAttempt}-${index}`,
 			provider: String(message.provider ?? ""),
 			model: String(message.model ?? ""),
+			model_request_id: this.currentModelRequestId,
+			usage_semantics: "per-response",
+			usage_available: numberValue(usage.totalTokens) > 0,
+			cost_source: "runtime-model-catalog-estimate",
 			usage: {
 				input: numberValue(usage.input),
 				output: numberValue(usage.output),

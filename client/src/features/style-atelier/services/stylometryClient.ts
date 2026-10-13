@@ -1,4 +1,5 @@
 import { api, query } from "@/services/api";
+import type { StylePresetCatalog } from "../stylePresetTypes";
 import type { CorpusSource, CreatorControls, CreatorMount, FragmentRequest, MetricRow,
   ParameterImport, StyloCompiled, StyloJob, StyloMeasurement, StyloProfile, StyloVersion, StyloWorkbench } from "../stylometryTypes";
 
@@ -6,6 +7,14 @@ function post<T>(path: string, payload: unknown): Promise<T> {
   return api(`/stylometry/${path}`, { method: "POST", body: JSON.stringify(payload) });
 }
 export const stylometryClient = {
+  presets: (root: string) => api<StylePresetCatalog>(`/stylometry/presets?${query({ project_root: root })}`),
+  recalculatePreset: (root: string, id: string, revision: number) => post<StylePresetCatalog>(
+    `presets/${encodeURIComponent(id)}/recalculate`, { project_root: root, expected_revision: revision }),
+  initializePresets: (root: string) => post<StylePresetCatalog>("presets/initialize", { project_root: root }),
+  savePresets: (root: string, value: StylePresetCatalog) => api<StylePresetCatalog>("/stylometry/presets", {
+    method: "PUT", body: JSON.stringify({ project_root: root, expected_revision: value.revision,
+      enabled: value.enabled, default_preset_id: value.default_preset_id, presets: value.presets }),
+  }),
   workbench: (root: string) => api<StyloWorkbench>(`/stylometry/workbench?${query({ project_root: root })}`),
   profile: (root: string, id: string) => api<StyloProfile>(`/stylometry/profiles/${encodeURIComponent(id)}?${query({ project_root: root })}`),
   version: (root: string, id: string) => api<StyloVersion>(`/stylometry/versions/${encodeURIComponent(id)}?${query({ project_root: root })}`),

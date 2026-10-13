@@ -40,7 +40,7 @@ describe("prompt workbench", () => {
     const wrapper = mount(PromptWorkbench, { props: { projectRoot: "C:/Books/Work" } });
     await flushPromises();
     expect(api.promptCatalog).toHaveBeenCalledWith("");
-    expect((wrapper.findAll("textarea")[1].element as HTMLTextAreaElement).value).toBe("全局指引");
+    expect((wrapper.findAll(".prompt-workbench-columns textarea")[1].element as HTMLTextAreaElement).value).toBe("全局指引");
     api.resetPromptLayer.mockResolvedValue({ effective: { source: "package" } });
     await wrapper.findAll(".button-row button")[1].trigger("click");
     await flushPromises();
@@ -50,10 +50,10 @@ describe("prompt workbench", () => {
     await wrapper.find("select[aria-label='提示词范围']").setValue("project");
     await flushPromises();
     expect(api.promptCatalog).toHaveBeenCalledWith("C:/Books/Work");
-    expect((wrapper.findAll("textarea")[1].element as HTMLTextAreaElement).value).toBe("作品指引");
+    expect((wrapper.findAll(".prompt-workbench-columns textarea")[1].element as HTMLTextAreaElement).value).toBe("作品指引");
     await wrapper.find("select[aria-label='提示词范围']").setValue("global");
     await flushPromises();
-    expect((wrapper.findAll("textarea")[1].element as HTMLTextAreaElement).value).toBe("全局指引");
+    expect((wrapper.findAll(".prompt-workbench-columns textarea")[1].element as HTMLTextAreaElement).value).toBe("全局指引");
   });
 
   it("edits literary guidance, activates history, and keeps protocol read only", async () => {
@@ -78,7 +78,7 @@ describe("prompt workbench", () => {
     const { default: PromptWorkbench } = await import("./PromptWorkbench.vue");
     const wrapper = mount(PromptWorkbench, { props: { projectRoot: "C:/Books/Work" } });
     await flushPromises();
-    await wrapper.findAll("textarea")[1].setValue("请让读者先误认这场沉默");
+    await wrapper.findAll(".prompt-workbench-columns textarea")[1].setValue("请让读者先误认这场沉默");
     await wrapper.find(".primary-button").trigger("click");
     await flushPromises();
     expect(api.savePromptLayer).toHaveBeenCalledWith("scene.creator.identity", {
@@ -93,7 +93,7 @@ describe("prompt workbench", () => {
     await wrapper.findAll(".prompt-tree-leaf")[1].trigger("click");
     await flushPromises();
     expect(wrapper.find(".prompt-fixed-template pre").text()).toBe("协议");
-    expect(wrapper.findAll("textarea")).toHaveLength(0);
+    expect(wrapper.findAll(".prompt-workbench-columns textarea")).toHaveLength(0);
     expect(wrapper.find(".primary-button").exists()).toBe(false);
     await wrapper.find(".prompt-tree-stage").trigger("click");
     expect(wrapper.findAll(".prompt-tree-leaf")).toHaveLength(0);

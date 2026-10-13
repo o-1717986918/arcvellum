@@ -6,6 +6,7 @@ import type {
   CreativeSession,
   SceneTransactionSummary,
 } from "./types";
+import { reduceAccounting } from "./usageAccounting";
 
 const MAX_ARTIFACT_CHARS = 2_000_000;
 const MAX_TRANSCRIPT_CHARS = 120_000;
@@ -21,7 +22,8 @@ export function applyCreativeEvent(snapshot: CreativeLiveSnapshot, event: Creati
   const reviews = event.channel === "review"
     ? [...snapshot.reviews, reviewFrom(event)].slice(-120)
     : snapshot.reviews;
-  const usage = event.channel === "usage" ? reduceUsage(snapshot.usage, event) : snapshot.usage;
+  const usage_accounting = reduceAccounting(snapshot,event);
+  const usage = { total_tokens: usage_accounting.total_tokens, cost_usd: usage_accounting.cost_usd, updates: usage_accounting.updates };
   const transaction = transactionFrom(event, snapshot.active_scene_transaction);
   const sceneTransactions = transaction
     ? reduceSceneTransactions(snapshot.scene_transactions || [], transaction)
@@ -34,6 +36,7 @@ export function applyCreativeEvent(snapshot: CreativeLiveSnapshot, event: Creati
     activity,
     reviews,
     usage,
+    usage_accounting,
     active_scene_transaction: transaction || snapshot.active_scene_transaction || null,
     scene_transactions: sceneTransactions,
     events: [...snapshot.events, event].slice(-240),
@@ -41,7 +44,6 @@ export function applyCreativeEvent(snapshot: CreativeLiveSnapshot, event: Creati
     live_cursor: Math.max(Number(snapshot.live_cursor || 0), Number(event.sequence || 0)),
   };
 }
-
 function transactionFrom(
   event: CreativeLiveEvent,
   previous: SceneTransactionSummary | null,
@@ -161,14 +163,5 @@ function reviewFrom(event: CreativeLiveEvent) {
     status: String(event.data.status || ""),
     findings: Array.isArray(event.data.findings) ? event.data.findings : [],
     artifact_id: event.artifact?.artifact_id || "",
-  };
-}
-
-function reduceUsage(current: CreativeLiveSnapshot["usage"], event: CreativeLiveEvent): CreativeLiveSnapshot["usage"] {
-  const usage = typeof event.data.usage === "object" && event.data.usage ? event.data.usage as Record<string, unknown> : {};
-  return {
-    total_tokens: current.total_tokens + Number(usage.total_tokens || 0),
-    cost_usd: current.cost_usd + Number(event.data.cost_usd || 0),
-    updates: current.updates + 1,
   };
 }

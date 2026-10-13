@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 from hashlib import sha256
 import json
+import re
 from pathlib import Path
 
 from literary_engineering_studio_engine.public.prompting import prompt_layer_spec, resolve_prompt_layer, prompt_assembly_manifest
@@ -23,6 +24,8 @@ class LessAiToneExperimentMixin:
 
     def revise_scene(self, transaction_id, brief, result, verification, review, *, attempt):
         mount = self._tone_mount(transaction_id, brief)
+        if review is not None and review.decision.value != "pass":
+            self._focused_tone_result(transaction_id,brief,result,mount)
         revised = self._revise_scene(transaction_id, brief, result, verification, review, attempt=attempt)
         return self._tone_result(transaction_id, brief, revised, mount, f"revise-{attempt}")
 
@@ -32,8 +35,11 @@ class LessAiToneExperimentMixin:
             return json.loads(path.read_text(encoding="utf-8"))
         settings = self._config.get("application", {}).get("less_ai_tone_experiment", {})
         frozen_scene = tuple(path.parent.parent.glob("prompt_assembly_v*.json"))
+        bundle_path = self._cache_path(transaction_id, "transaction_style_bundle.json")
+        bundle = json.loads(bundle_path.read_text(encoding="utf-8")) if bundle_path.is_file() else None
         mount = {"schema": "arcvellum/less-ai-tone-mount/v1",
-                 "enabled": settings.get("enabled") is True and not frozen_scene,
+                 "mode": "focused-candidates",
+                 "enabled": bundle["tone_enabled"] if bundle else settings.get("enabled") is True and not frozen_scene,
                  "source_commit": SOURCE_COMMIT}
         if mount["enabled"]:
             if self._prompt_snapshot_provider:
@@ -54,10 +60,15 @@ class LessAiToneExperimentMixin:
     def _tone_result(self, transaction_id, brief, result, mount, phase, *, preserved_editor_answer=None):
         if not mount["enabled"]:
             return result
+        if mount.get("mode") == "focused-candidates":
+            return self._focused_tone_result(transaction_id,brief,result,mount)
         fingerprint = _digest({"phase": phase, "result": result.to_dict(), "mount": mount})
         directory = self._cache_path(transaction_id, f"less-ai-tone/{phase}-{fingerprint[:24]}")
         report_path = directory / "report.json"
+        if not report_path.is_file() and preserved_editor_answer is None:
+            return self._focused_tone_result(transaction_id,brief,result,mount)
         protected = _protected(brief, result)
+        self._measure_creator_style(transaction_id, result)
         if report_path.is_file():
             report = json.loads(report_path.read_text(encoding="utf-8"))
             cleaned, accepted, _ = apply_tone_edits(result.prose, report["accepted"], protected)
@@ -81,7 +92,7 @@ class LessAiToneExperimentMixin:
                 "请回看本场已经完成的正文，提出具体的局部修改建议。\n" + json.dumps(context, ensure_ascii=False))
             answer_path.write_text(answer, encoding="utf-8")
         processor = NaturalOutputProcessor(directory, mount["texts"][EXTRACTOR],
-            lambda system, prompt: self._tone_invoke(transaction_id, system, prompt, role="reviewer"))
+            lambda system, prompt: self._tone_invoke(transaction_id, system, prompt, role="transport"))
         payload = processor.process(answer, kind="tone", context=context)
         cleaned, accepted, rejected = apply_tone_edits(result.prose, payload.get("edits"), protected)
         (directory / "cleaned.md").write_text(cleaned, encoding="utf-8")
@@ -97,9 +108,94 @@ class LessAiToneExperimentMixin:
                 "report_path": str(report_path), "message": f"主创局部清理完成：{len(accepted)} 处修改，{len(rejected)} 条建议保留原文。"})
         return _delivery(result, cleaned, accepted)
 
-    def _tone_invoke(self, transaction_id, system, prompt, role="worker"):
+    def _focused_tone_result(self, transaction_id, brief, result, mount):
+        if not mount.get("enabled"):
+            return result
+        body_digest = _text_digest(result.prose)
+        focus_path = self._cache_path(transaction_id,"editor-focus/"+body_digest+".json")
+        if not focus_path.is_file():
+            return result
+        request = json.loads(focus_path.read_text(encoding="utf-8"))
+        focus = [row for row in request.get("focus",[]) if isinstance(row,dict)
+                 and str(row.get("issue") or "").strip()
+                 and row.get("excerpt") and row["excerpt"] in result.prose]
+        formatted = self._local_tone_format(transaction_id,brief,result,focus)
+        focus = [row for row in focus if row.get("operation") != "trailing-whitespace"]
+        if not focus:
+            return formatted
+        context = {"prose":"\n\n".join(dict.fromkeys(row["excerpt"] for row in focus)),
+            "focus":focus,"scene_brief":brief.to_dict(),"scene_delta":result.scene_delta.to_dict(),
+            "author_intent":result.decision_summary,"source_sha256":body_digest}
+        key = _digest({"context":context,"mount":mount})
+        directory = self._cache_path(transaction_id,"less-ai-tone/focused-"+key[:24])
+        report_path = directory/"report.json"
+        report = self._focused_editor_report(transaction_id,brief,result,mount,context,directory,key)
+        _save(self._cache_path(transaction_id,"editor-candidates/"+body_digest+".json"),
+            {"source_sha256":body_digest,"candidates":report["candidates"],"report":str(report_path)})
+        if formatted.prose != result.prose:
+            _save(self._cache_path(transaction_id,"editor-candidates/"+_text_digest(formatted.prose)+".json"),
+                {"source_sha256":body_digest,"formatted_sha256":_text_digest(formatted.prose),
+                 "candidates":report["candidates"],"report":str(report_path)})
+        return formatted
+
+    def _focused_editor_report(self,transaction_id,brief,result,mount,context,directory,key):
+        body_digest = _text_digest(result.prose)
+        focus = context["focus"]
+        report_path = directory/"report.json"
+        if report_path.is_file():
+            report = json.loads(report_path.read_text(encoding="utf-8"))
+            if report["original_sha256"] != body_digest:
+                raise ValueError("focused editing source changed")
+            self._cache_hits += 1
+        else:
+            directory.mkdir(parents=True,exist_ok=True)
+            (directory/"original.md").write_text(result.prose,encoding="utf-8")
+            answer_path = directory/"editor-answer.md"
+            if answer_path.is_file():
+                answer = answer_path.read_text(encoding="utf-8")
+            else:
+                answer = self._tone_invoke(transaction_id,render_style(mount["texts"][EDITOR],mount["style"]),
+                    "针对这些具体问题提出局部建议。原作者在已有返修中决定如何采用。\n"+json.dumps(context,ensure_ascii=False))
+                answer_path.write_text(answer,encoding="utf-8")
+            payload = NaturalOutputProcessor(directory,mount["texts"][EXTRACTOR],
+                lambda system,prompt:self._tone_invoke(transaction_id,system,prompt,role="transport")).process(
+                    answer,kind="tone",context=context)
+            _,candidates,rejected = apply_tone_edits(context["prose"],payload.get("edits"),_protected(brief,result))
+            report = {"schema":"arcvellum/less-ai-tone-report/v2","original_sha256":body_digest,
+                "original":result.prose,"cleaned":result.prose,"focus":focus,"candidates":candidates,
+                "accepted":[],"rejected":rejected,"summary":payload.get("summary",""),
+                "delivery":"original-author-revision-candidates","input_digest":key}
+            _save(report_path,report)
+            if self._event_sink:
+                self._event_sink("scene.less-ai-tone.candidates",{"scene_transaction_id":transaction_id,
+                    "scene_id":brief.scene_id,"candidate_count":len(candidates),"rejected_count":len(rejected),
+                    "report_path":str(report_path),"message":"局部编辑建议已保存，交给原主创已有返修判断。"})
+        return report
+
+    def _local_tone_format(self,transaction_id,brief,result,focus):
+        edits = []
+        for row in focus:
+            if row.get("operation") != "trailing-whitespace":
+                continue
+            after = re.sub(r"[ \t]+(?=\n|$)","",row["excerpt"])
+            if after != row["excerpt"]:
+                edits.append({"rule_id":"11","before":row["excerpt"],"after":after,"reason":row["issue"]})
+        if not edits:
+            return result
+        cleaned,accepted,rejected = apply_tone_edits(result.prose,edits,_protected(brief,result))
+        _save(self._cache_path(transaction_id,"less-ai-tone/local-format-"+_text_digest(result.prose)+".json"),
+            {"original":result.prose,"cleaned":cleaned,"accepted":accepted,"rejected":rejected,
+             "operation":"trailing-whitespace","model_calls":0})
+        return replace(result,prose=cleaned) if accepted else result
+
+    def _tone_candidates(self,transaction_id,prose):
+        path = self._cache_path(transaction_id,"editor-candidates/"+_text_digest(prose)+".json")
+        return json.loads(path.read_text(encoding="utf-8")) if path.is_file() else None
+
+    def _tone_invoke(self, transaction_id, system, prompt, role="worker", *, purpose=None):
         return self._run(json.dumps({"schema": "arcvellum/default-conversation/v1",
-            "system_prompt": system, "prompt": prompt}, ensure_ascii=False),
+            "system_prompt": system, "prompt": prompt,
+            "call_purpose":purpose or ("record-repair" if role=="transport" else "local-edit")}, ensure_ascii=False),
             role=role, transaction_id=transaction_id)
 
 

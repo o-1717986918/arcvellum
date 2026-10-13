@@ -7,7 +7,8 @@ from tempfile import NamedTemporaryFile
 from threading import RLock
 from uuid import UUID
 
-from ..application.style.stylometry_contracts import CreatorStyleSnapshot, StylometryProfile, StylometryVersion, StylometryJob
+from ..application.style.stylometry_contracts import (CreatorStyleSnapshot, StylometryProfile, StylometryVersion,
+    StylometryJob, StylePresetV1, StylePresetCollectionV1)
 from ..project_agent.scope import work_id_for_root
 from .stylometry_lock import mount_lock
 
@@ -75,6 +76,26 @@ class FileStylometryRepository:
                 raise ValueError("挂载状态已更新，请刷新后重新选择。")
             updated = replace(snapshot, revision=current.revision + 1)
             _write(self._directory(root) / "mount.json", root, asdict(updated))
+            return updated
+
+    def presets(self, root):
+        path = self._directory(root) / "presets.json"
+        if not path.is_file():
+            return StylePresetCollectionV1()
+        payload = _read(path, root)
+        rows = tuple(StylePresetV1(**{**item, "narrative_modes": tuple(item["narrative_modes"]),
+                                     "reference_ids": tuple(item["reference_ids"])}) for item in payload["presets"])
+        return StylePresetCollectionV1(payload["revision"], payload["enabled"], payload["default_preset_id"], rows)
+
+    def save_presets(self, root, collection, expected_revision):
+        directory = self._directory(root)
+        with _LOCK, mount_lock(directory / "presets.lock"):
+            current = self.presets(root)
+            if type(expected_revision) is not int or expected_revision != current.revision:
+                raise ValueError("文风预设已更新，请刷新后重新保存。")
+            updated = replace(collection, revision=current.revision + 1)
+            _write(directory / "preset-history" / f"{updated.revision}.json", root, asdict(updated))
+            _write(directory / "presets.json", root, asdict(updated))
             return updated
 
     def jobs(self, root):

@@ -36,6 +36,10 @@ def recent_lean_reference_ids(data_root: Path, scene_id: str, mount: dict[str, s
 def scene_reference_context(project_root: Path, scene_id: str, brief: dict[str, Any]) -> str:
     """Use scene-specific prose facts, excluding repeated template and rhythm boilerplate."""
 
+    project_path = project_root / "project.yaml"
+    project = YAML(typ="safe").load(project_path.read_text(encoding="utf-8")) if project_path.is_file() else {}
+    creative = project.get("creative_brief", {}) if isinstance(project, dict) else {}
+    aesthetic = {key: creative.get(key) for key in ("genre", "themes", "audience") if creative.get(key)}
     brief_cues = {
         key: brief.get(key)
         for key in ("scene_id", "objective", "location", "participants", "viewpoint", "scene_function", "external_conflict", "internal_conflict")
@@ -43,7 +47,7 @@ def scene_reference_context(project_root: Path, scene_id: str, brief: dict[str, 
     }
     path = project_root / "scenes" / f"{scene_id}.yaml"
     if not path.is_file():
-        return json.dumps(brief_cues, ensure_ascii=False, sort_keys=True)
+        return json.dumps({"brief": brief_cues, "aesthetic_context": aesthetic}, ensure_ascii=False, sort_keys=True)
     try:
         scene = YAML(typ="safe").load(path.read_text(encoding="utf-8")) or {}
     except (OSError, ValueError, YAMLError):
@@ -59,8 +63,10 @@ def scene_reference_context(project_root: Path, scene_id: str, brief: dict[str, 
         "actions": scene.get("actions"), "revealed_info": scene.get("revealed_info"),
         "tension_source": experience.get("tension_source"),
         "scene_function": rhythm.get("scene_function"),
+        "narrative_strategy": scene.get("narrative_strategy"),
+        "chapter_literary_task": scene.get("chapter_literary_task"),
     }
-    return json.dumps({"brief": brief_cues, "scene_cues": cues}, ensure_ascii=False, sort_keys=True)
+    return json.dumps({"brief": brief_cues, "scene_cues": cues, "aesthetic_context": aesthetic}, ensure_ascii=False, sort_keys=True)
 
 
 def _read_selection(path: Path) -> dict[str, Any]:

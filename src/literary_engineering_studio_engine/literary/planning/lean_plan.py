@@ -17,7 +17,7 @@ _SCENE_FIELDS = (
 )
 _NARRATIVE_FIELDS = (
     "narrative_mode", "temporal_structure", "viewpoint_design",
-    "pacing_design", "structural_signature",
+    "pacing_design", "structural_signature", "narrator_voice", "world_presentation",
 )
 
 
@@ -173,6 +173,7 @@ def _chapters(rows: list[dict[str, Any]], chapters: list[object]) -> list[dict[s
             "dramatic_turn": turn,
             "obligation": _text(item.get("obligation"), "chapter obligation"),
             "reader_question": _text(item.get("reader_question"), "reader question"),
+            "literary_task": str(item.get("literary_task") or item.get("obligation") or "").strip(),
         })
     return clean
 
@@ -180,8 +181,10 @@ def _chapters(rows: list[dict[str, Any]], chapters: list[object]) -> list[dict[s
 def _narrative_design(value: object) -> dict[str, str]:
     if not isinstance(value, dict):
         return {}
-    return {field: str(value.get(field) or "").strip()[:500]
-            for field in _NARRATIVE_FIELDS if str(value.get(field) or "").strip()}
+    design = {field: str(value.get(field) or "").strip() for field in _NARRATIVE_FIELDS if str(value.get(field) or "").strip()}
+    if any(len(text) > 8000 for text in design.values()) or sum(map(len, design.values())) > 32000:
+        raise ValueError('narrative design exceeds context capacity; shorten the plan explicitly')
+    return design
 
 
 def _characters(characters: object) -> list[dict[str, str]]:
@@ -223,9 +226,9 @@ def normalize_scene_window(
     for offset, item in enumerate(answer):
         if not isinstance(item, dict):
             raise ValueError("scene plan must be an object")
-        participants = item.get("participants")
-        if not isinstance(participants, list) or not participants:
-            raise ValueError("scene participants must be a nonempty list")
+        participants = item.get("participants", [])
+        if not isinstance(participants, list):
+            raise ValueError("scene participants must be a list")
         people = [_text(person, "scene participant") for person in participants]
         normalized.append({
             "scene_id": f"scene_{start_index + offset:04d}",
@@ -234,7 +237,9 @@ def normalize_scene_window(
             "target_chars": targets[offset],
             "story_time": str(item.get("story_time") or "").strip()[:200],
             "participants": people,
-            **{field: _text(item.get(field), f"scene {field}") for field in _SCENE_FIELDS},
+            **{field: (_text(item.get(field), f"scene {field}") if field in {"name", "function", "obligation"}
+                       else str(item.get(field) or "").strip()) for field in _SCENE_FIELDS},
+            "narrative_strategy": str(item.get("narrative_strategy") or "").strip(),
             "rhythm_role": normalize_rhythm_role(
                 item.get("rhythm_role"), item.get("function")
             ),
@@ -249,7 +254,8 @@ def chapter_obligations(plan: dict[str, Any]) -> dict[str, dict[str, str]]:
             "promised_reward": str(chapter["obligation"]),
             "withheld_information": "",
             "payoff_or_delay": str(chapter["dramatic_turn"]),
-            "anti_summary_requirement": "关键改变须通过行动和后果呈现。",
+            "literary_task": str(chapter.get("literary_task") or chapter["obligation"]),
+            "anti_summary_requirement": "",
             "chapter_ending_hook": str(chapter["dramatic_turn"]),
         }
         for chapter in plan["chapters"]

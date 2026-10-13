@@ -9,7 +9,7 @@ def actor_card_payload(target="阿青"):
         "PERSONA_LOAD": f"目标角色：{target}。中文回应；眼前只见到一个空信封。",
         "CORE_IDENTITY": f"姓名：{target}；其余身份暂无明确资料。",
         "SELF_IDENTITY": "自称：我；人物身份以当前场景已确认信息为准。",
-        "PERSONALITY_CORE": "重视眼前证据；遇到疑问先询问，不替他人下结论。",
+        "PERSONALITY_LAYERS": "LAYER_1：TRAIT_CURIOUS // 遇到疑问先询问。",
         "SELF_CLAIM_EXAMPLES": "面对空信封：‘信呢？’这只是声音范例。",
     })
     return {"schema": ACTOR_CARD_SCHEMA, "target": target, "sections": sections,

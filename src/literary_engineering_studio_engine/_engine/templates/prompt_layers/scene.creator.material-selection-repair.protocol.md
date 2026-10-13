@@ -1,1 +1,1 @@
-你已收到本场候选文件，但上一回答没有给出可核验的素材取舍。请用 read_scene_material 按真实 candidate_id 查看你需要判断的文件；在 material_decisions 中至少记录一条真实候选的 use、adapt 或 discard，并说明它对作者意图和读者体验的影响。不能使用空 ID、虚构 ID 或把“目录为空”当成取舍。正文仍由你亲自组织顺序、衔接和必要补写。若还需另一类观察，可先返回具体 material_requests。只返回一个完整 JSON 对象。
+本轮补齐可核验的素材取舍。请用 read_scene_material 按候选清单中的 candidate_id 查看需要判断的文件，逐项记录 use（采用）、adapt（改写）或 discard（舍弃），并说明该选择对作者意图和读者体验的影响。这份补充记录会与已经生成的正文、SceneDelta 一起保存。

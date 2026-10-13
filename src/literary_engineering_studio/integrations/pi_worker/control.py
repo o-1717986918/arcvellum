@@ -16,7 +16,7 @@ from .installation import locate_pi_worker
 
 _PROVIDER_ID = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
 _MODEL_ROLES = (
-    "worker", "reviewer", "planner", "advisor", "steward", "style", "archaeology",
+    "worker", "reviewer", "planner", "advisor", "steward", "style", "archaeology", "transport",
     "character-actor", "environment-writer", "character-describer", "event-narrator", "scene-describer",
 )
 
@@ -74,7 +74,7 @@ def _run_catalog(executable: str, entrypoint: Path, auth_path: Path) -> dict[str
 def _selected_models(settings: dict[str, Any], selected: str) -> dict[str, str]:
     role_models = settings.get("models") if isinstance(settings.get("models"), dict) else {}
     return {
-        role: str(role_models.get(role) or selected)
+        role: str(role_models.get(role) or (role_models.get('reviewer') if role == 'transport' else None) or selected)
         for role in _MODEL_ROLES
     }
 

@@ -22,10 +22,11 @@ class ConfigTests(unittest.TestCase):
 
         self.assertEqual(pi_worker["model"], "deepseek/deepseek-v4-flash")
         self.assertEqual(
-            set(pi_worker["models"].values()),
+            {value for role, value in pi_worker["models"].items() if role != 'transport'},
             {"deepseek/deepseek-v4-flash"},
         )
         self.assertEqual(pi_worker["thinking"], "medium")
+        self.assertEqual(pi_worker['models']['transport'], '')
         self.assertEqual(pi_worker["project_agent_thinking"], "xhigh")
 
     def test_existing_shared_worker_thinking_does_not_lower_project_agent(self):

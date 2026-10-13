@@ -32,20 +32,29 @@ class SceneMaterialLibrary:
         return self.index_prompt()
 
     def index_prompt(self) -> str:
+        rows = self._read_entries()
+        if rows is None:
+            return "本场尚无取材文件；如需一级素材，请按文学目的请求相应 agent。"
+        if not rows:
+            return "本场尚无候选；如作者意图需要外部观察或人物自主回应，请先提交 material_requests。空目录不代表 agent 不可用。"
+        visible = [{key: row[key] for key in ("candidate_id", "kind", "target", "purpose", "scene_moment")}
+                   | ({"basis": row["basis"]} if row.get("basis") else {}) for row in rows]
+        return "可用素材文件目录（仅元数据，不含候选正文）：" + json.dumps(visible, ensure_ascii=False, separators=(",", ":"))
+
+    def candidate_ids(self) -> tuple[str, ...]:
+        return tuple(row['candidate_id'] for row in self._read_entries() or [])
+
+    def _read_entries(self):
         path = self.root / "index.json"
         if not path.is_file():
-            return "本场尚无取材文件；如需一级素材，请按文学目的请求相应 agent。"
+            return None
         value = json.loads(path.read_text(encoding="utf-8"))
         if not isinstance(value, dict) or value.get("schema") != self.SCHEMA:
             raise ValueError("scene material index is invalid")
         rows = value.get("entries")
         if not isinstance(rows, list):
             raise ValueError("scene material entries are invalid")
-        if not rows:
-            return "本场尚无候选；如作者意图需要外部观察或人物自主回应，请先提交 material_requests。空目录不代表 agent 不可用。"
-        visible = [{key: row[key] for key in ("candidate_id", "kind", "target", "purpose", "scene_moment")}
-                   | ({"basis": row["basis"]} if row.get("basis") else {}) for row in rows]
-        return "可用素材文件目录（仅元数据，不含候选正文）：" + json.dumps(visible, ensure_ascii=False, separators=(",", ":"))
+        return rows
 
 
 def _material_packet(rendered_materials: str) -> dict[str, Any]:

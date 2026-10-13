@@ -19,7 +19,7 @@ class V2PromptFlowTests(unittest.TestCase):
                   for stage in group["children"] for leaf in stage["children"]]
         v2 = [spec.layer_id for spec in list_prompt_layer_specs()
               if spec.layer_id.startswith(("scene.v2.", "project_agent.v2.")) or spec.layer_id == "project_agent.creator_persona.v2"]
-        self.assertEqual(len(v2), 27)
+        self.assertEqual(len(v2), 28)
         for layer_id in v2:
             with self.subTest(layer=layer_id):
                 self.assertEqual(leaves.count(layer_id), 1)

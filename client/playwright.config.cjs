@@ -4,6 +4,8 @@ const { defineConfig } = require("@playwright/test");
 
 const repositoryRoot = path.resolve(__dirname, "..");
 const visualRoot = path.join(repositoryRoot, "build", "orrery-visual");
+const venvPython = path.join(repositoryRoot, ".venv", process.platform === "win32" ? "Scripts/python.exe" : "bin/python");
+const visualPython = fs.existsSync(venvPython) ? `"${venvPython}"` : "python";
 const repositoryPythonPath = [
   path.join(repositoryRoot, "src"),
   process.env.PYTHONPATH,
@@ -40,7 +42,7 @@ module.exports = defineConfig({
   },
   webServer: [
     {
-      command: `python -m literary_engineering_studio serve --port ${apiPort}`,
+      command: `${visualPython} -m literary_engineering_studio serve --port ${apiPort}`,
       cwd: repositoryRoot,
       url: `http://127.0.0.1:${apiPort}/application/bootstrap`,
       reuseExistingServer: true,

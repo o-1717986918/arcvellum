@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import tempfile
 import unittest
+from ruamel.yaml import YAML
 from unittest.mock import patch
 
 from literary_engineering_studio.application.project_manager import create_project
@@ -20,6 +21,22 @@ from literary_engineering_studio.runtimes.pi_scene_style_history import scene_re
 
 
 class StyleReferenceProjectionTests(unittest.TestCase):
+    def test_author_comedy_intent_takes_priority_over_generic_relationship_match(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            with patch("literary_engineering_studio.application.project_manager.default_config_path", return_value=base / "config.json"):
+                root = Path(create_project(parent_directory=str(base), title="星光咖啡馆", folder_name="work")["path"])
+            project = root / "project.yaml"
+            yaml = YAML()
+            data = yaml.load(project.read_text(encoding="utf-8"))
+            data["creative_brief"]["genre"] = "日常，奇幻，喜剧"
+            with project.open("w", encoding="utf-8") as stream:
+                yaml.dump(data, stream)
+            context = scene_reference_context(root, "scene_0001", {"scene_function": "建立关系，定下喜剧基调"})
+            selection = select_active_style_references(root, context)
+            self.assertEqual(selection["references"][0]["unit_id"], "R07")
+            self.assertEqual(selection["selector_version"], "scene-reference-selector/2")
+
     def test_all_25_complete_units_are_indexed_reachable_and_verified(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             base = Path(temporary)
@@ -34,9 +51,9 @@ class StyleReferenceProjectionTests(unittest.TestCase):
             assert prompt is not None
             profile = (prompt.parent / "style-profile.md").read_text(encoding="utf-8")
             index = json.loads((prompt.parent / "reference-index.json").read_text(encoding="utf-8"))
-            self.assertEqual(len(index["units"]), 25)
+            self.assertEqual(len(index["units"]), 39)
             self.assertEqual(
-                [row["unit_id"] for row in index["units"]],
+                [row["unit_id"] for row in index["units"][:25]],
                 [f"R{number:02d}" for number in range(1, 26)],
             )
             for row in index["units"]:

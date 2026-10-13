@@ -210,7 +210,7 @@ function verdictLabel(value: unknown): string {
               </span>
             </header>
             <div class="style-evidence-metrics">
-              <article><Gauge :size="17" /><span><small>隔离评测</small><strong>{{ evaluation.overall_score ?? "待评测" }}</strong></span></article>
+              <article><Gauge :size="17" /><span><small>{{ evaluation.evidence_kind === "static-editorial-curation" ? "编辑整理" : "隔离评测" }}</small><strong>{{ evaluation.generation_effect === "not-verified" ? "生成效果待验收" : evaluation.overall_score ?? "待评测" }}</strong></span></article>
               <article><ShieldCheck :size="17" /><span><small>泄漏风险</small><strong>{{ verdictLabel(evaluation.leakage_risk_status || evaluation.risk_level) }}</strong></span></article>
               <article><BookCopy :size="17" /><span><small>提示词细节</small><strong>{{ promptQuality.detail_chars ? `${promptQuality.detail_chars} 字` : "待编译" }}</strong></span></article>
             </div>

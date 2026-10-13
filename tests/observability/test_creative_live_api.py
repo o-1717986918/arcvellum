@@ -48,6 +48,23 @@ class CreativeLiveApiTests(unittest.TestCase):
         self.client.close()
         self.temporary.cleanup()
 
+    def test_author_persona_edit_is_versioned_and_stale_edits_do_not_create_directions(self):
+        payload = {'project_root': str(self.project), 'expected_version': 0,
+                   'text': '你热爱森林的世界、风俗、奇异时间、华丽语言与热闹喜剧，乐于选择多种文学组织。',
+                   'reason': '作者明确调整主创文学志趣'}
+        saved = self.client.put('/creative-live/persona', json=payload)
+        self.assertEqual(saved.status_code, 200)
+        self.assertEqual(saved.json()['active_version'], 1)
+        path = self.project/'workflow/studio/user_directions.jsonl'
+        original = path.read_bytes()
+        rejected = self.client.put('/creative-live/persona', json=payload)
+        self.assertEqual(rejected.status_code, 400)
+        self.assertEqual(path.read_bytes(), original)
+        state = self.client.get('/creative-live/persona', params={'project_root': str(self.project)}).json()
+        self.assertEqual(state['history'][0]['text'], payload['text'])
+        preview = self.client.get('/creative-live/config', params={'project_root': str(self.project)}).json()
+        self.assertIn('scene_creator_v2', preview['effective'])
+
     def test_snapshot_and_revision_endpoints_share_the_same_artifact_identity(self) -> None:
         self._publish_preview("第一段。", revision=1)
         snapshot = self.client.get("/creative-live", params={"project_root": str(self.project)})
@@ -157,6 +174,12 @@ class CreativeLiveApiTests(unittest.TestCase):
         self.assertEqual(payload["active_scene_transaction"]["scene_id"], "scene_0007")
         self.assertEqual(payload["scene_transactions"][0]["status"], "prepared")
         self.assertNotIn(str(self.project), json.dumps(payload["scene_transactions"], ensure_ascii=False))
+        materials = self.client.get("/creative-live/scene-materials/scene-tx-api-1", params={"project_root": str(self.project)})
+        self.assertEqual(materials.status_code, 200)
+        self.assertEqual(materials.json()["inspection"]["schema"], "arcvellum/scene-material-inspection/v1")
+        self.assertEqual(materials.json()["inspection"]["materials"], [])
+        alien = self.client.get("/creative-live/scene-materials/other-tx", params={"project_root": str(self.project)})
+        self.assertEqual(alien.status_code, 400)
 
     def test_project_stream_starts_with_snapshot_then_real_event(self) -> None:
         self._publish_preview("流式候选。", revision=1)

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from ..infrastructure.lean_scene_runtime import build_lean_planning_service
+
 from pathlib import Path
 from typing import Any, Callable
 
@@ -106,7 +108,7 @@ class LeanSceneAutopilotHost:
             repository=self._scene_transactions,
             event_sink=lambda event, data: self._emit_event(run_id, event, data),
             transaction_events=_AutopilotSceneEvents(self._emit_event, run_id),
-            planning=LeanLongformPlanningService(
+            planning=build_lean_planning_service(
                 self._config,
                 data_root=data_root,
                 event_sink=lambda event, data: self._emit_event(run_id, event, data),

@@ -50,6 +50,12 @@ test("real corpus statistics, parameters, editable fragment, mount, measure and 
   await desk.getByRole("button", { name: "保存新版本", exact: true }).click();
   await expect(desk).toContainText("已保存新版本");
   await page.screenshot({ path: testInfo.outputPath("stylometry-desktop.png"), fullPage: true });
+  const previousVersion = (await (await request.get(endpoint)).json()).presets[0].stylometry_version_id;
+  await presets.getByRole("button", { name: "按所选参照重新统计", exact: true }).click();
+  await expect(presets).toContainText("已按选定参照生成新的真实画像和参数版本", { timeout: 30_000 });
+  const recomputed = await (await request.get(endpoint)).json();
+  expect(recomputed.presets[0].stylometry_version_id).not.toBe(previousVersion);
+  expect(recomputed.presets[0].literary_intent).toBe(intention);
   await desk.getByRole("button", { name: "主创挂载与测量", exact: true }).click();
   await expect(desk.locator(".stylo-content > section:visible pre").first()).toContainText(custom);
   await desk.getByRole("button", { name: "挂载所选版本", exact: true }).click();
@@ -148,3 +154,47 @@ async function checkLayout(page: Page, desk: ReturnType<Page["getByRole"]>, scre
   expect(first.y + first.height <= second.y + 1 || first.x + first.width <= second.x + 1).toBeTruthy();
   await page.screenshot({ path: screenshot, fullPage: true });
 }
+
+
+test("narrative presets link verified references, editable intent and live parameters", async ({ page, request }, testInfo) => {
+  const { api, root, desk, errors } = await openDesk(page, request);
+  const presets = desk.getByLabel("叙述方式文风预设");
+  await presets.getByRole("button", { name: "计算四类初始文风预设" }).click();
+  await expect(presets).toContainText("已从完整参照重新计算四类画像", { timeout: 30_000 });
+  await presets.getByRole("button", { name: "世界与风俗", exact: true }).click();
+  await expect(desk.locator(".stylo-parameter-deck")).toBeVisible();
+  const intention = "让地方风俗、季节与奇异日常充分展开，发展讲述者的热情与趣味。";
+  await presets.getByLabel("文学用途", { exact: true }).fill(intention);
+  await presets.getByRole("button", { name: "保存预设配置" }).click();
+  await expect(presets).toContainText("预设已保存");
+  const endpoint = api + "/stylometry/presets?project_root=" + encodeURIComponent(root);
+  const before = await (await request.get(endpoint)).json();
+  expect(before.presets).toHaveLength(4);
+  expect(before.reference_catalog.references).toHaveLength(33);
+  expect(before.presets.find((row: { preset_id: string }) => row.preset_id === "world-narration").literary_intent).toBe(intention);
+  await presets.getByText(/参照全文与来源/).click();
+  await presets.locator("summary").filter({ hasText: "S02" }).click();
+  await expect(presets).toContainText("核验原文");
+  await expect(presets.getByRole("link", { name: "原始出处" }).first()).toHaveAttribute("href", /gutenberg/);
+  await desk.getByLabel("拖动后自动挂载参数要求").check();
+  await expect(desk).toContainText("参数要求已保存并挂载");
+  const updated = await (await request.get(endpoint)).json();
+  expect(updated.revision).toBeGreaterThan(before.revision);
+  const selected = updated.presets.find((row: { preset_id: string }) => row.preset_id === "world-narration");
+  expect(selected.stylometry_version_id).not.toBe(before.presets[0].stylometry_version_id);
+  await page.screenshot({ path: testInfo.outputPath("narrative-presets-desktop.png"), fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect.poll(() => page.locator(".pa-thread-rail").evaluate(node => node.getBoundingClientRect().right)).toBeLessThanOrEqual(1);
+  await presets.scrollIntoViewIfNeeded();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBeTruthy();
+  expect(await presets.evaluate(node => node.scrollWidth <= node.clientWidth + 1)).toBeTruthy();
+  await page.screenshot({ path: testInfo.outputPath("narrative-presets-mobile.png"), fullPage: true });
+  await desk.getByRole("button", { name: "主创挂载与测量", exact: true }).click();
+  await desk.getByRole("button", { name: "卸载计量文风", exact: true }).click();
+  await expect(desk).toContainText("已卸载，后续新场景生效。");
+  expect((await (await request.get(endpoint)).json()).enabled).toBe(false);
+  await desk.getByRole("button", { name: "挂载所选版本", exact: true }).click();
+  await expect(desk).toContainText("已挂载，后续新场景生效。");
+  expect((await (await request.get(endpoint)).json()).enabled).toBe(true);
+  expect(errors).toEqual([]);
+});

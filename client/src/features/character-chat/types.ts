@@ -1,5 +1,5 @@
 export interface CharacterCard {
-  schema: "arcvellum/actor-character-card/v1";
+  schema: "arcvellum/actor-character-card/v1" | "arcvellum/actor-character-card/v2";
   target: string;
   sections: Record<string, string>;
   source_refs: string[];
@@ -15,7 +15,7 @@ export interface CharacterChatSession {
   turns: Array<{ message: string; answer: string; at: string }>;
 }
 export interface CharacterChatSetup {
-  sections: string[]; system_template: string;
+  sections: string[]; system_template: string; card_schema?: CharacterCard["schema"];
   cards: Array<{ card: CharacterCard; scene_id: string; digest: string }>;
   sessions: Array<{ session_id: string; target: string; updated_at: string }>;
 }

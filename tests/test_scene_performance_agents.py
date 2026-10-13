@@ -38,10 +38,6 @@ def _plan() -> dict[str, object]:
         }],
         "opening_direction": {"finish": False, "next_speaker": "character/protagonist", "beat_id": "b1",
                               "scene_change": "", "cue": "面对妹妹已经发现的抽屉", "director_note": ""},
-        "actor_prompts": {
-            "character/protagonist": "【PERSONA_LOAD】\nSELF_CLAIM_OLDER_BROTHER\nLANG_ZH_CN_ONLY\n\n【PERSONALITY_CORE】\nTRAIT_SENSITIVE_AND_GUARDED\n\n【PERSONALITY_PUBLIC】\nTRAIT_STUBBORN\n\nANTI_CONCISE",
-            "character/sister": "【PERSONA_LOAD】\nSELF_CLAIM_YOUNGER_SISTER\nLANG_ZH_CN_ONLY\n\n【PERSONALITY_CORE】\nTRAIT_CARES_FOR_BROTHER\n\n【PERSONALITY_PUBLIC】\nTRAIT_BRISK_AND_DRYLY_FUNNY\n\nANTI_CONCISE",
-        },
         "actor_tasks": {
             "character/protagonist": "面对妹妹对昨夜取信的怀疑，最终承认取信。",
             "character/sister": "发现抽屉被打开，向哥哥追问信的去向。",
@@ -184,144 +180,40 @@ class ScenePerformanceAgentTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "cover every participant"):
             parse_relay_plan(bad, brief)
 
-    def test_actor_initialization_is_pure_and_task_is_separate(self) -> None:
-        voice = {
-            "speaker": "姐姐", "role": "档案员", "belief": "承认比辩解有用",
-            "wants": "留住妹妹", "avoids": "承认自己害怕被抛下",
-            "roleplay_direction": "【PERSONA_LOAD】\nSELF_CLAIM_OLDER_SISTER\nROLE_ARCHIVIST\nLANG_ZH_CN_ONLY\n\n【PERSONALITY_CORE】\nTRAIT_WARM_BUT_STUBBORN\n\n【PERSONALITY_PUBLIC】\nTRAIT_GENTLE\n\nANTI_CONCISE",
-            "scene_task": "面对妹妹的追问，承认自己拿了信。",
-            "stable_voice": {"rhythm": "旧的长句规则不应进入角色任务"},
-            "voice_state": {"interlocutors": ["妹妹"], "known_facts": ["昨夜拿了信"]},
-        }
-        initialization = render_actor_initialization_prompt(voice)
-        task = render_actor_scene_prompt(_brief().to_dict(), _plan()["beats"], voice)
-        self.assertTrue(initialization.startswith('''【PERSONA_LOAD】
-SELF_CLAIM_OLDER_SISTER
-ROLE_ARCHIVIST
-LANG_ZH_CN_ONLY
-
-【PERSONALITY_CORE】
-EMOTION_RELATIONALLY_ALIVE
-TRAIT_WARM_BUT_STUBBORN
-
-【PERSONALITY_PUBLIC】
-TRAIT_GENTLE
-
-ANTI_CONCISE
-
-[LANGUAGE_STYLE]
-ANTI_PLAIN
-POLISHED
-ANTI_SHORT_SENTENCES
-
-[LITERATURE_STYLE]
-
-【角色沉浸要求】在你的思考过程（<think>标签内）中，请遵守以下规则：'''))
-        self.assertIn("1. 请以角色第一人称进行内心独白", initialization)
-        self.assertIn("2. 用第一人称描写角色的内心感受", initialization)
-        self.assertIn("3. 思考内容应沉浸在角色中", initialization)
-        self.assertIn("EMOTION_RELATIONALLY_ALIVE", initialization)
-        self.assertNotIn("scene_0001", initialization)
-        self.assertNotIn("JSON", initialization)
-        self.assertNotIn("本场角色任务单", initialization)
+    def test_actor_initialization_is_complete_card_and_task_is_separate(self) -> None:
+        card = "name: 姐姐\r\nspeech_style:\r\n  rhythm: 问话短，解释会绕弯。\r\n  examples: [信在我这里。]\r\n"
+        initialization = render_actor_initialization_prompt(card)
+        task = render_actor_scene_prompt(_brief().to_dict(), _plan()["beats"], {
+            "speaker": "姐姐", "scene_task": "面对妹妹的追问，承认自己拿了信。",
+        })
+        self.assertEqual(initialization, card)
         self.assertIn("面对妹妹的追问", task)
         self.assertIn("first_person_action", task)
-        self.assertIn("private_impulse", task)
-        self.assertNotIn("角色沉浸要求", task)
-        self.assertNotIn("旧的长句规则", task)
-        self.assertNotIn("TRAIT_WARM_BUT_STUBBORN", task)
+        self.assertNotIn(card, task)
+        self.assertNotIn("角色沉浸要求", initialization)
+        self.assertNotIn("ANTI_SHORT_SENTENCES", initialization)
 
-    def test_actor_initialization_does_not_convert_chinese_short_traits_into_mixed_tags(self) -> None:
-        with self.assertRaisesRegex(ValueError, "three persona sections"):
-            render_actor_initialization_prompt({"name": "许遥", "roleplay_direction": "可爱的猫娘"})
-        with self.assertRaisesRegex(ValueError, "uppercase English"):
-            render_actor_initialization_prompt({"name": "许遥", "roleplay_direction":
-                "【PERSONA_LOAD】\nSELF_CLAIM_许遥\n\n【PERSONALITY_CORE】\nTRAIT_CUTE\n\n【PERSONALITY_PUBLIC】\nANTI_CONCISE"})
+    def test_actor_initialization_requires_an_actual_card(self) -> None:
+        for invalid in ("", "  ", {"roleplay_direction": "TRAIT_CUTE"}):
+            with self.subTest(invalid=invalid), self.assertRaisesRegex(ValueError, "complete character card"):
+                render_actor_initialization_prompt(invalid)
 
-    def test_actor_initialization_keeps_director_authored_fields_verbatim(self) -> None:
-        profile = '''【PERSONA_LOAD】
-SELF_CLAIM_ZHUANGFANGYI
-FOOD_WULING_FRIED_RICE
-LANG_ZH_CN_ONLY
+    def test_actor_initialization_preserves_long_card_and_last_voice_rule(self) -> None:
+        card = "name: 纪蔚\nbackground_story: |\n  " + "她欠朋友一个夜班。" * 1000 + "\nspeech_style:\n  rhythm: 短句，像交接记录。\n"
+        self.assertEqual(render_actor_initialization_prompt(card), card)
 
-【PERSONALITY_CORE】
-TRAIT_WARM_OUTSIDE_COLD_INSIDE
-TRAIT_BROKEN_BEAUTY
-
-【PERSONALITY_PUBLIC】
-TRAIT_GRACEFUL_CALM
-TRAIT_SINCERE_HUMBLE
-
-ANTI_CONCISE'''
-        emotional_profile = profile.replace(
-            "【PERSONALITY_CORE】", "【PERSONALITY_CORE】\nEMOTION_RELATIONALLY_ALIVE", 1,
-        )
-        self.assertTrue(render_actor_initialization_prompt({
-            "name": "庄方怡", "roleplay_direction": profile,
-        }).startswith(emotional_profile + "\n\n[LANGUAGE_STYLE]\nANTI_PLAIN\nPOLISHED\nANTI_SHORT_SENTENCES\n\n[LITERATURE_STYLE]\n\n【角色沉浸要求】"))
-        custom = profile + "\n\n[LANGUAGE_STYLE]\nSPEAK_WITH_PLAYFUL_RHYTHM"
-        self.assertTrue(render_actor_initialization_prompt({
-            "name": "庄方怡", "roleplay_direction": custom,
-        }).startswith(emotional_profile + "\n\n[LANGUAGE_STYLE]\nANTI_PLAIN\nPOLISHED\nANTI_SHORT_SENTENCES\nSPEAK_WITH_PLAYFUL_RHYTHM\n\n[LITERATURE_STYLE]\n\n【角色沉浸要求】"))
-        partial = profile + "\n\n[LANGUAGE_STYLE]\nPOLISHED\nVOICE_WRY_AND_WARM"
-        self.assertTrue(render_actor_initialization_prompt({
-            "name": "庄方怡", "roleplay_direction": partial,
-        }).startswith(emotional_profile + "\n\n[LANGUAGE_STYLE]\nANTI_PLAIN\nANTI_SHORT_SENTENCES\nPOLISHED\nVOICE_WRY_AND_WARM\n\n[LITERATURE_STYLE]\n\n【角色沉浸要求】"))
-        literary = partial + "\n\n[LITERATURE_STYLE]\nKAFKA_LIKE\nABSURDITY_STYLE"
-        rendered = render_actor_initialization_prompt({"name": "庄方怡", "roleplay_direction": literary})
-        self.assertIn("[LITERATURE_STYLE]\nKAFKA_LIKE\nABSURDITY_STYLE\n\n【角色沉浸要求】", rendered)
-        self.assertEqual(rendered.count("【角色沉浸要求】"), 1)
-        self.assertNotIn("角色沉浸要求", profile)
-
-    def test_director_leaves_micro_tactics_to_character_actor(self) -> None:
+    def test_director_plans_scene_tasks_with_personality_from_cards(self) -> None:
         prompt = render_performance_plan_prompt(_brief().to_dict(), {}, "昨夜拿了信。")
-        self.assertIn("具体台词、手势和临场反应由演员自己选择", prompt)
-        self.assertIn("区块和字段数量可自由调整", prompt)
-        self.assertIn('SELF_CLAIM_ROMANIZED_NAME', prompt)
-        self.assertIn('TRAIT_OWN_ARCHETYPE', prompt)
-        self.assertIn('VOICE_RELATIONAL_TEMPERAMENT', prompt)
-        self.assertIn('EMOTION_FIERCE_TENDERNESS', prompt)
-        self.assertIn('ATTR_EMOTION_THROUGH_PERCEPTION', prompt)
-        self.assertIn('[LANGUAGE_STYLE]', prompt)
-        self.assertIn('[LITERATURE_STYLE]', prompt)
-        self.assertIn('AUTHOR_LIKE', prompt)
-        self.assertIn('ANTI_PLAIN', prompt)
-        self.assertIn('POLISHED', prompt)
-        self.assertIn('ANTI_SHORT_SENTENCES', prompt)
-        self.assertIn('从人物档案、关系和过往选择中', prompt)
-        self.assertIn('傲娇与依恋', prompt)
-        self.assertIn('不设固定标签数量', prompt)
-        self.assertIn('叙事职能、本场任务与具体动作进入后续场景资料', prompt)
-        self.assertIn('人格和口头气质标签应当换一个场景仍然成立', prompt)
-        self.assertIn('CADENCE_OWN_LITERARY_RHYTHM', prompt)
-        self.assertIn('actor_tasks 给此人一个有生活感的起点', prompt)
-        self.assertIn('概括此人面对人的口头气质', prompt)
-        self.assertIn('先让玩笑者亲自演出，使后来的角色真能听见并误解', prompt)
-        self.assertIn('若误称来自另一人的玩笑或暗示，先让玩笑者亲自演出', prompt)
-        self.assertIn('cue 写清主要对话对象、可感的起因和关系压力', prompt)
-        self.assertIn('从已知场地、人物和事件自然生长', prompt)
-        self.assertIn('若一人的关键言行构成另一人回应的前因，先让前者获得自己的轮次', prompt)
-        self.assertIn('此人主要面对谁、凭什么开口、关系压力何在', prompt)
-        self.assertIn('平实、短促、克制、清单感等语言倾向是否适合人物', prompt)
-        self.assertNotIn('ANTI_CONCISE', prompt)
-        self.assertNotIn('TRAIT_内在性情', prompt)
-        self.assertIn("actor_prompts", prompt)
+        self.assertIn("人物的稳定人格、经历、习惯和声音完整来自角色卡", prompt)
         self.assertIn("actor_tasks", prompt)
+        self.assertNotIn("actor_prompts", prompt)
+        self.assertNotIn("ANTI_PLAIN", prompt)
+        self.assertNotIn("ANTI_SHORT_SENTENCES", prompt)
+        self.assertIn("cue 写清主要对话对象、可感的起因和关系压力", prompt)
+        self.assertIn("若一人的关键言行构成另一人回应的前因，先让前者获得自己的轮次", prompt)
         self.assertIn("environment_initialization", prompt)
-        self.assertIn("opening_direction", prompt)
         self.assertIn("【SCENE_LOAD】", prompt)
-        self.assertIn("[LITERATURE_STYLE]", prompt)
         self.assertIn("[NOW_TO_DO]", prompt)
-        self.assertIn("ATTR_SENSORY_TRANSFORMATION", prompt)
-        self.assertIn("ATTR_LYRICAL_VARIATION", prompt)
-        self.assertIn("MOVEMENT_SYMBOLISM", prompt)
-        self.assertIn("具体天气、光线、物件、地点、颜色、动作和某一场的意象放到后续场景资料里", prompt)
-        self.assertNotIn("SENSE_ORDER_LIGHT_AIR_SOUND_TOUCH_SMELL", prompt)
-        self.assertNotIn("ATTR_CINEMATIC_AND_RESTRAINED", prompt)
-        self.assertIn("数量不限", prompt)
-        self.assertNotIn("response_boundary", prompt)
-        self.assertNotIn("speech_act", prompt)
-        self.assertNotIn("voice_turn", prompt)
 
     def test_malformed_plan_reply_gets_one_clean_retry(self) -> None:
         calls = []
@@ -332,7 +224,7 @@ ANTI_CONCISE'''
             return valid + ',"orphan":true' if len(calls) == 1 else valid
 
         result = _generate_performance_plan(_brief().to_dict(), {}, "", invoke)
-        self.assertEqual(set(result["actor_prompts"]), set(_brief().participants))
+        self.assertEqual(set(result["actor_tasks"]), set(_brief().participants))
         self.assertEqual(len(calls), 2)
         self.assertIn("完整 JSON 对象", calls[1][0])
 
@@ -348,8 +240,8 @@ ANTI_CONCISE'''
 
     def test_environment_prompt_allows_uneven_free_observation(self) -> None:
         prompt = render_environment_prompt(_brief().to_dict(), _plan()["beats"], "", "")
-        self.assertIn("沿用你的初始化方式", prompt)
-        self.assertIn("自行选择值得停留的观察时刻、段落长短和语言节奏", prompt)
+        self.assertIn("沿用你的文学身份", prompt)
+        self.assertIn("选择适合的地方尺度、时间跨度与感官组织", prompt)
         self.assertIn("零至四段", prompt)
 
     def test_actor_relay_separates_actual_public_history_from_pending_plot(self) -> None:
@@ -396,7 +288,7 @@ ANTI_CONCISE'''
     def test_environment_prompt_uses_scene_facts_without_prescribing_style(self) -> None:
         prompt = render_environment_prompt(_brief().to_dict(), _plan()["beats"], "参考语言起伏", "信在桌上", _plan()["unknown_slots"])
         self.assertIn("场景事实和线索以来源为准", prompt)
-        self.assertIn("自行决定在哪些时刻写", prompt)
+        self.assertIn("篇幅依据本次文学任务", prompt)
         self.assertNotIn("Main Creator's Scene-Specific Perception Boundary", prompt)
         self.assertIn("门外的具体天气尚未确认", prompt)
         self.assertIn("普通感官细节可以自由选择", prompt)
@@ -404,7 +296,7 @@ ANTI_CONCISE'''
             "beat_id": _plan()["beats"][0]["beat_id"], "focal_character": "", "description": "风" * 500,
         }]}
         self.assertEqual(len(parse_environment_material(extended, _brief().to_dict(), _plan()["beats"])["passages"]), 1)
-        extended["passages"][0]["description"] = "风" * 601
+        extended["passages"][0]["description"] = "风" * 12001
         with self.assertRaisesRegex(ValueError, "too long"):
             parse_environment_material(extended, _brief().to_dict(), _plan()["beats"])
         self.assertNotIn("150—300", prompt)
@@ -490,7 +382,7 @@ ANTI_CONCISE'''
     def test_unknown_slots_are_factual_gaps_not_micro_direction(self) -> None:
         plan = parse_performance_plan(_plan(), _brief().to_dict())
         self.assertEqual(plan["unknown_slots"], ["门外的具体天气尚未确认"])
-        self.assertEqual(set(plan["actor_prompts"]), set(_brief().participants))
+        self.assertNotIn("actor_prompts", plan)
         self.assertEqual(set(plan["actor_tasks"]), set(_brief().participants))
         prompt = render_actor_scene_prompt(_brief().to_dict(), _plan()["beats"], {"speaker": "character/protagonist"}, plan["unknown_slots"])
         self.assertIn("门外的具体天气尚未确认", prompt)

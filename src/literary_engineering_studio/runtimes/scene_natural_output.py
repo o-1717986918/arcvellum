@@ -5,76 +5,36 @@ from hashlib import sha256
 import json
 from pathlib import Path
 from typing import Any, Callable, Mapping
+from .natural_field_repair import apply_field_patch, field_repair_task
+from .natural_authored_records import authored_record, replay_authored_patch
+from .evidence_patch_source import resolve_evidence_patches
+from .material_need import require_source_needs
 
-from .pi_scene_payload import _answer_payload
-from .commission_source_format import restore_commission_source, restore_tone_source
+from .commission_source_format import restore_commission_source, restore_tone_source, tone_text_matches_source
 from .natural_card_source import restore_labelled_card_sections
-from .archive_partition_transport import normalize_archive_partitions
-from .natural_material_response import whole_material_response
-from .creator_delivery_labels import resolve_creator_targets
+from .archive_partition_transport import normalize_archive_partitions, require_source_partition_choice
+from .creator_delivery_labels import resolve_creator_targets, recover_style_preset_id, recover_style_reference_ids, recover_style_list_format
 from .event_material_provenance import event_fields, recover_event_source_status
 from .scene_review_validation import validate_review_extraction
+from .natural_selection_pending import pending_selection, archive_notes_before_materials, validate_choice_ids, revalidate_pending_selection
+from .handoff_transport import restore_handoff_targets
+from .planning_reading import normalize_planning_weights
+from .actor_card_transport import actor_card_contract, card_section_schema
+from .natural_transport_pipeline import NaturalTransportPipeline
+from .natural_transport_repair import NaturalExtractionError, NaturalSourceClarificationError
+from .natural_local_delivery import explicit_creator_phase
+from .natural_delivery_phase import project_creator_phase
+from .creator_body_boundary import detach_creator_notes
+from .natural_editor_focus import recover_creator_editor_focus
+from .scene_integrity import validate_integrity_delivery
 from literary_engineering_studio_engine.public.literary import (
-    ACTOR_CARD_SECTIONS, parse_scene_material_requests_v4,
+    ACTOR_CARD_SECTIONS, ACTOR_CARD_SCHEMA, LEGACY_ACTOR_CARD_SCHEMA,
+    parse_scene_material_requests_v4, parse_creator_material_plan,
 )
 
 NATURAL_RESPONSE_MODE = "natural-v1"
 STYLE_TOKEN = "{{STYLE_DIRECTION}}"
-_CREATOR_CONTRACT = {
-    "material_plan": {"required_kinds": ["one or more of the five kind IDs"], "reason": "creator reason"},
-    "material_requests": [{"kind": "actor/environment/character-description/event-narration/scene-description",
-        "target": "actor/character-description: exact participant name from context.briefing.scene_brief.participants; other kinds: commission subject",
-        "purpose": "purpose", "scene_moment": "moment", "cue": "stimulus",
-        "author_prompt": "verbatim contiguous creator invitation from source_text",
-        "working_context": "verbatim contiguous creator note describing this call's current context, or empty",
-        "style_direction": "verbatim contiguous style from source_text, or empty when unstated",
-        "archive_attachments": [{"path": "relative archive path", "start_line": None,
-                                "end_line": None,
-                                "knowledge": "known or reference for actor; empty for other kinds"}],
-        "material_attachments": [{"candidate_id": "an explicitly selected candidate ID from this transaction",
-                                  "start_char": None, "end_char": None}],
-        "character_card": "actor only: schema arcvellum/actor-character-card/v1, target, sections mapping from the supplied sixteen template keys, source_refs list, notes"}],
-    "prose": "exact contiguous source text of completed body, or empty during preparation",
-    "decision_summary": "creator's working intention and decisions",
-    "creative_intent": {"reader_experience": "intended experience", "reader_knows": "intended understanding",
-                        "reader_misreads": "intended ambiguity", "withheld": "later revelation"},
-    "scene_delta": {"character_changes": [], "canon_candidates": [], "continuity_changes": [],
-        "promise_updates": [], "reader_question_updates": [], "next_handoff": [], "new_asset_candidates": []},
-    "material_decisions": [{"candidate_id": "existing ID", "decision": "use/adapt/discard", "reason": "creator's reason"}],
-}
-_MATERIAL_CONTRACT = {
-    "candidates": [{"text": "exact contiguous literary source text", "focus": "literary focus",
-        "spoken": "exact source speech for actor", "first_person_action": "exact actor action",
-        "private_impulse": "verbatim private impulse when explicitly present in source_text, otherwise empty",
-        "basis": "event only: confirmed/attributed/proposed",
-        "source_note": "event only: source or author's proposal note"}],
-    "no_material_reason": "reason if creator offers no material",
-}
-_REVIEW_CONTRACT = {
-    "decision": "pass/revise/escalate", "summary": "editor's judgment",
-    "strengths": [{"claim": "literary quality already working", "evidence": "verbatim excerpt from context.prose"}],
-    "major_issues": [{"title": "reading problem", "evidence": "verbatim excerpt from context.prose",
-        "reader_effect": "what the reader loses", "direction": "repair exploration",
-        "prior_issue_id": "matching open issue ID or empty when newly observed"}],
-    "optional_explorations": [{"question": "aesthetic possibility", "evidence": "verbatim current passage or empty",
-        "direction": "possible reader experience"}],
-    "issue_progress": [{"issue_id": "open issue ID from context.review_continuity",
-        "status": "resolved/persists/changed/uncertain",
-        "evidence": "verbatim current passage when it supports the status, otherwise empty"}],
-    "revision_instructions": [], "evidence": [],
-}
-CONTRACTS = {"creator": _CREATOR_CONTRACT, "material": _MATERIAL_CONTRACT, "review": _REVIEW_CONTRACT}
-CONTRACTS["tone"] = {"edits": [{"rule_id": "1 through 11", "before": "exact original fragment",
-    "after": "verbatim proposed replacement", "reason": "editor's stated literary reason"}],
-    "summary": "editor's summary; empty edits when text is retained"}
-CONTRACTS["card"] = {"card": {"schema": "arcvellum/actor-character-card/v1", "target": "target from context",
-    "sections": {key: "verbatim card section" for key in ACTOR_CARD_SECTIONS}, "source_refs": [], "notes": ""}}
-_CHANGE = {"target_ref": "reference in context.briefing.scene_brief.source_refs; narrative future handoffs use next_handoff",
-           "summary": "stated change",
-           "evidence": "verbatim source passage", "operation": "update/create", "attributes": {}}
-for _key in _CREATOR_CONTRACT["scene_delta"]:
-    if _key != "next_handoff":
-        _CREATOR_CONTRACT["scene_delta"][_key] = [_CHANGE]
+from .natural_output_contracts import CONTRACTS
 
 
 def render_style(template: str, direction: str) -> str:
@@ -85,10 +45,12 @@ def render_style(template: str, direction: str) -> str:
 
 def creator_style(briefing: Mapping[str, Any]) -> str:
     style = briefing.get("style") or {}
+    if (style.get("assembled") or {}).get("content"):
+        return style["assembled"]["content"]
     measured = style.get("stylometry") or {}
     keys = ("author_directive",) if measured.get("combine") == "replace" else ("author_directive", "mounted")
     return "\n\n".join(str(item.get("content") or "").strip()
-                        for key in (*keys, "stylometry")
+                        for key in (*keys, "preset_direction", "selected_strategy", "references", "stylometry")
                         if isinstance((item := style.get(key)), dict) and item.get("content"))
 
 
@@ -118,111 +80,140 @@ class NaturalOutputProcessor:
         self.validate_payload = validate_payload
 
     def _prepare(self, answer, payload, kind, context):
-        payload = _prepare_transport_payload(answer, payload, kind, context)
+        payload = _transport_payload(payload, kind)
+        if kind == 'creator' and context.get('creation_integrity_contract'):
+            validate_integrity_delivery(answer, payload, context)
+        payload = revalidate_pending_selection(answer, payload, kind, context, _verbatim)
+        try:
+            payload = _prepare_transport_payload(answer, payload, kind, context)
+        except NaturalSourceClarificationError as error:
+            error.payload = payload
+            raise
+        except ValueError as error:
+            payload = pending_selection(payload, kind, context, error)
+            payload = _prepare_transport_payload(answer, payload, kind, context)
         if self.validate_payload:
-            self.validate_payload(payload)
+            try:
+                self.validate_payload(payload)
+            except NaturalSourceClarificationError as error:
+                error.payload = payload
+                raise
+        if kind == 'creator':
+            validate_integrity_delivery(answer, payload, context)
+            require_source_needs(answer, payload, context)
+            payload['source_provenance'] = _commission_provenance(answer, payload, context)
         return payload
 
     def process(self, answer: str, *, kind: str, context: Mapping[str, Any], reuse_only=False) -> dict[str, Any]:
-        if not answer.strip() or len(answer) > 160_000:
-            raise ValueError("natural response is empty or exceeds the transport budget")
-        digest = sha256(answer.encode("utf-8")).hexdigest()
-        directory = self.root / "natural-answers" / digest
-        directory.mkdir(parents=True, exist_ok=True)
-        (directory / "original.md").write_text(answer, encoding="utf-8")
-        if kind == "material":
-            whole = whole_material_response(answer, context)
-            if whole is not None:
-                validate_extracted_text(answer, whole, kind, context)
-                return whole
-        context = {key: value for key, value in context.items() if key != "delivery_feedback"}
-        fingerprint = sha256(json.dumps(["verbatim-commission-v4", kind, context, self.system_prompt],
-            ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
-        cache = directory / (fingerprint + ".json")
-        issue = ""
-        if not cache.is_file():
-            self._reuse_legacy(answer, kind, context, directory, cache)
-        if reuse_only and not cache.is_file():
-            raise ValueError("saved source has no valid extraction for the current context")
-        if cache.is_file():
-            try:
-                payload = self._prepare(answer, json.loads(cache.read_text(encoding="utf-8")), kind, context)
-            except ValueError as error:
-                if reuse_only:
-                    raise
-                issue = str(error)
-                payload = self._extract(answer, kind, context, directory, fingerprint, issue)
-        else:
-            payload = self._extract(answer, kind, context, directory, fingerprint, issue)
-        if kind == "creator":
-            payload["source_provenance"] = _commission_provenance(answer, payload)
-        cache.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-        return payload
+        try:
+            return NaturalTransportPipeline(self.root, self.system_prompt, self.invoke, self._prepare, CONTRACTS).process(
+                answer, kind, context, reuse_only=reuse_only)
+        except (NaturalSourceClarificationError,NaturalExtractionError):
+            raise
+        except ValueError as error:
+            raise NaturalExtractionError(str(error)) from error
 
-    def _reuse_legacy(self, answer, kind, context, directory, cache):
-        legacy = sha256(json.dumps(["verbatim-commission-v3", kind, context, self.system_prompt],
-            ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
-        for prior in sorted(directory.glob(legacy + ".extraction*.md")):
+    def process_field_repair(self, source, reply, *, kind, context, payload, fields):
+        combined=source+'\n\n【原作者指定字段补交】\n'+reply
+        def prepare(_answer,patch,_kind,_context):
+            patch=replay_authored_patch(patch,source,reply,fields)
+            patch=resolve_evidence_patches(patch,str(payload.get('prose') or context.get('prose') or ''),fields)
+            merged=apply_field_patch(payload,patch,fields)
             try:
-                recovered = self._prepare(answer, _answer_payload(prior.read_text(encoding="utf-8")), kind, context)
-            except ValueError:
-                continue
-            recovered["reused_extraction"] = prior.name
-            cache.write_text(json.dumps(recovered, ensure_ascii=False, indent=2), encoding="utf-8")
-            break
-
-    def _extract(self, answer, kind, context, directory, fingerprint, issue):
-        task = {"operation": kind, "task_contract": CONTRACTS[kind], "source_text": answer, "context": context,
-            "transport_limits": {"candidate_count": 3, "candidate_chars": 2400,
-                "requests": 8, "author_prompt_chars": 6000, "style_chars": 8000}}
-        if kind == "material":
-            task["literal_annotation"] = "text 保留完整的连续原文。spoken、first_person_action、private_impulse 各用一个连续原文片段；对白穿插动作时可连同原动作取出。完整回应中分散的语句留在 text，相应独立标注使用空字符串。"
-        if kind == "creator":
-            task["archive_knowledge_values"] = {
-                "known": ["role_known_archive", "character_known", "角色可知区"],
-                "reference": ["director_reference_archive", "creator_reference", "主创参考区"],
-                "instruction": "依据目标角色在原文被明确分配的资料，逐条使用 known 或 reference 作为 knowledge 值；原文未选择分区时使用空字符串。分区名称、解释及人物名作为来源说明保留。"}
-            task["delivery_modes"] = {
-                "prepare": "原文明示等待新一轮取材时，提取当轮待调用邀请，prose 使用空值。",
-                "complete": "原文明示交付完成正文时，逐字提取正文；素材取舍、旧邀请和角色卡回顾留在工作记录，material_requests 使用空数组。",
-                "selection": "依据本次 source_text 的交付意图选择一个阶段；现有候选与冻结计划帮助识别回顾记录。"}
-            task["archive_partition_transport"] = "把原文明确选择的 role_known_archive 与 director_reference_archive 各路径逐条展开为 archive_attachments，逐条保留原分类。原文未明确分类时保留空值，由主创补充。"
-            task["handoff_transport"] = "交接札记里的后续起点、未完成事项与下一场安排，写入 scene_delta.next_handoff 的字符串数组。人物改变用目标人物名或本场提供的人物档案引用；连续性事实用本场已有引用。next_handoff 是字段名。"
-        for attempt in range(2):
-            if issue:
-                task["transport_feedback"] = {"issue": issue,
-                    "request": "请用本次 source_text 中连续的原文片段完成整理；可选内容空缺时使用合同空值。"}
-            extracted = self.invoke(self.system_prompt, json.dumps(task, ensure_ascii=False))
-            sequence = len(list(directory.glob(fingerprint + ".extraction*.md"))) + 1
-            suffix = ".extraction.md" if sequence == 1 else f".extraction-{sequence}.md"
-            path = directory / (fingerprint + suffix)
-            path.write_text(extracted, encoding="utf-8")
-            try:
-                return self._prepare(answer, _answer_payload(extracted), kind, context)
-            except ValueError as error:
-                issue = str(error)
-                path.with_suffix(".failure.json").write_text(json.dumps({"issue": issue}, ensure_ascii=False), encoding="utf-8")
-                if attempt == 1:
+                value=self._prepare(combined,merged,kind,context)
+            except NaturalSourceClarificationError as error:
+                error.source_text=combined
+                raise
+            except NaturalExtractionError as error:
+                if not error.fields:
                     raise
+                next_error = NaturalSourceClarificationError(str(error), fields=error.fields, payload=merged)
+                next_error.source_text = combined
+                raise next_error from error
+            value['field_repair_provenance']={'parent_source_sha256':sha256(source.encode()).hexdigest(),
+                'reply_sha256':sha256(reply.encode()).hexdigest(),'allowed_fields':list(fields)}
+            return value
+        contract=field_repair_task(source,payload,fields,context)['response_contract']
+        return NaturalTransportPipeline(self.root,self.system_prompt,self.invoke,prepare,
+            {'field-repair':contract}).process(reply,'field-repair',
+                {**context,'allowed_paths':list(fields),'parent_source_sha256':sha256(source.encode()).hexdigest(),
+                 'frozen_fields_sha256':sha256(json.dumps({key:value for key,value in payload.items()
+                     if not key.startswith('__')},ensure_ascii=False,sort_keys=True).encode()).hexdigest()})
 
 
 def _prepare_transport_payload(answer, payload, kind, context):
     payload = _transport_payload(payload, kind)
-    if kind == "creator":
+    if kind.startswith('planning-'):
+        payload = normalize_planning_weights(payload)
+    if kind == "card" and payload.get("schema") in {ACTOR_CARD_SCHEMA, LEGACY_ACTOR_CARD_SCHEMA}:
+        payload = {"card": payload}
+    if kind == 'card':
         payload = restore_labelled_card_sections(answer, payload)
-        payload = restore_commission_source(answer, payload)
-        payload = resolve_creator_targets(payload, context)
-        payload = normalize_archive_partitions(payload)
+    if kind == "creator":
+        payload = _prepare_creator_transport(answer, payload, context)
     if kind == "material" and context.get("role") == "event-narrator":
         payload = recover_event_source_status(answer, payload)
     if kind == 'tone':
-        payload = restore_tone_source(answer,payload)
+        payload = restore_tone_source(answer,payload,context.get('prose'))
     validate_extracted_text(answer, payload, kind, context)
     if kind == "creator" and "briefing" in context:
-        participants = (context["briefing"].get("scene_brief") or {}).get("participants") or []
-        parse_scene_material_requests_v4(payload, list(participants))
+        _validate_creator_material_requests(answer, payload, context)
     return payload
 
+
+def _validate_creator_material_requests(answer, payload, context):
+    participants = context.get("eligible_actors", (context["briefing"].get("scene_brief") or {}).get("participants") or [])
+    try:
+        parse_scene_material_requests_v4(payload, list(participants), free_character_subjects=context.get("free_character_subjects", False))
+    except ValueError as error:
+        if not authored_record(answer, 'creator_record') or not payload.get('material_requests'):
+            raise
+        fields = ['/material_requests']
+        if payload.get('material_plan') is not None:
+            try:
+                parse_creator_material_plan(payload)
+            except ValueError:
+                fields.append('/material_plan')
+        if isinstance(payload.get('creative_intent'), str) and payload['creative_intent'].strip():
+            fields.append('/creative_intent')
+        raise NaturalSourceClarificationError(
+            str(error) + '。原主创仅补交授权的结构记录，保留邀约的原意和原文。',
+            fields=tuple(fields), payload=payload) from error
+
+
+def _prepare_creator_transport(answer, payload, context):
+    payload = detach_creator_notes(payload)
+    payload = project_creator_phase(answer, payload)
+    if payload.get('pending_body_source') and not payload.get('material_requests'):
+        raise ValueError('pending creator invitations require material_requests before this saved candidate is finalized')
+    if explicit_creator_phase(answer) == 'prepare':
+        payload['prose'] = ''
+    for request in payload.get("material_requests") or []:
+        card = request.get("character_card")
+        if isinstance(card, dict) and not card.get("sections"):
+            request["character_card"] = None
+    payload = restore_labelled_card_sections(answer, payload)
+    payload = restore_commission_source(answer, payload)
+    payload = archive_notes_before_materials(payload, answer, context)
+    payload = resolve_creator_targets(payload, context)
+    payload = normalize_archive_partitions(payload)
+    require_source_partition_choice(answer, payload)
+    payload = _resolve_delta_aliases(payload, context)
+    return restore_handoff_targets(payload)
+
+
+
+def _resolve_delta_aliases(payload, context):
+    aliases = context.get("eligible_actor_refs") or {}
+    for key, changes in (payload.get("scene_delta") or {}).items():
+        if key == "next_handoff" or not isinstance(changes, list):
+            continue
+        for change in changes:
+            if isinstance(change, dict) and change.get("target_ref") in aliases:
+                original = change["target_ref"]
+                change["target_ref"] = aliases[original]
+                payload.setdefault("delta_alias_resolution", []).append({"original": original, "reference": change["target_ref"]})
+    return payload
 
 def _transport_payload(payload, kind):
     if payload.get("operation") == kind and isinstance(payload.get("task_contract"), dict):
@@ -234,44 +225,132 @@ def _transport_payload(payload, kind):
 
 def validate_extracted_text(answer: str, payload: Mapping[str, Any], kind: str,
                             context: Mapping[str, Any] | None = None) -> None:
+    context = context or {}
+    recover_creator_editor_focus(answer,payload,kind,context)
+    _validate_editor_focus(answer,payload,context,kind)
     if kind == "card":
         _validate_card_text(answer, payload.get("card") or {})
-    if kind == "creator" and payload.get("prose"):
+    if kind == "creator":
+        _validate_creator_delivery(answer, payload, context)
+    if kind == "material":
+        _validate_material_delivery(answer, payload, context)
+    if kind == "review":
+        if payload.get('decision') not in {'pass','revise','escalate'} or not isinstance(payload.get('summary'),str):
+            raise ValueError('review extraction needs its original decision and summary')
+        validate_review_extraction(payload, context, answer)
+    if kind == "tone":
+        _validate_tone_text(answer, payload)
+    if kind == "style-choice":
+        _validate_style_choice(answer, payload, context)
+    if kind == 'material-plan':
+        _validate_required_material_plan(answer, payload)
+    if kind.startswith('planning-'):
+        _validate_planning_chapter(payload, context)
+        _validate_planning_participants(payload, context)
+
+
+def _validate_required_material_plan(answer, payload):
+    plan = parse_creator_material_plan(payload)
+    _verbatim(answer, plan.reason, 'material plan reason')
+    for ident in plan.required_kinds:
+        _verbatim(answer, ident, 'material plan kind')
+
+
+def _validate_planning_participants(payload, context):
+    if 'registered_actor_names' not in context:
+        return
+    chapters = [payload['chapter']] if isinstance(payload.get('chapter'), dict) else payload.get('chapters') or []
+    allowed = set(context['registered_actor_names'])
+    for chapter in chapters:
+        for scene in chapter.get('scenes') or []:
+            unknown = set(scene.get('participants') or []) - allowed
+            if unknown:
+                raise ValueError('planning participant metadata needs registered names: ' + ', '.join(sorted(unknown)))
+
+
+def _validate_planning_chapter(payload, context):
+    if 'chapter_id' not in context or 'future_scene_count' not in context:
+        return
+    chapter = payload.get('chapter')
+    if (not isinstance(chapter, dict) or chapter.get('chapter_id') != context['chapter_id']
+            or len(chapter.get('scenes') or []) != context['future_scene_count']):
+        raise ValueError('planning chapter must retain requested identity and every source unit')
+
+
+
+
+def _validate_creator_delivery(answer, payload, context):
+    if explicit_creator_phase(answer) == 'prepare' and not payload.get('material_requests'):
+        raise ValueError('creator preparation needs its pending source invitations')
+    if not payload.get("prose") and not payload.get("material_requests") and not (context.get("selection_only") and payload.get("material_decisions")):
+        raise ValueError("creator extraction needs its source invitations or completed body")
+    if payload.get("prose"):
         _verbatim(answer, payload["prose"], "prose")
         if payload.get("material_requests"):
             raise ValueError("creator transport mixes completed prose and pending material requests; select the source delivery phase")
-    if kind == "creator":
-        _validate_requested_cards(answer, payload, context or {})
-        _commission_provenance(answer, payload)
-    if kind == "material":
-        _validate_material_text(answer, payload)
-        if (context or {}).get("role") == "event-narrator":
-            for candidate in payload["candidates"]:
-                event_fields(candidate)
-    if kind == "review":
-        validate_review_extraction(payload, context or {})
-    if kind == "tone":
-        _validate_tone_text(answer, payload)
+    _validate_requested_cards(answer, payload, context)
+    _commission_provenance(answer, payload, context)
+
+def _validate_material_delivery(answer, payload, context):
+    _validate_material_text(answer, payload)
+    if context.get("role") == "event-narrator":
+        for candidate in payload["candidates"]:
+            event_fields(candidate)
+
+def _validate_style_choice(answer, payload, context):
+    if not recover_style_preset_id(answer, payload, context):
+        raise ValueError("creator selected an unavailable style preset")
+    _verbatim(answer, payload["preset_id"], "preset ID")
+    recover_style_reference_ids(answer,payload,context)
+    recover_style_list_format(answer,payload)
+    references = payload.get("reference_ids")
+    if not isinstance(references, list) or len(set(references)) != len(references):
+        raise ValueError("style selection needs unique reference IDs")
+    for ident in references:
+        if ident not in context.get("reference_ids", []):
+            raise ValueError("creator selected an unavailable reference")
+        _verbatim(answer, ident, "reference ID")
+    for key in ("literary_mode", "reason"):
+        _verbatim(answer, payload.get(key), key)
 
 
-def _commission_provenance(answer: str, payload: Mapping[str, Any]) -> dict[str, Any]:
-    rows = []
+def _commission_provenance(answer: str, payload: Mapping[str, Any], context=None) -> dict[str, Any]:
+    rows,failed = [],[]
     for index, request in enumerate(payload.get("material_requests") or []):
         if not isinstance(request, dict):
             raise ValueError("invalid creator invitation extraction")
         spans = {}
         for key in ("author_prompt", "working_context", "style_direction"):
-            if key not in request or (key == "style_direction" and not request[key]):
+            if key not in request or (key in {"style_direction", "working_context"} and not request[key]):
                 continue
             value = request[key]
-            _verbatim(answer, value, key)
-            start = answer.index(value)
-            spans[key] = {"start": start, "end": start + len(value)}
-        for attachment in request.get("material_attachments") or []:
-            if isinstance(attachment, dict):
-                _verbatim(answer, attachment.get("candidate_id"), "selected material candidate ID")
+            if not _commission_literal(answer,value,key):
+                failed.append(f'/material_requests/{index}/{key}')
+                continue
+            literal = value if value in answer else json.dumps(value, ensure_ascii=False)[1:-1]
+            start = answer.index(literal)
+            spans[key] = {"start": start, "end": start + len(literal),
+                          "encoding": "plain" if literal == value else "json-string"}
+        _verify_attachment_ids(answer,request)
         rows.append({"request_index": index, "spans": spans})
+    if failed:
+        raise NaturalExtractionError('extraction changed invitation source fields; original natural text is preserved',fields=failed)
+    validate_choice_ids(answer, payload, _verbatim, (context or {}).get('available_material_ids'))
     return {"source_sha256": sha256(answer.encode("utf-8")).hexdigest(), "requests": rows}
+
+
+def _commission_literal(answer,value,key):
+    try:
+        _verbatim(answer,value,key)
+        return True
+    except ValueError:
+        return False
+
+
+def _verify_attachment_ids(answer,request):
+    for attachment in request.get('material_attachments') or []:
+        if isinstance(attachment,dict):
+            _verbatim(answer,attachment.get('candidate_id'),'selected material candidate ID')
 
 
 def _validate_tone_text(answer: str, payload: Mapping[str, Any]) -> None:
@@ -281,15 +360,16 @@ def _validate_tone_text(answer: str, payload: Mapping[str, Any]) -> None:
     for edit in edits:
         if not isinstance(edit, dict):
             raise ValueError("tone edit extraction is invalid")
-        _verbatim(answer, edit.get("before"), "tone original fragment")
+        if not tone_text_matches_source(answer, edit.get('before')):
+            _verbatim(answer, edit.get("before"), "tone original fragment")
         if edit.get("after"):
-            _verbatim(answer, edit["after"], "tone replacement")
+            if not tone_text_matches_source(answer, edit['after']):
+                _verbatim(answer, edit["after"], "tone replacement")
 
 
 def _validate_card_text(answer: str, card: Mapping[str, Any]) -> None:
+    card_section_schema(card)
     sections = card.get("sections")
-    if not isinstance(sections, dict) or set(sections) != set(ACTOR_CARD_SECTIONS):
-        raise ValueError("card extraction needs all sixteen sections")
     for value in sections.values():
         _verbatim(answer, value, "card section")
 
@@ -305,18 +385,52 @@ def _validate_material_text(answer: str, payload: Mapping[str, Any]) -> None:
         for key in ("spoken", "first_person_action", "private_impulse"):
             if candidate.get(key):
                 _verbatim(answer, candidate[key], key)
+        for key in ('spoken_fragments', 'action_fragments', 'private_fragments'):
+            for value in candidate.get(key) or []:
+                _verbatim(answer, value, key)
 
 
 def _validate_requested_cards(answer: str, payload: Mapping[str, Any], context: Mapping[str, Any]) -> None:
-    frozen = (context.get("actor_card_context") or {}).get("frozen_scene_cards") or []
+    cards = context.get("actor_card_context") or {}
+    frozen = [*(cards.get("frozen_scene_cards") or []), *(cards.get("work_cards") or [])]
     for request in payload.get("material_requests") or []:
         card = request.get("character_card")
         if not card or any(card == item.get("card") for item in frozen):
             continue
+        if (context.get('actor_system_template') or context.get('actor_card_schema')) and card_section_schema(card) != actor_card_contract(context)['schema']:
+            raise ValueError('new actor card must use the current frozen template version')
         _validate_card_text(answer, card)
 
 
 def _verbatim(answer: str, value: Any, label: str) -> None:
-    if not isinstance(value, str) or not value.strip() or value not in answer:
+    if not isinstance(value, str) or not value.strip() or (value not in answer and json.dumps(value, ensure_ascii=False)[1:-1] not in answer):
         raise ValueError(f"extraction changed {label}; original natural text is preserved")
 
+
+
+def _validate_editor_focus(answer,payload,context,kind):
+    if _defer_preparation_editor_focus(answer,payload,kind):
+        return
+    for focus in payload.get("editor_focus") or []:
+        if not isinstance(focus,dict):
+            raise ValueError("editor_focus must contain explicit source questions")
+        _verbatim(answer,focus.get("issue"),"editor focus")
+        if focus.get("operation"):
+            _verbatim(answer,focus["operation"],"editor focus operation")
+        excerpt = focus.get("excerpt")
+        prose = payload.get("prose") if kind == "creator" else context.get("prose")
+        if not isinstance(excerpt,str) or not excerpt.strip() or excerpt not in str(prose or ""):
+            raise ValueError("editor_focus must select current prose exactly")
+
+
+def _defer_preparation_editor_focus(answer,payload,kind):
+    if kind=='creator' and payload.get('material_requests') and not payload.get('prose'):
+        from copy import deepcopy
+        for focus in payload.get('editor_focus') or []:
+            if not isinstance(focus,dict):raise ValueError('editor_focus must contain explicit source questions')
+            _verbatim(answer,focus.get('issue'),'editor focus')
+        if payload.get('editor_focus'):
+            payload['deferred_editor_focus']=deepcopy(payload['editor_focus'])
+            payload['editor_focus']=[]
+        return True
+    return False

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from ..infrastructure.lean_scene_runtime import build_lean_planning_service
+
 from pathlib import Path
 from typing import Any, Callable
 
@@ -66,7 +68,7 @@ class LeanRouteAutopilotHost:
             if str(run.get("runtime") or "") != "pi-worker" or runtime_for_role(self.config, "worker") != "pi-worker":
                 raise ValueError("lean-v2 planning requires the Pi Worker runtime")
             ensure_default_style_mount(project)
-            plan = LeanLongformPlanningService(
+            plan = build_lean_planning_service(
                 self.config,
                 data_root=self.data_root,
                 event_sink=lambda event, data: self.emit_event(run_id, event, data),

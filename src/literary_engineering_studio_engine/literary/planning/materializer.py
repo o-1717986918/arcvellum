@@ -11,6 +11,7 @@ import re
 
 from literary_engineering_studio_engine.foundation.atomic_io import atomic_write_batch, atomic_write_text
 from .review import all_planning_reviews_pass
+from .chapter_literary_tasks import chapter_task_writes, chapter_tasks_present
 from .materialization_parser import (
     parse_chapter_obligations,
     parse_scene_inventory,
@@ -110,9 +111,11 @@ def materialize_lean_window(
         and existing.get("scene_paths") == [_relative(path, root) for path in scene_paths]
         and not prepared
         and outline.is_file()
+        and chapter_tasks_present(root, obligations)
     ):
         return _result(root, manifest_path, outline, scene_paths, existing)
     writes = {path: rendered for path, rendered in prepared}
+    writes.update(chapter_task_writes(root, obligations))
     if not outline.is_file():
         writes[outline] = "# 正式长篇大纲\n\n" + outline_text.strip() + "\n"
     manifest = _materialization_manifest(

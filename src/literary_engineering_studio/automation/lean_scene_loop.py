@@ -98,13 +98,33 @@ class LeanSceneRunCoordinator:
                 return LeanSceneStep("planning-window", message="next chapter scene window prepared")
             return LeanSceneStep("route-ready", route_ready=True, message="all scenes committed")
         transaction = self.repository.latest_for_scene(str(self.project), scene_id)
-        if transaction is None:
+        if transaction is None or not self._current_plan_binding(transaction):
             transaction = self.service.prepare(self.project, scene_id, mode=mode)
+            self._bind_plan(transaction)
             return self._step("prepared", transaction)
         return self.advance_transaction(
             transaction.transaction_id,
             steward_approved=steward_approved,
         )
+
+    def _planning_revision(self):
+        path = self.project / "plot/lean_project_plan.json"
+        return str(json.loads(path.read_text(encoding="utf-8")).get("planning_revision") or "") if path.is_file() else ""
+
+    def _binding_path(self, transaction):
+        return self.data_root / "scene-transactions" / transaction.transaction_id / "planning_binding.json"
+
+    def _current_plan_binding(self, transaction):
+        current = self._planning_revision()
+        path = self._binding_path(transaction)
+        if not current:
+            return True
+        return path.is_file() and json.loads(path.read_text(encoding="utf-8")).get("planning_revision") == current
+
+    def _bind_plan(self, transaction):
+        path = self._binding_path(transaction)
+        atomic_write_text(path, json.dumps({"schema": "arcvellum/scene-plan-binding/v1",
+            "transaction_id": transaction.transaction_id, "planning_revision": self._planning_revision()}, ensure_ascii=False))
 
     def advance_transaction(
         self,

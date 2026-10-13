@@ -52,7 +52,14 @@ def dependencies_from_actions(
         message = str(arguments.get("message") or "").strip()
         if not message:
             raise ValueError("project_record_direction requires a message")
-        result = record_direction(root, message, actor="project-agent")
+        values = {}
+        if arguments.get("source_kind"):
+            values = {"source_kind": str(arguments["source_kind"]),
+                "evidence": [str(value) for value in arguments.get("evidence", [])],
+                "supersedes": [str(value) for value in arguments.get("supersedes", [])]}
+            if arguments.get("verified_author_quote"):
+                values["evidence"].append("human-message: " + arguments["verified_author_quote"])
+        result = record_direction(root, message, actor="project-agent", **values)
         record = result.get("record") if isinstance(result.get("record"), dict) else {}
         return {
             "ok": True,

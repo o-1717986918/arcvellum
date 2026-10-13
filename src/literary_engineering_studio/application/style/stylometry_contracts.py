@@ -66,6 +66,30 @@ class CreatorStyleSnapshot:
 
 
 @dataclass(frozen=True)
+class StylePresetV1:
+    preset_id: str
+    title: str
+    literary_intent: str
+    narrative_modes: tuple[str, ...]
+    reference_ids: tuple[str, ...]
+    stylometry_version_id: str
+    active: bool = True
+    combine: str = "append"
+    usage: str = "guide"
+
+
+@dataclass(frozen=True)
+class StylePresetCollectionV1:
+    revision: int = 0
+    enabled: bool = False
+    default_preset_id: str = ""
+    presets: tuple[StylePresetV1, ...] = ()
+
+    def to_dict(self):
+        return {"schema": "arcvellum/style-presets/v1", **asdict(self)}
+
+
+@dataclass(frozen=True)
 class StylometryJob:
     job_id: str
     title: str
@@ -98,6 +122,9 @@ class StylometryRepositoryPort(Protocol):
     def save_version(self, root: Path, record: StylometryVersion) -> None: ...
     def snapshot(self, root: Path) -> CreatorStyleSnapshot: ...
     def set_mount(self, root: Path, snapshot: CreatorStyleSnapshot, expected_revision: int) -> CreatorStyleSnapshot: ...
+    def presets(self, root: Path) -> StylePresetCollectionV1: ...
+    def save_presets(self, root: Path, collection: StylePresetCollectionV1,
+                     expected_revision: int) -> StylePresetCollectionV1: ...
     def jobs(self, root: Path) -> tuple[StylometryJob, ...]: ...
     def job(self, root: Path, job_id: str) -> StylometryJob: ...
     def save_job(self, root: Path, record: StylometryJob) -> None: ...

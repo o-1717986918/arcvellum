@@ -3,6 +3,7 @@ import { lstat, mkdir, readFile, readdir, realpath, rename, rm, stat, writeFile 
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { Type } from "@earendil-works/pi-ai";
+import { ActiveContextReads } from "./active-context-reads.ts";
 
 const privateNames = new Set([".git", ".env", ".codex", ".agent", "auth.json", "secrets.json"]);
 const decoder = new TextDecoder("utf-8", { fatal: true });
@@ -61,6 +62,15 @@ async function files(root: string): Promise<string[]> {
 
 export async function workArchiveOperation(root: string, input: Record<string, unknown>): Promise<Record<string, unknown>> {
 	const action = String(input.action || "");
+	if (action === "read_batch") {
+		if (!Array.isArray(input.reads) || !input.reads.length) throw new Error("batch needs archive selectors");
+		const reads = [];
+		for (const selector of input.reads) {
+			if (!selector || typeof selector !== "object" || Array.isArray(selector)) throw new Error("invalid archive selector");
+			reads.push(await workArchiveOperation(root, { ...selector, action: "read" }));
+		}
+		return { reads };
+	}
 	if (action === "list") {
 		const prefix = String(input.path || "");
 		parts(prefix, true);
@@ -147,12 +157,15 @@ export async function sceneScratchOperation(root: string, input: Record<string, 
 	throw new Error("scratch action must be list, read, write, move, or delete");
 }
 
-export function createSceneArchiveTool(root: string, onCall: () => void): AgentTool {
+export function createSceneArchiveTool(root: string, onCall: () => void, delivered = new ActiveContextReads()): AgentTool {
 	return {
 		name: "work_archive", label: "Read Work Archive",
 		description: "List, search, or read work archive files. Read-only; use offset to continue a long result.",
 		parameters: Type.Object({
-			action: Type.Union([Type.Literal("list"), Type.Literal("search"), Type.Literal("read")]),
+			action: Type.Union([Type.Literal("list"), Type.Literal("search"), Type.Literal("read"), Type.Literal("read_batch")]),
+			reads: Type.Optional(Type.Array(Type.Object({ path: Type.String(),
+				start_line: Type.Optional(Type.Integer({ minimum: 1 })), end_line: Type.Optional(Type.Integer({ minimum: 1 })),
+				offset: Type.Optional(Type.Integer({ minimum: 0 })) }))),
 			path: Type.Optional(Type.String()), query: Type.Optional(Type.String()),
 			start_line: Type.Optional(Type.Integer({ minimum: 1 })),
 			end_line: Type.Optional(Type.Integer({ minimum: 1 })),
@@ -162,7 +175,9 @@ export function createSceneArchiveTool(root: string, onCall: () => void): AgentT
 		execute: async (_id, params) => {
 			onCall();
 			const result = await workArchiveOperation(root, params as Record<string, unknown>);
-			return { content: [{ type: "text", text: JSON.stringify(result) }], details: {
+			const projected = Array.isArray(result.reads) ? { reads: result.reads.map((row) =>
+				delivered.receipt(row as Record<string, unknown>, _id)) } : delivered.receipt(result, _id);
+			return { content: [{ type: "text", text: JSON.stringify(projected) }], details: {
 				action: (params as Record<string, unknown>).action,
 				archive_receipt: archiveReceipt(params as Record<string, unknown>, result),
 			} };
@@ -172,6 +187,9 @@ export function createSceneArchiveTool(root: string, onCall: () => void): AgentT
 
 function archiveReceipt(input: Record<string, unknown>, result: Record<string, unknown>) {
 	const receipt: Record<string, unknown> = { action: input.action };
+	if (input.action === "read_batch" && Array.isArray(result.reads)) {
+		receipt.reads = result.reads.map((row) => archiveReceipt({ action: "read" }, row as Record<string, unknown>));
+	}
 	if (input.action === "read") {
 		for (const key of ["path", "status", "start_line", "end_line", "complete", "next_offset", "file_sha256"]) {
 			receipt[key] = result[key];

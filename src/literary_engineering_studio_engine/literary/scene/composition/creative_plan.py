@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Any
 
 from literary_engineering_studio_engine.literary.scene.roleplay.lab import CharacterCard, _load_characters
-from literary_engineering_studio_engine.literary.scene.roleplay.actor_personas import actor_personas_for_participants
 from ..facts import SceneFacts
 
 
@@ -15,7 +14,7 @@ def build_subtext_map(
     cards: list[CharacterCard],
 ) -> list[dict[str, Any]]:
     if not cards:
-        return [_unknown_subtext(facts)]
+        return []
     return [_character_subtext(facts, card) for card in cards]
 
 
@@ -24,15 +23,7 @@ def build_dialogue_intents(
     cards: list[CharacterCard],
 ) -> list[dict[str, Any]]:
     if not cards:
-        return [
-            {
-                "speaker": "未建档角色",
-                "wants": facts.scene_goal or "推进场景。",
-                "avoids": facts.internal_conflict or "未填写。",
-                "speech_strategy": "先补人物 speech_style，再生成对白。",
-                "forbidden_exposition": "不得用对白直接解释世界观和背景故事。",
-            }
-        ]
+        return []
     return [_dialogue_intent(facts, card) for card in cards]
 
 
@@ -64,12 +55,12 @@ def build_expression_plan(
         active.append("information_strategy")
     return {
         "schema": "literary-engineering-workbench/scene-expression-plan/v1",
-        "focalization_lens": facts.viewpoint or "由当前视角人物的已知信息与误判决定",
-        "information_strategy": "依据已确认的读者问题与暂扣信息选择揭示顺序",
-        "syntax_motion": str(rhythm_state.get("paragraph_shape") or "句法随行动和关系压力变化"),
-        "dialogue_pressure": facts.internal_conflict or "依据人物的当下目标与关系位置决定",
-        "evidence_channel": "选择当前因果所需的动作、对白、物证、直述、沉默或环境；允许直接命名情绪",
-        "ending_residue": facts.next_hooks[0] if facts.next_hooks else "保留本场变化造成的下一步压力",
+        "focalization_lens": facts.viewpoint or "由本段文学任务选择讲述者声音与感知位置",
+        "information_strategy": "根据章节文学任务组织世界认识、时间、发现与人物经验",
+        "syntax_motion": str(rhythm_state.get("paragraph_shape") or "句法随讲述、想象、时间与情感展开"),
+        "dialogue_pressure": facts.internal_conflict or "依据人物的兴趣、愿望与本轮相遇展开",
+        "evidence_channel": "选择讲述、概述、评论、抒情、现场、对白与生活反复，共同发展本段经验",
+        "ending_residue": facts.next_hooks[0] if facts.next_hooks else "以适合本段文学方式的余味与后续阅读经验衔接",
         "active_axes": active[:3],
     }
 
@@ -102,7 +93,6 @@ def project_brief_expression_context(project_root: Path, brief: dict[str, Any]) 
         "expression_plan": build_expression_plan(facts, {"narrative_rhythm": {"paragraph_shape": paragraph_shape}}),
         "dialogue_intents": build_dialogue_intents(facts, cards),
         "perceptual_options": build_perceptual_options(facts),
-        "actor_personas": actor_personas_for_participants(project_root, participants),
     }
 
 
@@ -112,8 +102,8 @@ def revision_targets(
     branch: dict[str, Any],
 ) -> list[str]:
     targets = [
-        "把每个节拍改写成具体动作、可观察细节和状态变化。",
-        "删掉解释性背景段落，让 background_story 只通过选择、回避、误判、语气和关系压力体现。",
+        "按照章节文学任务重新选择叙述声音、时间尺度与详略。",
+        "以适合本段的讲述、回忆、内心或现场展开人物经验与世界认识。",
         "生成正文后运行 review-scene；涉及新增事实时继续运行 canon-lint。",
     ]
     if not cards and facts.participants:
@@ -132,7 +122,6 @@ def guardrails() -> list[str]:
         "composition 是写作编排，不是正稿。",
         "不得新增未经确认的 canon。",
         "不得改变人物、地点、时间线或规则的适用范围。",
-        "不得把角色 background_story 直接写成说明段落。",
         "不得让分支推荐绕过人工选择、审查和发布门禁。",
         "只有 selection_source=selection 的 composition 才能进入 generate-scene；内部实验必须显式放行。",
     ]
@@ -246,7 +235,7 @@ def _dialogue_intent(facts: SceneFacts, card: CharacterCard) -> dict[str, Any]:
             "speech_action": ("试探或回避" if card.secret else "争取、拒绝或追问")
             + (f"；对象：{'、'.join(interlocutors)}" if interlocutors else "；以当前场景压力决定"),
         },
-        "forbidden_exposition": "不得借对白直接讲述 background_story；只能让语气、停顿和避词泄露压力。",
+        "voice_development": "沿人物词汇、兴趣、欲望与思维方式展开本轮表达。",
     }
 
 

@@ -34,7 +34,9 @@ class ProjectAgentPromptAndFactoryTests(unittest.TestCase):
         self.assertIn("不擅自把这些口味写成高优先级方向", prompt)
         self.assertIn("不能写成长篇高优先级方向替主创定稿", prompt)
         self.assertIn("当前作品会话优先使用 catalog 的 current_work_id", prompt)
-        self.assertIn("三到五个能共同塑造此人说话和互动的核心项", prompt)
+        self.assertIn("角色 Agent 的人格初始化完整来自角色卡", prompt)
+        self.assertIn("历史标签配置的查看和编辑", prompt)
+        self.assertNotIn("三到五个能共同塑造此人说话和互动的核心项", prompt)
 
     def test_project_agent_thinking_is_independent_of_worker_thinking(self):
         with tempfile.TemporaryDirectory() as temporary:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 from literary_engineering_studio_engine.prompting.layers import prompt_layer_spec, render_prompt_template
@@ -39,8 +40,10 @@ def render_describer_turn(
     context = {
         "scene_id": brief.get("scene_id"), "viewpoint": brief.get("viewpoint"),
         "location": brief.get("location"), "participants": brief.get("participants"),
+        "objective": brief.get("objective"), "scene_function": brief.get("scene_function"),
+        "canon_constraints": brief.get("canon_constraints", []),
         "target": target, "literary_purpose": purpose, "scene_moment": scene_moment,
-        "cue": cue, "confirmed_sources": confirmed_sources[:5_000],
+        "cue": cue, "confirmed_sources": confirmed_sources,
         "public_stage": public_stage[-16:],
     }
     return render_prompt_template("scene.describer.turn.protocol", (
@@ -68,7 +71,7 @@ def _parse_describer_candidate(item: Any, kind: str) -> dict[str, str]:
         raise ValueError("describer candidate must be an object")
     text = str(item.get("text") or "").strip()
     focus = str(item.get("focus") or "").strip()
-    if not 5 <= len(text) <= 700 or not focus or len(focus) > 160:
+    if not 5 <= len(text) <= 12_000 or not focus or len(focus) > 160:
         raise ValueError("describer candidate needs bounded text and focus")
     candidate = {"text": text, "focus": focus}
     if kind == "event-narration":
@@ -77,8 +80,27 @@ def _parse_describer_candidate(item: Any, kind: str) -> dict[str, str]:
 
 
 def _event_basis(item: dict[str, Any]) -> dict[str, str]:
-    basis = str(item.get("basis") or "").strip()
+    original = str(item.get("basis") or "").strip()
+    basis = _declared_event_basis(original) if original else "proposed"
     source_note = str(item.get("source_note") or "").strip()
-    if basis not in {"confirmed", "attributed", "proposed"} or not source_note or len(source_note) > 240:
+    if basis not in {"confirmed", "attributed", "proposed"}:
         raise ValueError("event narration needs confirmed, attributed, or proposed basis and source note")
+    if not original:
+        source_note = "原始交付未标来源状态；整体保留为待确认创作提案。\n" + source_note
+    if not source_note:
+        basis = "proposed"
+        source_note = "原始交付未附来源说明；整体保留为待确认创作提案。"
+    if original and basis != original:
+        source_note = f"来源状态原文：{original}\n{source_note}"
+    if len(source_note) > 4_000:
+        raise ValueError("event narration source note exceeds context capacity")
     return {"basis": basis, "source_note": source_note}
+
+
+def _declared_event_basis(value: str) -> str:
+    status = r"(?:confirmed|attributed|proposed)"
+    annotated = status + r"(?:\s*[（(][^()（）]*[）)])?"
+    if not re.fullmatch(annotated + r"(?:\s*[+＋/、,，;；|]\s*" + annotated + r")*", value):
+        return ""
+    declarations = re.findall(r"(?<![A-Za-z])(?:confirmed|attributed|proposed)(?![A-Za-z])", value)
+    return next(label for label in ("proposed", "attributed", "confirmed") if label in declarations)

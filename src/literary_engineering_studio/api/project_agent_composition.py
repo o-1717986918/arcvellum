@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from ..infrastructure.lean_scene_runtime import build_lean_planning_service
+
 from pathlib import Path
 from typing import Any
 
@@ -94,7 +96,7 @@ def build_project_agent_service(
             ),
             goal_evidence=lambda root: read_models.reader(root),
             extend_chapter=lambda root, **values: extend_lean_chapter(root, _role_gateway(config), **values),
-            replan_future=lambda root, **values: replan_lean_future(root, _role_gateway(config), **values),
+            replan_future=lambda root, **values: replan_lean_future(root, _role_gateway(config), planning_delivery=build_lean_planning_service(config, data_root=Path(config["application"]["data_root"])).planning_delivery, **values),
             save_actor_persona=save_actor_persona,
             archive_dependencies=archive_dependencies,
             write_owner_style=write_owner_style_directive,
@@ -122,7 +124,7 @@ def _role_gateway(config: dict[str, Any]) -> RoleConversationGateway:
 
 def _prepare_lean_plan(config: dict[str, Any], root: Path) -> dict[str, Any]:
     data_root = Path(str(config.get("application", {}).get("data_root") or "."))
-    return LeanLongformPlanningService(config, data_root=data_root).ensure_initial(root)
+    return build_lean_planning_service(config, data_root=data_root).ensure_initial(root)
 
 
 def _reconcile_lean_assets(

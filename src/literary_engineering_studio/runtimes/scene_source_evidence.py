@@ -25,7 +25,7 @@ def scene_source_evidence(
         remaining = min(remaining, max(0, max_chars))
     north_star = _author_north_star(project_root, brief.scene_id)
     if len(north_star) > remaining:
-        north_star = ""
+        north_star = "全篇文学任务超出本轮来源预算，需补读 plot/lean_project_plan.json。"
     blocks: list[str] = [north_star] if north_star else []
     remaining = max(0, remaining - len(north_star))
     directive = _owner_style_block(project_root, remaining)
@@ -48,7 +48,7 @@ def scene_source_evidence(
         separator = 2 if blocks else 0
         if remaining <= len(header) + separator:
             break
-        excerpt = body[:remaining - len(header) - separator]
+        excerpt = _visible_excerpt(reference, body, remaining - len(header) - separator)
         blocks.append(f"{header}{excerpt}")
         remaining -= len(header) + len(excerpt) + separator
         if remaining <= 0:
@@ -75,6 +75,10 @@ def _source_excerpt(reference: str, body: str, scene_id: str) -> str:
         limit = 1_500  # Later entries supersede earlier direction.
     elif reference.startswith("characters/"):
         limit = 850
+    elif reference == "canon/world_rules.yaml":
+        limit = 7_000
+    elif reference == "canon/forbidden_changes.yaml":
+        limit = 3_500
     else:
         limit = 1_000
     if len(body) <= limit:
@@ -85,7 +89,16 @@ def _source_excerpt(reference: str, body: str, scene_id: str) -> str:
         return _structured_scene_excerpt(reference, body, limit)
     if reference.endswith("user_directions.md"):
         return body[-limit:]
-    return body[:limit]
+    return _visible_excerpt(reference, body, limit)
+
+
+def _visible_excerpt(reference: str, body: str, limit: int) -> str:
+    if len(body) <= limit:
+        return body
+    note = f"\n[来源节选：后续未提供，完整条目见 {reference}。]"
+    if len(note) >= limit:
+        return note[-max(0, limit):] if limit else ""
+    return body[:limit - len(note)] + note
 
 
 def _structured_scene_excerpt(reference: str, body: str, limit: int) -> str:
@@ -185,10 +198,11 @@ def _north_star_payload(plan: dict[str, object], scene_id: str) -> dict[str, obj
         "premise": str(plan.get("premise") or "")[:180],
         "central_question": str(plan.get("central_question") or "")[:150],
         "ending_choice": str(plan.get("ending_choice") or "")[:200],
-        "narrative_design": {key: str(value)[:120] for key, value in design.items()},
+        "narrative_design": {key: str(value) for key, value in design.items()},
+        "narrative_strategy": str(scene.get("narrative_strategy") or ""),
         "scene_story_time": str(scene.get("story_time") or "")[:160],
         "current_chapter": {key: str(chapter.get(key) or "")[:150]
-                            for key in ("chapter_id", "title", "dramatic_turn", "obligation", "reader_question")},
+                            for key in ("chapter_id", "title", "dramatic_turn", "obligation", "reader_question", "literary_task")},
         "chapter_spine": _chapter_spine(chapters, chapter_id),
     }
 

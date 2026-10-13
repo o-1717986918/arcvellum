@@ -20,4 +20,4 @@
 ## 本场明确留白
 [[ARCVELLUM_PROMPT_6]]
 
-仅返回 JSON：{"scene_id":"[[ARCVELLUM_PROMPT_7]]","passages":[{"beat_id":"可用节拍的 beat_id","focal_character":"现有视角人物或空串","description":"环境段落"}]}。自行决定在哪些时刻写，零至四段，每段不超过 600 字。
+兼容交付格式：{"scene_id":"[[ARCVELLUM_PROMPT_7]]","passages":[{"beat_id":"可用节拍的 beat_id","focal_character":"现有视角人物或空串","description":"完整环境素材"}]}。自行选择零至四段有独立价值的素材，篇幅依据本次文学任务。

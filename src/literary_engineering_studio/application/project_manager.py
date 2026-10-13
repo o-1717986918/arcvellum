@@ -241,7 +241,9 @@ def clone_bundled_demo(
     return {"ok": True, "project": register_project(destination)}
 
 
-def record_direction(project_root: Path | str, message: str, *, actor: str = "user") -> dict[str, Any]:
+def record_direction(project_root: Path | str, message: str, *, actor: str = "user",
+                     source_kind: str = "", evidence: list[str] | None = None,
+                     supersedes: list[str] | None = None) -> dict[str, Any]:
     root = Path(project_root).expanduser().resolve()
     if not (root / "project.yaml").is_file():
         raise FileNotFoundError(f"项目不存在：{root}")
@@ -255,7 +257,13 @@ def record_direction(project_root: Path | str, message: str, *, actor: str = "us
         "recorded_at": _now(),
         "actor": actor.strip() or "user",
         "message": clean,
+        "source_kind": source_kind or ("author_intent" if actor == "user" else "agent_judgment"),
+        "evidence": evidence or [], "supersedes": supersedes or [],
     }
+    from .direction_provenance import KINDS, classify_direction
+    if record["source_kind"] not in KINDS:
+        raise ValueError("unknown direction source kind")
+    record = classify_direction(record)
     directory = root / "workflow" / "studio"
     directory.mkdir(parents=True, exist_ok=True)
     index = directory / "user_directions.jsonl"
@@ -280,7 +288,8 @@ def read_directions(project_root: Path | str, *, limit: int = 20) -> list[dict[s
             continue
         if isinstance(payload, dict) and payload.get("message"):
             records.append(payload)
-    return records[-max(1, min(200, int(limit))):]
+    from .direction_provenance import project_direction_records
+    return project_direction_records(records)[-max(1, min(200, int(limit))):]
 
 
 def _load_registry() -> dict[str, Any]:
@@ -426,11 +435,16 @@ def _safe_folder_name(value: str) -> str:
 
 
 def _render_direction_digest(records: list[dict[str, Any]]) -> str:
-    lines = ["# 当前用户创作方向", "", "以下内容由 Studio 客户端记录。执行任务时应把较新的方向视为更高优先级，但不得借此绕过 Canon、审查或人工审批门禁。", ""]
+    lines = ["# 作品方向与连续性记录", "", "作者意图、Agent 判断和连续性校正分别保留来源与依据。作者意图提供审美方向；连续性记录以已提交正文和回执为依据。", ""]
     if not records:
         lines.append("暂无用户创作方向。")
     for item in reversed(records):
-        lines.extend([f"## {item.get('recorded_at', '')}", "", str(item.get("message") or "").strip(), ""])
+        if item.get("status") == "superseded":
+            continue
+        labels = {"author_intent": "作者意图", "agent_judgment": "Agent 判断", "continuity": "连续性校正"}
+        lines.extend([f"## {item.get('recorded_at', '')} · {labels.get(item.get('source_kind'), '来源未标明')} · {item.get('status', 'active')}",
+                      f"来源：{item.get('actor', '')}；记录：{item.get('record_id', '')}", "",
+                      str(item.get("message") or "").strip(), "依据：" + "、".join(item.get("evidence", [])), ""])
     return "\n".join(lines).rstrip() + "\n"
 
 

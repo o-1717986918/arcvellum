@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Mapping
 
 from .character_card import ActorCharacterCardV1, parse_actor_character_card
@@ -67,11 +67,14 @@ class MaterialCandidateAttachmentRefV1:
 class SceneMaterialRequestV4(SceneMaterialRequestV3):
     working_context: str = ""
     material_attachments: tuple[MaterialCandidateAttachmentRefV1, ...] = ()
+    need_evidence: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         result = super().to_dict()
         result["working_context"] = self.working_context
         result["material_attachments"] = [item.to_dict() for item in self.material_attachments]
+        if self.need_evidence:
+            result["need_evidence"] = self.need_evidence
         return result
 
 
@@ -110,15 +113,16 @@ def parse_scene_material_requests_v3(
 
 def parse_scene_material_requests_v4(
     payload: Mapping[str, Any], participants: tuple[str, ...] | list[str],
+    *, free_character_subjects: bool = False,
 ) -> tuple[SceneMaterialRequestV4, ...]:
     raw = payload.get("material_requests", [])
     if not isinstance(raw, list) or len(raw) > 8:
         raise ValueError("material_requests must have at most eight requests")
-    return tuple(_parse_request_v4(item, set(participants)) for item in raw)
+    return tuple(_parse_request_v4(item, set(participants), free_character_subjects=free_character_subjects) for item in raw)
 
 
-def _parse_request_v4(raw: Any, participants: set[str]) -> SceneMaterialRequestV4:
-    request = _parse_request(raw, participants)
+def _parse_request_v4(raw: Any, participants: set[str], *, free_character_subjects=False) -> SceneMaterialRequestV4:
+    request = _parse_request(raw, participants, free_character_subjects=free_character_subjects)
     if not isinstance(raw, Mapping):
         raise ValueError("material request must be an object")
     working_context = str(raw.get("working_context") or "").strip()
@@ -134,7 +138,17 @@ def _parse_request_v4(raw: Any, participants: set[str]) -> SceneMaterialRequestV
         request.kind, request.target, request.purpose, request.scene_moment, request.cue,
         request.author_prompt, request.archive_attachments, request.beat_id, request.scene_change,
         request.character_card, request.style_direction, working_context, attachments,
+        _parse_need_evidence(raw.get("need_evidence")),
     )
+
+
+def _parse_need_evidence(value):
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise ValueError("need_evidence must be an object")
+    from copy import deepcopy
+    return deepcopy(value)
 
 
 def _parse_material_attachment(raw: Any) -> MaterialCandidateAttachmentRefV1:
@@ -155,7 +169,7 @@ def _parse_material_attachment(raw: Any) -> MaterialCandidateAttachmentRefV1:
     return MaterialCandidateAttachmentRefV1(candidate_id, start, end)
 
 
-def _parse_request(raw: Any, participants: set[str]) -> SceneMaterialRequestV3:
+def _parse_request(raw: Any, participants: set[str], *, free_character_subjects=False) -> SceneMaterialRequestV3:
     if not isinstance(raw, Mapping):
         raise ValueError("material request must be an object")
     fields = {key: str(raw.get(key) or "").strip() for key in (
@@ -163,7 +177,8 @@ def _parse_request(raw: Any, participants: set[str]) -> SceneMaterialRequestV3:
     )}
     kind, target = fields["kind"], fields["target"]
     _validate_common_request(fields)
-    _validate_target(kind, target, fields["scene_change"], participants)
+    _validate_target(kind, target, fields["scene_change"], participants | {target}
+                     if free_character_subjects and kind == "character-description" else participants)
     attachments = raw.get("archive_attachments", [])
     if not isinstance(attachments, list) or len(attachments) > 20:
         raise ValueError("archive_attachments must have at most twenty entries")

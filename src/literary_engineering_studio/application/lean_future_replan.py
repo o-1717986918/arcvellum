@@ -18,14 +18,16 @@ from literary_engineering_studio_engine.public.projects import atomic_write_batc
 from ruamel.yaml import YAML
 
 from ..runtime.role_conversation import RoleConversationGateway
+from .future_plan_budget import allocate_future_targets, proposed_counts
 
 
 def replan_lean_future(
     root: Path,
     gateway: RoleConversationGateway,
     *,
-    chapter_scene_counts: Mapping[str, int],
+    chapter_scene_counts: Mapping[str, int] | None = None,
     direction: str,
+    planning_delivery=None,
 ) -> dict[str, Any]:
     """Rebuild a contiguous future suffix while preserving committed work."""
 
@@ -39,18 +41,23 @@ def replan_lean_future(
     plan_bytes, budget_bytes = plan_path.read_bytes(), budget_path.read_bytes()
     plan, budget = json.loads(plan_bytes), json.loads(budget_bytes)
     committed = _committed_prefix(project, list(plan.get("scenes") or []))
-    counts, active_chapters = _validated_counts(plan, budget, committed, chapter_scene_counts)
-    future, event_budget, narrative_design = _ask_for_future(
-        project, gateway, plan, budget, committed, counts, direction,
+    chapter_scene_counts, proposal = _count_proposal(
+        project, gateway, plan, budget, committed, chapter_scene_counts, direction, planning_delivery,
     )
-    revised_budget = _rebalance_budget(budget, counts)
+    counts, active_chapters = _validated_counts(plan, budget, committed, chapter_scene_counts)
+    future, event_budget, narrative_design, chapter_updates, selected_budget = _ask_for_future(
+        project, gateway, plan, budget, committed, counts, direction, planning_delivery=planning_delivery, initial_response=proposal,
+    )
+    revised_budget = _rebalance_budget(selected_budget, counts)
     revised_project = _revised_project_contract(
         project_bytes, int(revised_budget["totals"]["scene_count"]),
     )
     revised_plan = {
         **plan,
+        "planning_revision": hashlib.sha256((plan_bytes.decode("utf-8") + direction).encode()).hexdigest(),
         "project_digest": hashlib.sha256(revised_project.encode("utf-8")).hexdigest(),
         "scenes": [*committed, *future],
+        "chapters": [{**row, **chapter_updates.get(row["chapter_id"], {})} for row in plan["chapters"]],
         "narrative_design": narrative_design or plan.get("narrative_design", {}),
         "event_budget": [
             *[
@@ -150,26 +157,29 @@ def _normalize_chapter_counts(
 def _ask_for_future(
     root: Path, gateway: RoleConversationGateway, plan: dict[str, Any], budget: dict[str, Any],
     committed: list[dict[str, Any]], counts: dict[str, int], direction: str,
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, str]]:
-    prompt = _future_prompt(plan, budget, committed, counts, direction)
-    raw_answer = gateway.run(root, prompt, role="worker", timeout=900).answer
-    response: dict[str, Any] = {"malformed_answer": raw_answer[-12000:]}
+    *, planning_delivery=None, initial_response=None,
+) -> tuple:
+    prompt = _future_prompt(plan, budget, committed, counts, direction) + _committed_reading(root, committed)
+    response: dict[str, Any] = {}
     try:
-        response = _json_answer(raw_answer)
-        future, events = _normalize_future(plan, budget, committed, counts, response)
+        response = initial_response or _future_delivery(root, gateway, prompt, counts, planning_delivery, plan)
+        selected_budget = allocate_future_targets(budget, committed, response, counts)
+        future, events = _normalize_future(plan, selected_budget, committed, counts, response)
         _reject_exact_event_replays(committed, future)
     except ValueError as exc:
         repaired = _repair_future(
-            root, gateway, plan, budget, committed, counts, direction, response, exc,
+            root, gateway, plan, budget, committed, counts, direction, response, exc, planning_delivery=planning_delivery,
         )
-        future, events = _normalize_future(plan, budget, committed, counts, repaired)
+        selected_budget = allocate_future_targets(budget, committed, repaired, counts)
+        future, events = _normalize_future(plan, selected_budget, committed, counts, repaired)
         _reject_exact_event_replays(committed, future)
         response = repaired
     design = response.get("narrative_design")
     return future, events, (
-        {key: str(value).strip()[:500] for key, value in design.items() if isinstance(key, str) and str(value).strip()}
+        {key: str(value).strip() for key, value in design.items() if isinstance(key, str) and str(value).strip()}
         if isinstance(design, dict) else {}
-    )
+    ), {row["chapter_id"]: {key: row[key] for key in ("title", "literary_task", "obligation", "dramatic_turn", "reader_question") if key in row}
+        for row in response["chapters"]}, selected_budget
 
 
 def _future_prompt(
@@ -184,7 +194,7 @@ def _future_prompt(
         {
             "chapter_id": chapter_id,
             "remaining_scene_count": total - committed_counts[chapter_id],
-            "chapter": next(row for row in plan["chapters"] if row["chapter_id"] == chapter_id),
+            "prior_chapter_title": next(row for row in plan["chapters"] if row["chapter_id"] == chapter_id)["title"],
             "target_chinese_chars": next(
                 int(row["target_words"]) for row in budget["chapter_budgets"]
                 if row["chapter_id"] == chapter_id
@@ -203,18 +213,18 @@ def _future_prompt(
     ]
     return "\n".join([
         "# 未写场景后缀重排",
-        "你是作品主创。只返回 JSON 对象：chapters 是按请求顺序排列的数组；可同时返回 narrative_design，更新全书叙事模式、时间结构、视角、节奏与组织特色。",
-        "每章对象只含 chapter_id, irreversible_change, scenes。irreversible_change 必须说明本章结束后哪项人物处境、关系、资源、知识或承诺不能回到章首。",
-        "scenes 数量匹配 remaining_scene_count。每场包含 name, function, participants(人名数组), conflict, information_release, consequence, setup_payoff_role, rhythm_role, obligation；可加 story_time 和 length_weight 重新组织故事时间与相对篇幅。rhythm_role 使用 setup/escalation/climax/payoff/aftermath/bridge/transition。",
-        "统筹完整未来后缀：按用户认可的方向安排各章不同的不可逆转向，承接已提交事件的后果，分配兑现与余波。章节的 dramatic_turn 与 obligation 在本章行动中实现；已提交正文和既定事实保持不变。",
-        "阅读顺序与故事时间可以不同，story_time 标记故事时间；时间调度服务作品的叙事设计。length_weight 表达场景详略，按选择、阻力、人物关系、心理与空间的需要分配。",
-        "participants 逐字复用注册人物姓名；一次性无名路人可用角色称谓。",
-        "## 用户认可的重排方向\n" + direction[:5000],
+        "你是作品主创。用自然文字按请求章序交付未来规划，发展全书讲述声音、叙述时间、感知位置、详略与组织特色。",
+        "每章标明章节编号，写出章名、文学任务、阅读经验、组织变化、阅读兴趣和逐一展开的正文单元。章节价值可以是世界认识、风俗趣味、人物经验、情感、时间、发现与语言享受。",
+        "单元数量匹配章节请求中的剩余数量。每个单元以标题与自然段落说明文学作用、阅读任务、叙述策略、故事时间、参与人物和相对篇幅权重。按文学需要发展处境与差异、读者获得的认识、经验延续、前后呼应与组织节奏。每章也标明相对篇幅权重，表达未来部分的详略。",
+        "统筹完整未来阅读旅程，让各章形成适合本作的文学意义。根据作者方向与已提交经历，选择世界叙述、风俗、抒情、生活反复、概述、群像或人物现场，发展作品的声音与趣味。",
+        "阅读顺序与故事时间可以不同，story_time 标记故事时间；时间调度服务作品的叙事设计。length_weight 表达场景详略，按世界、风俗、思想、情感、群体与人物经验的需要分配。",
+        "参与人物名单逐字填写已注册姓名；纯叙述单元名单为空。群体、临时来客与世界经验写进单元叙述策略与阅读内容。",
+        "## 用户认可的重排方向\n" + direction,
         "## 终局\n" + str(plan.get("ending_choice") or ""),
-        "## 全书叙事设计\n" + json.dumps(plan.get("narrative_design") or {}, ensure_ascii=False),
+        "## 全书组织任务\n依据本轮作者方向重新发展叙述声音、时间、详略与各阶段阅读经验。",
         "## 注册人物\n" + json.dumps([row["name"] for row in plan.get("characters") or []], ensure_ascii=False),
         "## 章节请求\n" + json.dumps(request, ensure_ascii=False),
-        "## 已提交事件（均不得重演）\n" + json.dumps(used, ensure_ascii=False),
+        "## 已提交经历与阅读前缀\n" + json.dumps(used, ensure_ascii=False),
     ])
 
 
@@ -222,16 +232,17 @@ def _repair_future(
     root: Path, gateway: RoleConversationGateway, plan: dict[str, Any], budget: dict[str, Any],
     committed: list[dict[str, Any]], counts: dict[str, int], direction: str,
     answer: dict[str, Any], error: ValueError,
+    *, planning_delivery=None,
 ) -> dict[str, Any]:
     prompt = "\n".join([
         _future_prompt(plan, budget, committed, counts, direction),
         "## 结构或重复错误",
         str(error),
-        "返回完整修正版；保留有效事件，但合并或替换重复事件，不能只换说法。",
+        "交付完整修正版，沿用成立的文学构想，发展重复单元的新经验与组织方式。",
         "## 上一份回答",
         json.dumps(answer, ensure_ascii=False),
     ])
-    return _json_answer(gateway.run(root, prompt, role="worker", timeout=900).answer)
+    return _future_delivery(root, gateway, prompt, counts, planning_delivery, plan)
 
 
 def _normalize_future(
@@ -250,8 +261,9 @@ def _normalize_future(
             row, budget, committed, counts, start_index,
         )
         for scene in scenes:
-            if any(name not in registered for name in scene["participants"]):
-                raise ValueError("future replan uses a participant not registered in the project plan")
+            unknown = [name for name in scene["participants"] if name not in registered]
+            if unknown:
+                raise ValueError(f"future replan uses a participant not registered in the project plan: {chapter_id}/{scene['scene_id']} · {', '.join(unknown)}")
         future.extend(scenes)
         event_budget.append({
             "chapter_id": chapter_id,
@@ -270,8 +282,7 @@ def _normalize_future_chapter(
         raise ValueError("future replan chapter must be an object")
     chapter_id = str(row["chapter_id"])
     irreversible = str(row.get("irreversible_change") or "").strip()
-    if not irreversible:
-        raise ValueError(f"future replan chapter {chapter_id} requires an irreversible change")
+
     existing = [scene for scene in committed if scene.get("chapter_id") == chapter_id]
     remaining_count = counts[chapter_id] - len(existing)
     if remaining_count == 0:
@@ -338,6 +349,7 @@ def _rebalance_budget(budget: dict[str, Any], counts: dict[str, int]) -> dict[st
                 None,
             )
             if source is not None:
+                row["target_words"] = source["target_words"]
                 row["target_scene_count"] = source["scene_count"]
                 row["avg_scene_words"] = source["avg_scene_words"]
     return revised
@@ -445,3 +457,34 @@ def _json_answer(answer: str) -> dict[str, Any]:
 
 
 __all__ = ["replan_lean_future"]
+
+
+def _future_delivery(root, gateway, prompt, counts, delivery, plan=None):
+    if delivery:
+        context = {'chapter_counts': counts}
+        if plan is not None:
+            context['registered_actor_names'] = [row['name'] for row in plan.get('characters') or []]
+        return delivery(root, gateway, prompt, layer_id="planning.v2.future", kind="planning-future", context=context)
+    return _json_answer(gateway.run(root, prompt, role="worker", timeout=900).answer)
+
+
+def _committed_reading(root, committed):
+    if not committed:
+        return ""
+    scene_id = committed[-1]["scene_id"]
+    paths = [root / "drafts/scenes" / (scene_id + ".md"),
+             root / "workflow/scene_deltas" / (scene_id + ".json"),
+             root / "workflow/scene_commits" / (scene_id + ".json")]
+    return "\n## 上一已提交单元的完整正文与回执\n" + "\n\n".join(
+        path.relative_to(root).as_posix() + "\n" + path.read_text(encoding="utf-8") for path in paths if path.is_file())
+
+
+def _count_proposal(project, gateway, plan, budget, committed, counts, direction, delivery):
+    if counts is not None:
+        return counts, None
+    active = _active_chapter_ids([row["chapter_id"] for row in budget["chapter_budgets"]], committed)
+    current = {row["chapter_id"]: int(row["scene_count"]) for row in budget["chapter_budgets"] if row["chapter_id"] in active}
+    prompt = _future_prompt(plan, budget, committed, current, direction) + _committed_reading(project, committed)
+    prompt = prompt.replace("单元数量匹配章节请求中的剩余数量。", "自由选择各章未来正文单元的数量，章节请求中的数量与篇幅作为旧规划参照。")
+    proposal = _future_delivery(project, gateway, prompt, current, delivery, plan)
+    return proposed_counts(budget, committed, proposal), proposal

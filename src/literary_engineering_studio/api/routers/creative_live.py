@@ -18,6 +18,11 @@ from ...observability.creative_live.projector import project_runtime_event
 from ...observability.creative_live.snapshot import build_creative_live_snapshot
 from ...observability.creative_live.scene_transactions import project_scene_transactions
 from ...observability.scene_rehearsals import scene_rehearsal_detail, scene_rehearsal_index
+from ...observability.scene_materials import scene_material_detail
+from ...observability.scene_prompts import scene_prompt_detail
+from ...application.creator_persona import CreatorPersonaStore
+from ...application.creative_configuration import read_creative_configuration, save_creative_configuration, effective_creative_config
+from pydantic import BaseModel, Field
 from ..common import call_handler, project_root as resolve_project_root
 from ..streaming import sse_headers
 
@@ -31,10 +36,48 @@ class CreativeLiveRouterDependencies:
     scene_transactions: Any
     sse: Callable[[str, dict[str, Any], int | str | None], str]
     data_root: Path | None = None
+    config: dict | None = None
+
+
+class CreativeConfigurationRequest(BaseModel):
+    project_root: str
+    expected_revision: int = Field(ge=0)
+    overrides: dict[str, bool]
+
+
+class CreatorPersonaRequest(BaseModel):
+    project_root: str
+    expected_version: int = Field(ge=0)
+    text: str = Field(min_length=20, max_length=4000)
+    reason: str = Field(min_length=6, max_length=1000)
 
 
 def build_creative_live_router(deps: CreativeLiveRouterDependencies) -> APIRouter:
     router = APIRouter()
+
+    @router.get("/creative-live/persona")
+    def creator_persona(project_root: str):
+        return call_handler(lambda: CreatorPersonaStore(deps.data_root or Path(".")).read_current(resolve_project_root(project_root)))
+
+    @router.put("/creative-live/persona")
+    def save_creator_persona(payload: CreatorPersonaRequest):
+        return call_handler(lambda: CreatorPersonaStore(deps.data_root or Path(".")).save_as_author(
+            resolve_project_root(payload.project_root), payload.text, reason=payload.reason, expected_version=payload.expected_version))
+
+    @router.get("/creative-live/config")
+    def creative_configuration(project_root: str):
+        return call_handler(lambda: _configuration_preview(deps, resolve_project_root(project_root)))
+
+    @router.put("/creative-live/config")
+    def save_configuration(payload: CreativeConfigurationRequest):
+        return call_handler(lambda: save_creative_configuration(resolve_project_root(payload.project_root),
+            payload.overrides, expected_revision=payload.expected_revision))
+
+    @router.get("/creative-live/scene-prompts/{transaction_id}")
+    def scene_prompts(transaction_id: str, project_root: str):
+        root = resolve_project_root(project_root)
+        return call_handler(lambda: scene_prompt_detail(deps.data_root or Path("."),
+            deps.scene_transactions.list_for_project(str(root), limit=500), transaction_id))
 
     @router.get("/creative-live")
     def creative_live(project_root: str):
@@ -98,6 +141,13 @@ def build_creative_live_router(deps: CreativeLiveRouterDependencies) -> APIRoute
                 transaction_id,
             ),
         })
+
+    @router.get("/creative-live/scene-materials/{transaction_id}")
+    def scene_materials(transaction_id: str, project_root: str):
+        root = resolve_project_root(project_root)
+        return call_handler(lambda: {"ok": True, "inspection": scene_material_detail(
+            deps.data_root or Path("."), deps.scene_transactions.list_for_project(str(root), limit=500), transaction_id,
+        )})
 
     @router.get("/creative-live/artifacts/{artifact_id}/revisions")
     def creative_artifact_revisions(artifact_id: str, project_root: str):
@@ -166,16 +216,24 @@ def _raw_events(
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     status = deps.autopilot.status(root)
     current_run = status.get("run") if isinstance(status.get("run"), dict) else {}
-    durable = (
-        deps.jobs.autopilot_events_since(str(current_run.get("run_id") or ""), 0, limit=1200)
-        if current_run.get("run_id")
-        else []
-    )
+    durable = []
+    cursor = 0
+    while current_run.get("run_id"):
+        page = deps.jobs.autopilot_events_since(str(current_run["run_id"]),cursor,limit=1200)
+        if not page:
+            break
+        durable.extend(page)
+        next_cursor = max(int(row.get("sequence") or 0) for row in page)
+        if next_cursor <= cursor or len(page) < 1200:
+            break
+        cursor = next_cursor
     raw = [{**item, "source": "autopilot"} for item in durable]
     raw.extend(
         {**item, "source": "project-live"}
         for item in deps.live_events.wait_since(project_channel(root), 0, timeout=0)
     )
+    if hasattr(deps.live_events,"accounting_events"):
+        raw.extend({**item,"source":"project-live"} for item in deps.live_events.accounting_events(project_channel(root)))
     raw.sort(key=_event_time)
     return raw, current_run
 
@@ -279,3 +337,10 @@ def _resume_cursor(after: int, last_event_id: str | None) -> int:
 
 
 __all__ = ["CreativeLiveRouterDependencies", "build_creative_live_router"]
+
+
+def _configuration_preview(deps, root):
+    stored = read_creative_configuration(root)
+    application = effective_creative_config(deps.config or {}, root).get('application', {})
+    return {**stored, 'effective': {key: application.get(key, {}).get('enabled') is True
+                                  for key in ('scene_creator_v2', 'less_ai_tone_experiment')}}

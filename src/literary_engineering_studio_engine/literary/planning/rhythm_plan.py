@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from ..scene.facts import SceneFacts, load_scene_facts
-from .narrative_rhythm import analyze_narrative_rhythm_sequence, narrative_rhythm_contract, normalize_tension_curve
+from .narrative_rhythm import analyze_narrative_rhythm_sequence, narrative_rhythm_contract, normalize_tension_curve, literary_rhythm_strategy
 
 
 RHYTHM_PLAN_SCHEMA = "literary-engineering-workbench/rhythm-plan/v0.2"
@@ -89,7 +89,7 @@ def _load_scene_entries(root: Path, stored: dict[str, Any]) -> list[dict[str, An
         scene_id = facts.scene_id
         contract = narrative_rhythm_contract(root, path, plan_payload=stored, scene_text=scene_text)
         rhythm = contract.get("narrative_rhythm") if isinstance(contract.get("narrative_rhythm"), dict) else {}
-        curve = normalize_tension_curve(rhythm.get("tension_curve")) or {"entry": 2, "peak": 3, "exit": 2}
+        curve = rhythm["tension_curve"] if literary_rhythm_strategy(rhythm.get("tension_curve")) else normalize_tension_curve(rhythm.get("tension_curve")) or {"entry": 2, "peak": 3, "exit": 2}
         stored_entry = stored_scenes.get(scene_id) if isinstance(stored_scenes.get(scene_id), dict) else {}
         stored_gap = stored_entry.get("spatial_time_gap_before") if stored_entry else None
         entries.append(_scene_entry(facts, rhythm, curve, stored_gap, stored_scenes, contract))
@@ -187,7 +187,7 @@ def _normalize_saved_entry(scene_id: str, entry: dict[str, Any]) -> dict[str, An
     pace = str(entry.get("pace") or "balanced").strip().lower()
     role = str(entry.get("rhythm_role") or "mixed").strip().lower()
     detail_level = str(entry.get("detail_level") or "standard").strip().lower()
-    curve = normalize_tension_curve(entry.get("tension_curve"))
+    curve = entry["tension_curve"] if literary_rhythm_strategy(entry.get("tension_curve")) else normalize_tension_curve(entry.get("tension_curve"))
     if pace not in PACE_VALUES:
         raise ValueError(f"unsupported scene pace: {pace}")
     if role not in ROLE_VALUES:

@@ -74,32 +74,10 @@ class DefaultStylePresetTests(unittest.TestCase):
         self.assertTrue(quality["length_ok"])
         self.assertTrue(quality["structure_ok"])
         self.assertLess(len(prompt), 2_000)
-        self.assertIn("抽象文风要求必须在初稿中落实", prompt)
-        self.assertIn("语言从何处蓄势、何处抬高、何处骤停", prompt)
-        self.assertIn("句长服从意义和呼吸", prompt)
-        self.assertIn("去掉姓名后人物说话是否仍有差异", prompt)
-        self.assertIn("后两组同样可担任主参照", prompt)
-        self.assertIn("白描不能独占全场", prompt)
-        self.assertIn("自由间接引语、反讽、借代、通感", prompt)
-        self.assertIn("内心语言充分呈现", prompt)
-        self.assertIn("人物感受继续变化时，让心理运动", prompt)
-        self.assertNotIn("才简短直述", prompt)
-        self.assertIn("已把同一层意思传达清楚时，删去重复解释", prompt)
-        self.assertIn("交付格式由当前创作任务决定", prompt)
-        self.assertIn("机械“不是……而是……”", prompt)
-        self.assertIn("换皮对照", prompt)
-        self.assertIn("中文正文统一使用全角标点", prompt)
-        self.assertIn("硬边界由 Style Lint 与 AgentReview 核验", prompt)
-        self.assertIn("无关精确数字默认不用", prompt)
-        self.assertIn("一个又一个", prompt)
-        self.assertIn("一项实际功能足以保留必要精度", prompt)
-        self.assertIn("人物说话受身份、欲望和关系牵动", prompt)
-        self.assertIn("场景合同和参考语料不自动豁免装饰性数字", prompt)
-        self.assertIn("已确定金额、日期、数量和差值必须准确", prompt)
-        self.assertIn("普通陈设和日常动作不为显得具体而记账", prompt)
-        self.assertIn("当前任务提供的主参考选段", prompt)
-        self.assertIn("至少两项可观察技法", prompt)
-        self.assertIn("一张桌、两把椅子、拧两下、看几秒", prompt)
+        for mode in ("世界与风俗", "人物现场", "抒情与内心", "群像与传奇"):
+            self.assertIn(mode, prompt)
+        for old in ("承压才", "情绪必须", "你不能", "你不是", "硬边界"):
+            self.assertNotIn(old, prompt)
         self.assertIn("version: v15", route_prompt)
         self.assertIn("本场选中的完整参考", route_prompt)
         self.assertIn("expression plan", route_prompt)
@@ -190,13 +168,9 @@ class DefaultStylePresetTests(unittest.TestCase):
             ).read_text(encoding="utf-8").strip()
             for block in re.split(r"\n{2,}", corpus_text):
                 self.assertIn(block, profile_text)
-            self.assertIn("R01—R07", profile_text)
-            self.assertIn("R17—R25", profile_text)
-            self.assertIn("类型氛围与空间定调", profile_text)
-            self.assertNotIn("类型氛围反例", profile_text)
-            self.assertNotIn("https://", profile_text)
-            self.assertNotIn("作者：", profile_text)
-            self.assertNotIn("版权", profile_text)
+            self.assertIn("R01—R25", profile_text)
+            self.assertIn("出处核验的文学参照", profile_text)
+            self.assertIn("https://www.gutenberg.org/", profile_text)
             self.assertIn(
                 mounted_profile.resolve(),
                 {path.resolve() for path in style_source_paths(root)},
@@ -232,7 +206,7 @@ class DefaultStylePresetTests(unittest.TestCase):
             self.assertIn(selection["references"][0]["text"], render_style_reference_selection(selection))
             author_style = runtime._author_style_reference(runtime._style_reference(selection))
             self.assertIn("项目已挂载文风", author_style)
-            self.assertIn("人物感受继续变化时，让心理运动", author_style)
+            self.assertIn("让人与世界之间的感情充分展开", author_style)
             self.assertIn("### 主参考 R17", author_style)
 
             config = json.loads(
@@ -309,7 +283,7 @@ class DefaultStylePresetTests(unittest.TestCase):
             current = active_project_style(root)
             self.assertEqual(refreshed.version_id, current["version_id"])
             self.assertEqual(first["content_hash"], current["content_hash"])
-            self.assertIn("交付格式由当前创作任务决定", (
+            self.assertIn("文学身份与写作志趣", (
                 root / current["prompt"]).read_text(encoding="utf-8"))
 
 

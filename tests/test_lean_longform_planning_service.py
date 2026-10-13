@@ -1,4 +1,5 @@
 import json
+from importlib.resources import files
 from pathlib import Path
 import tempfile
 from types import SimpleNamespace
@@ -22,6 +23,42 @@ class _Gateway:
 
 
 class LeanLongformPlanningServiceTests(unittest.TestCase):
+    def test_initial_plan_replaces_project_init_blank_scene_scaffold(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "project.yaml").write_text(
+                "target_length: 6000\ntarget_chapters: 1\ntarget_scenes: 1\n",
+                encoding="utf-8",
+            )
+            scene = root / "scenes" / "scene_0001.yaml"
+            scene.parent.mkdir()
+            scene.write_text(
+                files("literary_engineering_studio_engine")
+                .joinpath("_engine", "templates", "scene.yaml")
+                .read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            answer = {
+                "premise": "旧承诺使林昭欠下一笔债",
+                "central_question": "他会怎样履约？",
+                "ending_choice": "保住盟友或完成承诺",
+                "volume_obligations": ["债务变得不可撤销"],
+                "chapters": [{
+                    "title": "信件", "dramatic_turn": "承诺公开",
+                    "obligation": "建立债务", "reader_question": "谁留下信？",
+                }],
+                "first_window": [_scene("拆信")],
+            }
+            gateway = _Gateway([answer])
+            service = LeanLongformPlanningService({}, data_root=root / "data", gateway=gateway)
+
+            service.ensure_initial(root)
+
+            self.assertEqual(len(gateway.calls), 1)
+            self.assertIn("## 已填场景档案\n无", gateway.calls[0][1])
+            self.assertIn('scene_id: "scene_0001"', scene.read_text(encoding="utf-8"))
+            self.assertTrue(longform_materialization_status(root)[0])
+
     def test_initial_plan_preserves_an_existing_authored_scene(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -132,8 +169,8 @@ class LeanLongformPlanningServiceTests(unittest.TestCase):
             self.assertIn("章场数量、人物出场范围、视角和语言形式留在规划或用户方向中", gateway.calls[0][1])
             self.assertIn("narrative_design", gateway.calls[0][1])
             self.assertIn("length_weight", gateway.calls[0][1])
-            self.assertIn("consequence 可以写条件性的可能变化", gateway.calls[0][1])
-            self.assertIn("职业流程只做生活背景", gateway.calls[0][1])
+            self.assertIn("consequence 也可以记录读者理解或作品尺度的变化", gateway.calls[0][1])
+            self.assertIn("章节的文学任务", gateway.calls[0][1])
             self.assertNotIn("会改变眼前选择且后文会核验", gateway.calls[0][1])
             self.assertEqual(len(service.ensure_initial(root)["scenes"]), 2)
             self.assertEqual(len(gateway.calls), 1)
@@ -151,7 +188,7 @@ class LeanLongformPlanningServiceTests(unittest.TestCase):
             self.assertIn('"irreversible_change":"盟友离开"', gateway.calls[1][1])
             self.assertIn("不追加尾声或续集钩子", gateway.calls[1][1])
             self.assertIn("story_time", gateway.calls[1][1])
-            self.assertIn("场景详略按事件", gateway.calls[1][1])
+            self.assertIn("单元详略按世界认识", gateway.calls[1][1])
             self.assertTrue((root / "scenes" / "scene_0003.yaml").is_file())
             stored = json.loads((root / "plot" / "lean_project_plan.json").read_text(encoding="utf-8"))
             second_event = next(

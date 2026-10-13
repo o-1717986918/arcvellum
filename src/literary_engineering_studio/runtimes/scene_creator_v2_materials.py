@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, replace, field
 from hashlib import sha256
 import json
 from pathlib import Path
@@ -12,15 +12,21 @@ from literary_engineering_studio_engine.public.literary import (
     CreatorMaterialPlanV1, SceneMaterialRequestV3, SceneMaterialRequestV4,
     assert_required_material_calls,
     ActorCharacterCardV1, parse_actor_character_card, render_actor_character_card,
+    actor_card_schema_for_template, ACTOR_CARD_SCHEMA,
 )
 
 from .scene_creator_workspace import SceneCreatorWorkspace
+from .actor_history_projection import _adopted_actor_history
+from .natural_transport_repair import NaturalExtractionError
 from .scene_creator_material_context import (
-    freeze_material_candidate, natural_material_invitation,
+    freeze_material_candidate, freeze_material_selections, natural_material_invitation,
     validate_material_context_budget,
 )
 from .scene_natural_output import NATURAL_RESPONSE_MODE, render_style
 from .event_material_provenance import event_fields as _event_fields
+from .material_need import check_saved_need
+from .material_input_reuse import input_identity, reuse_equal_input, literary_request
+from .natural_creator_prompt import STABLE_PREFIX_LAYOUT
 
 
 _KIND_ROLE = {
@@ -44,6 +50,7 @@ class MaterialInvocationV2:
     initialization_answer: str = ""
     character_card_digest: str = ""
     response_mode: str = ""
+    request_context: dict[str, Any] = field(default_factory=dict)
 
 
 def assert_v2_prompts_ready(layers: Mapping[str, str]) -> None:
@@ -104,9 +111,11 @@ def render_material_invocation(
     )} for entry in selected_materials)
     return MaterialInvocationV2(
         _KIND_ROLE[request.kind], system,
-        natural_material_invitation(task) if natural else json.dumps(task, ensure_ascii=False), request_id, manifest,
+        natural_material_invitation(task, actor_turn_template=layers.get('scene.v2.actor.turn', ''))
+        if natural else json.dumps(task, ensure_ascii=False), request_id, manifest,
         character_card_digest=card_digest,
         response_mode=NATURAL_RESPONSE_MODE if natural else "",
+        request_context={'kind': request.kind, 'target': request.target},
     )
 
 
@@ -118,6 +127,7 @@ def _material_system(request, layers, natural):
             raise ValueError("actor request needs a creator-authored character_card")
         template = render_actor_character_card(template, request.character_card)
         digest = _card_digest(request.character_card)
+        return template, digest
     elif natural:
         template = render_style(template, request.style_direction)
     if natural:
@@ -130,12 +140,17 @@ class SceneCreatorV2MaterialCoordinator:
     """Persist request snapshots and verify actual consultations before prose."""
 
     def __init__(self, root: Path, workspace: SceneCreatorWorkspace, layers: Mapping[str, str],
-                 *, scene_id: str, actor_personas: Mapping[str, str] | None = None):
+                 *, scene_id: str, actor_personas: Mapping[str, str] | None = None,
+                 creator_prompt_layout: str = ""):
         self.root = root
         self.workspace = workspace
         self.layers = layers
         self.scene_id = scene_id
         self.actor_personas = actor_personas or {}
+        self.material_scope = {}
+        if creator_prompt_layout not in {"", STABLE_PREFIX_LAYOUT}:
+            raise ValueError("unsupported frozen creator prompt layout")
+        self.creator_prompt_layout = creator_prompt_layout
 
     def save_plan(self, plan: CreatorMaterialPlanV1) -> None:
         path = self.root / "material_plan.json"
@@ -162,9 +177,11 @@ class SceneCreatorV2MaterialCoordinator:
         self, request: SceneMaterialRequestV3,
         invoke: Callable[[MaterialInvocationV2], Mapping[str, Any]],
         *, adopted_candidate_ids: set[str] | frozenset[str] = frozenset(),
+        adopted_decisions: Mapping[str,Mapping[str,Any]] | None = None,
     ) -> list[dict[str, Any]]:
         if not (self.root / "material_plan.json").is_file():
             raise ValueError("scene creator must save a material plan before calling an agent")
+        check_saved_need(self, request)
         if request.kind == "actor":
             request = replace(request, character_card=self._resolve_actor_card(request))
         request_key = sha256(json.dumps([self.scene_id, request.to_dict()],
@@ -172,7 +189,7 @@ class SceneCreatorV2MaterialCoordinator:
         record_path = self.root / "calls" / (request_key + ".json")
         if request.kind == "actor":
             history, initialization_answer, role_context, role_context_sha256 = (
-                self._actor_role_context(request, adopted_candidate_ids))
+                self._actor_role_context(request, adopted_candidate_ids,adopted_decisions))
         else:
             history, initialization_answer, role_context, role_context_sha256 = (), "", None, ""
         cached = self._cached_candidates(record_path, request.kind, role_context_sha256)
@@ -187,12 +204,17 @@ class SceneCreatorV2MaterialCoordinator:
         )
         call = replace(call, history=history,
                        initialization_answer=initialization_answer)
+        digest = input_identity(call, self.scene_id, self.layers)
+        reused = reuse_equal_input(self, request_key, digest, request)
+        if reused is not None:
+            return reused
         response = invoke(call)
         candidates = _parse_candidates(response, request, call.request_id)
         sequence = len(list((self.root / "calls").glob("*.json"))) + 1
         self._write(record_path, {
             "schema": "arcvellum/material-call/v2", "scene_id": self.scene_id,
             "sequence": sequence,
+            "input_identity": digest,
             "request": request.to_dict(), "request_id": call.request_id, "role": call.role,
             "attachment_manifest": list(call.attachment_manifest),
             "attachments": attachments, "material_attachments": selected_materials,
@@ -201,6 +223,7 @@ class SceneCreatorV2MaterialCoordinator:
             "character_card_digest": call.character_card_digest,
             "prompt": call.prompt, "answer": str(response.get("__answer") or ""),
             "initialization_answer": str(response.get("__initialization_answer") or ""),
+            "transport": response.get('__transport'),
             "invoked": True, "candidates": candidates,
             **({"role_context_sha256": role_context_sha256, "role_context": role_context}
                if role_context is not None else {}),
@@ -211,9 +234,10 @@ class SceneCreatorV2MaterialCoordinator:
     def _actor_role_context(
         self, request: SceneMaterialRequestV3,
         adopted_candidate_ids: set[str] | frozenset[str],
+        adopted_decisions=None,
     ) -> tuple[tuple[tuple[str, str], ...], str, dict[str, Any], str]:
         history_rows = self._history(request.kind, request.target, exclude_request=request.to_dict())
-        history = _adopted_actor_history(history_rows, adopted_candidate_ids)
+        history = _adopted_actor_history(history_rows, adopted_candidate_ids,adopted_decisions)
         initialization_answer = (
             str(history_rows[-1].get("initialization_answer") or "") if history_rows else ""
         )
@@ -233,6 +257,8 @@ class SceneCreatorV2MaterialCoordinator:
             return None
         saved = json.loads(record_path.read_text(encoding="utf-8"))
         saved_role_context = str(saved.get("role_context_sha256") or "")
+        if kind == "actor" and not saved_role_context:
+            raise NaturalExtractionError("历史角色回应缺少语境绑定，原候选保留为历史证据；当前委托不能直接复用，请明确新的来话与刺激。")
         if (kind == "actor" and saved_role_context
                 and saved_role_context != role_context_sha256):
             raise ValueError(
@@ -251,7 +277,13 @@ class SceneCreatorV2MaterialCoordinator:
                 raise ValueError("character_card is frozen for this actor and scene transaction")
             return saved
         if request.character_card is None:
-            raise ValueError("first actor request needs a creator-authored character_card")
+            from ..application.actor_card_store import ActorCardStore
+            work = ActorCardStore.read(self.workspace.archive_root, request.target)
+            if work is None:
+                raise ValueError("first actor request needs a creator-authored character_card")
+            if work['card']['schema'] != actor_card_schema_for_template(self.layers['scene.v2.material.actor']):
+                raise ValueError('角色旧卡已保留为参考，请按当前十一块模板重新填写人物卡。')
+            request = replace(request, character_card=parse_actor_character_card(work["card"], request.target))
         self._write(path, request.character_card.to_dict())
         self._publish_actor_card(request.character_card)
         return request.character_card
@@ -259,7 +291,17 @@ class SceneCreatorV2MaterialCoordinator:
     def _publish_actor_card(self, card: ActorCharacterCardV1) -> None:
         work_id = self.workspace.scratch_root.name
         data_root = self.workspace.scratch_root.parent.parent
-        self._write(data_root / "character-card-library" / work_id / (_card_digest(card) + ".json"),
+        if card.schema == ACTOR_CARD_SCHEMA:
+            from ..application.actor_card_store import ActorCardStore
+            previous = ActorCardStore.read(self.workspace.archive_root, card.target)
+            if previous is None or previous['card']['schema'] != card.schema:
+                ActorCardStore(data_root).save(self.workspace.archive_root, card.to_dict(), provenance={
+                    'author': 'scene-creator', 'transaction': str(self.root), 'scene_id': self.scene_id,
+                    'reason': '十一块角色卡初始化', 'previous_digest': previous['digest'] if previous else ''})
+        path = data_root / "character-card-library" / work_id / (_card_digest(card) + ".json")
+        if path.is_file():
+            return
+        self._write(path,
             {"card": card.to_dict(), "scene_id": self.scene_id, "digest": _card_digest(card)})
 
     def creator_card_context(self) -> dict[str, Any]:
@@ -268,7 +310,15 @@ class SceneCreatorV2MaterialCoordinator:
             payload = json.loads(path.read_text(encoding="utf-8"))
             card = parse_actor_character_card(payload, str(payload.get("target") or ""))
             cards.append({"digest": _card_digest(card), "card": card.to_dict()})
-        return {"stable_persona_sources": dict(self.actor_personas), "frozen_scene_cards": cards}
+        work_cards = []
+        for path in sorted((self.workspace.archive_root / "characters/role-cards").glob("*.json")):
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            work_cards.append({"source": path.relative_to(self.workspace.archive_root).as_posix(), **payload})
+        schema = actor_card_schema_for_template(self.layers['scene.v2.material.actor'])
+        return {"stable_persona_sources": dict(self.actor_personas),
+                "work_cards": [row for row in work_cards if row['card']['schema'] == schema],
+                "previous_work_cards": [row for row in work_cards if row['card']['schema'] != schema],
+                "frozen_scene_cards": cards}
 
     def _prepared_attachments(self, request: SceneMaterialRequestV3, request_key: str) -> list[dict[str, Any]]:
         path = self.root / "prepared" / (request_key + ".json")
@@ -295,7 +345,8 @@ class SceneCreatorV2MaterialCoordinator:
                 raise ValueError("prepared material selection is inconsistent")
             return saved["attachments"]
         candidates = self._candidate_lookup() if refs else {}
-        attachments = [freeze_material_candidate(ref, candidates) for ref in refs]
+        attachments = freeze_material_selections(refs,candidates,
+            actor_target=request.target if request.kind=="actor" else None)
         self._write(path, {"schema": "arcvellum/material-selection-prepared/v1",
                            "request": request.to_dict(), "attachments": attachments})
         return attachments
@@ -326,7 +377,7 @@ class SceneCreatorV2MaterialCoordinator:
             record = json.loads(file.read_text(encoding="utf-8"))
             request = record.get("request") or {}
             if (request.get("kind") == kind and request.get("target") == target
-                    and request != exclude_request and record.get("answer")):
+                    and literary_request(request) != literary_request(exclude_request or {}) and record.get("answer")):
                 rows.append(record)
         return sorted(rows, key=lambda row: int(row.get("sequence") or 0))
 
@@ -371,7 +422,8 @@ class SceneCreatorV2MaterialCoordinator:
 def _parse_candidates(response: Mapping[str, Any], request: SceneMaterialRequestV3,
                       request_id: str) -> list[dict[str, Any]]:
     raw = response.get("candidates")
-    if not isinstance(raw, list) or len(raw) > 3:
+    if not isinstance(raw, list) or len(raw) > 3 and not all(
+            isinstance(row, Mapping) and row.get('source_delivery') == 'original-v2' for row in raw):
         raise ValueError("material agent must return at most three candidates")
     if not raw and not str(response.get("no_material_reason") or "").strip():
         raise ValueError("empty material response needs a reason")
@@ -396,50 +448,35 @@ def _card_digest(card: ActorCharacterCardV1) -> str:
 
 
 def _candidate_text_focus(item: Mapping[str, Any], actor_fields: Mapping[str, str]) -> tuple[str, str]:
-    if actor_fields:
+    if item.get('source_delivery') == 'original-v2':
+        text = str(item.get('text') or '')
+    elif actor_fields:
         text = "\n".join(part for part in (
             actor_fields.get("first_person_action"), actor_fields.get("spoken"),
         ) if part)
     else:
         text = str(item.get("text") or "").strip()
     focus = str(item.get("focus") or "").strip()
-    if not 5 <= len(text) <= 2400 or not 1 <= len(focus) <= 200:
+    minimum = 1 if item.get('source_delivery') == 'original-v2' else 5
+    maximum = 160_000 if item.get('source_delivery') == 'original-v2' else 2400
+    if not minimum <= len(text) <= maximum or not 1 <= len(focus) <= 200:
         raise ValueError("material candidate needs bounded literary text and focus")
     return text, focus
 
 
-def _adopted_actor_history(
-    rows: list[dict[str, Any]], adopted_candidate_ids: set[str] | frozenset[str],
-) -> tuple[tuple[str, str], ...]:
-    if not adopted_candidate_ids:
-        return ()
-    history = []
-    for row in rows:
-        for candidate in row.get("candidates") or []:
-            if not isinstance(candidate, Mapping):
-                continue
-            if str(candidate.get("candidate_id") or "") not in adopted_candidate_ids:
-                continue
-            lines = []
-            for key, label in (
-                ("spoken", "台词"), ("first_person_action", "动作"),
-                ("private_impulse", "内心冲动"),
-            ):
-                value = str(candidate.get(key) or "").strip()
-                if value:
-                    lines.append(f"{label}：{value}")
-            if lines:
-                history.append(("主创选用的本角色上一轮表达", "\n".join(lines)))
-    return tuple(history[-12:])
-
-
-def _actor_fields(item: Mapping[str, Any]) -> dict[str, str]:
+def _actor_fields(item: Mapping[str, Any]) -> dict[str, Any]:
     spoken = str(item.get("spoken") or "").strip()
     action = str(item.get("first_person_action") or "").strip()
-    if not (spoken or action):
+    if not (spoken or action or item.get('source_delivery') == 'original-v2' and item.get('private_impulse')):
         raise ValueError("actor candidate needs speech or first-person action")
-    return {"spoken": spoken[:1200], "first_person_action": action[:1200],
-            "private_impulse": str(item.get("private_impulse") or "").strip()[:800]}
+    impulse = str(item.get('private_impulse') or '').strip()
+    if len(spoken) > 1200 or len(action) > 1200 or len(impulse) > 800:
+        raise ValueError('actor response exceeds a field budget; source is preserved without clipping')
+    fields = {"spoken": spoken, "first_person_action": action, "private_impulse": impulse}
+    for key in ('spoken_fragments', 'action_fragments', 'private_fragments', 'annotation_spans', 'source_delivery'):
+        if key in item:
+            fields[key] = item[key]
+    return fields
 
 
 __all__ = [

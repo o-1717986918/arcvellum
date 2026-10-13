@@ -1111,6 +1111,42 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/creative-live/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Creative Configuration */
+        get: operations["creative_configuration_creative_live_config_get"];
+        /** Save Configuration */
+        put: operations["save_configuration_creative_live_config_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/creative-live/persona": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Creator Persona */
+        get: operations["creator_persona_creative_live_persona_get"];
+        /** Save Creator Persona */
+        put: operations["save_creator_persona_creative_live_persona_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/creative-live/runs/{controller_id}/snapshot": {
         parameters: {
             query?: never;
@@ -1120,6 +1156,40 @@ export interface paths {
         };
         /** Creative Run Snapshot */
         get: operations["creative_run_snapshot_creative_live_runs__controller_id__snapshot_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/creative-live/scene-materials/{transaction_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Scene Materials */
+        get: operations["scene_materials_creative_live_scene_materials__transaction_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/creative-live/scene-prompts/{transaction_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Scene Prompts */
+        get: operations["scene_prompts_creative_live_scene_prompts__transaction_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2753,6 +2823,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/stylometry/presets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Presets */
+        get: operations["presets_stylometry_presets_get"];
+        /** Save Presets */
+        put: operations["save_presets_stylometry_presets_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stylometry/presets/initialize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Initialize Presets */
+        post: operations["initialize_presets_stylometry_presets_initialize_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stylometry/presets/{preset_id}/recalculate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Recalculate Preset */
+        post: operations["recalculate_preset_stylometry_presets__preset_id__recalculate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/stylometry/profiles/{profile_id}": {
         parameters: {
             query?: never;
@@ -3438,6 +3560,17 @@ export interface components {
              */
             timeout: number;
         };
+        /** CreativeConfigurationRequest */
+        CreativeConfigurationRequest: {
+            /** Expected Revision */
+            expected_revision: number;
+            /** Overrides */
+            overrides: {
+                [key: string]: boolean;
+            };
+            /** Project Root */
+            project_root: string;
+        };
         /** CreativeQualityPreviewRequest */
         CreativeQualityPreviewRequest: {
             /** Profile */
@@ -3462,6 +3595,17 @@ export interface components {
             };
             /** Project Root */
             project_root: string;
+        };
+        /** CreatorPersonaRequest */
+        CreatorPersonaRequest: {
+            /** Expected Version */
+            expected_version: number;
+            /** Project Root */
+            project_root: string;
+            /** Reason */
+            reason: string;
+            /** Text */
+            text: string;
         };
         /** DemoCloneRequest */
         DemoCloneRequest: {
@@ -3504,6 +3648,11 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** InitialPresetsRequest */
+        InitialPresetsRequest: {
+            /** Project Root */
+            project_root: string;
         };
         /** LiteraryKernelMigrationRequest */
         LiteraryKernelMigrationRequest: {
@@ -3549,6 +3698,13 @@ export interface components {
             credential: string;
             /** Provider Id */
             provider_id: string;
+        };
+        /** PresetRecalculationRequest */
+        PresetRecalculationRequest: {
+            /** Expected Revision */
+            expected_revision: number;
+            /** Project Root */
+            project_root: string;
         };
         /** ProjectAgentSessionRequest */
         ProjectAgentSessionRequest: {
@@ -3869,6 +4025,55 @@ export interface components {
             style_id: string;
             /** Version Id */
             version_id: string;
+        };
+        /** StylePresetRequest */
+        StylePresetRequest: {
+            /**
+             * Active
+             * @default true
+             */
+            active: boolean;
+            /**
+             * Combine
+             * @default append
+             */
+            combine: string;
+            /**
+             * Literary Intent
+             * @default
+             */
+            literary_intent: string;
+            /** Narrative Modes */
+            narrative_modes?: string[];
+            /** Preset Id */
+            preset_id: string;
+            /** Reference Ids */
+            reference_ids?: string[];
+            /** Stylometry Version Id */
+            stylometry_version_id: string;
+            /** Title */
+            title: string;
+            /**
+             * Usage
+             * @default guide
+             */
+            usage: string;
+        };
+        /** StylePresetsRequest */
+        StylePresetsRequest: {
+            /** Default Preset Id */
+            default_preset_id: string;
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /** Expected Revision */
+            expected_revision: number;
+            /** Presets */
+            presets: components["schemas"]["StylePresetRequest"][];
+            /** Project Root */
+            project_root: string;
         };
         /** StyleSourceCreateRequest */
         StyleSourceCreateRequest: {
@@ -6264,12 +6469,206 @@ export interface operations {
             };
         };
     };
+    creative_configuration_creative_live_config_get: {
+        parameters: {
+            query: {
+                project_root: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    save_configuration_creative_live_config_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreativeConfigurationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    creator_persona_creative_live_persona_get: {
+        parameters: {
+            query: {
+                project_root: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    save_creator_persona_creative_live_persona_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreatorPersonaRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     creative_run_snapshot_creative_live_runs__controller_id__snapshot_get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
                 controller_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    scene_materials_creative_live_scene_materials__transaction_id__get: {
+        parameters: {
+            query: {
+                project_root: string;
+            };
+            header?: never;
+            path: {
+                transaction_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    scene_prompts_creative_live_scene_prompts__transaction_id__get: {
+        parameters: {
+            query: {
+                project_root: string;
+            };
+            header?: never;
+            path: {
+                transaction_id: string;
             };
             cookie?: never;
         };
@@ -9560,6 +9959,138 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["StylometryParametersRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    presets_stylometry_presets_get: {
+        parameters: {
+            query: {
+                project_root: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    save_presets_stylometry_presets_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StylePresetsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    initialize_presets_stylometry_presets_initialize_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InitialPresetsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recalculate_preset_stylometry_presets__preset_id__recalculate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                preset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PresetRecalculationRequest"];
             };
         };
         responses: {

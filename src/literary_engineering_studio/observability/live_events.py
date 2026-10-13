@@ -10,6 +10,7 @@ import time
 from typing import Any
 
 from .event_policy import EPHEMERAL_RUNTIME_EVENTS
+from .event_policy import canonical_runtime_event
 
 
 @dataclass(frozen=True)
@@ -28,6 +29,7 @@ class LiveEventBus:
         self.max_events_per_channel = max(50, int(max_events_per_channel))
         self._channels: dict[str, deque[LiveEvent]] = {}
         self._sequences: dict[str, int] = {}
+        self._accounting: dict[str, list[LiveEvent]] = {}
         self._condition = threading.Condition(threading.RLock())
         self._closed = False
 
@@ -38,6 +40,9 @@ class LiveEventBus:
             item = LiveEvent(sequence, event, datetime.now(timezone.utc).isoformat(), dict(data))
             queue = self._channels.setdefault(channel, deque(maxlen=self.max_events_per_channel))
             queue.append(item)
+            if canonical_runtime_event(event) in {"usage.updated","role.invocation.started",
+                    "runner.provider.request.started","runner.http.attempt.started","billing.actual_charge.recorded"}:
+                self._accounting.setdefault(channel,[]).append(item)
             self._condition.notify_all()
             return item
 
@@ -66,6 +71,10 @@ class LiveEventBus:
         with self._condition:
             self._closed = True
             self._condition.notify_all()
+
+    def accounting_events(self, channel: str) -> list[dict[str, Any]]:
+        with self._condition:
+            return [row.as_dict() for row in self._accounting.get(channel,())]
 
 
 EPHEMERAL_WORKER_EVENTS = set(EPHEMERAL_RUNTIME_EVENTS)

@@ -57,7 +57,7 @@ def continue_scene_describer(
 
     def produce() -> dict[str, Any]:
         answer, _ = invoke_role_turn(role, session["initialization"], history, prompt)
-        return {"answer": answer, "payload": _answer_payload(answer)}
+        return {"answer": answer, "payload": _answer_payload(answer), "request": request}
 
     def validate(record: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(record.get("answer"), str) or not isinstance(record.get("payload"), dict):

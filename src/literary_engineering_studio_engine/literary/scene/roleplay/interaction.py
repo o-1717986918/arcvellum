@@ -78,16 +78,18 @@ def _check_material_request(
         raise ValueError("material request literary purpose, moment, or target is too long")
     if not purpose or not scene_moment:
         raise ValueError("material request needs a literary purpose and scene moment")
-    if not _valid_material_role(kind, speaker, scene_change, participants):
-        raise ValueError("material request speaker is outside its role")
+    _validate_material_request_role(kind, speaker, scene_change, participants)
 
 
-def _valid_material_role(kind: str, speaker: str, scene_change: str, participants: set[str]) -> bool:
-    if kind in {"actor", "character-description"}:
-        return speaker in participants
-    if kind == "event-narration":
-        return bool(speaker) and not scene_change
-    return not scene_change and (kind != "environment" or not speaker)
+def _validate_material_request_role(
+    kind: str, target: str, scene_change: str, participants: set[str],
+) -> None:
+    if kind in {"actor", "character-description"} and target not in participants:
+        raise ValueError("actor and character-description target must be a scene participant")
+    if kind == "event-narration" and not target:
+        raise ValueError("event-narration requires a subject target")
+    if kind != "actor" and scene_change:
+        raise ValueError("scene_change only applies to actor requests")
 
 
 def parse_interaction_direction(payload: dict[str, Any], brief: dict[str, Any], plan: dict[str, Any]) -> dict[str, Any]:

@@ -61,6 +61,9 @@ CASES = {
 }
 
 
+from .literary_cases import LITERARY_CASES
+CASES.update(LITERARY_CASES)
+
 def prepare_case(folder: Path, case_id: str) -> Path:
     case, project = CASES[case_id], folder / "work"
     if (folder / "case-seed.json").is_file():
@@ -68,16 +71,21 @@ def prepare_case(folder: Path, case_id: str) -> Path:
             raise ValueError("案例种子已变化，请用新的 variant 保存独立对照。")
         return project
     if not (project / "project.yaml").is_file():
-        init_work_project(InitOptions(project, title=case["title"], target_length=2200, premise=case["premise"]))
-    files = {project / "canon/world_rules.yaml": "rules: [人物依靠亲历与交谈获得信息, 物件与行动遵循日常物理条件]\n"}
+        init_work_project(InitOptions(project, title=case["title"], target_length=case.get("unit_target", 1100) * 2, premise=case["premise"]))
+    files = {project / "canon/world_rules.yaml": case.get("world_rules", "rules: [人物依靠亲历与交谈获得信息, 物件与行动遵循日常物理条件]\n")}
     for index, (name, detail) in enumerate(case["people"].items()):
         files[project / f"characters/person-{index+1}.yaml"] = f"name: {name}\ncharacter_id: person-{index+1}\nprofile: {detail}\n"
     for index, goal in enumerate(case["goals"], 1):
+        participants = case.get("participants", [list(case["people"])] * 2)[index - 1]
+        target = case.get("unit_target", 850)
         files[project / f"scenes/scene_{index:04d}.yaml"] = (
             f"scene_id: scene_{index:04d}\nchapter_id: chapter_01\nscene_goal: {goal}\n"
-            f"participants: [{', '.join(case['people'])}]\nlocation: {case['location']}\nviewpoint: {next(iter(case['people']))}\n"
-            "word_count_target: 850\nword_count_min: 500\nword_count_max: 1400\ncharacter_state_change: 2\n"
+            f"participants: [{', '.join(participants)}]\nlocation: {case['location']}\nviewpoint: {next(iter(participants), '')}\n"
+            f"word_count_target: {target}\nword_count_min: {round(target * .75)}\nword_count_max: {round(target * 1.2)}\ncharacter_state_change: {2 if participants else 0}\n"
+            f"narrative_strategy: {goal}\n"
             "input_state:\n  canon_refs: [canon/world_rules.yaml]\n")
+    if case.get("literary_acceptance"):
+        files[project / "workflow/studio/creative_configuration.json"] = json.dumps({"schema": "arcvellum/creative-configuration/v1", "revision": 1, "overrides": {"scene_creator_v2": True, "less_ai_tone_experiment": True}})
     direction = case["style"] + "\n" + case["materials"]
     files[project / "workflow/studio/user_directions.md"] = "# 作者方向\n" + direction
     files[project / "workflow/studio/user_directions.jsonl"] = json.dumps({"message": direction}, ensure_ascii=False) + "\n"

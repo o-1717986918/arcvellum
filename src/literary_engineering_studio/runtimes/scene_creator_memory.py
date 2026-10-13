@@ -24,6 +24,8 @@ class SceneCreatorMemoryV1:
     phase: str = "opening"
     prompt_digest: str = ""
     pending_request: dict[str, Any] | None = None
+    deferred_editor_focus: list[dict[str, Any]] = field(default_factory=list)
+    pending_body_source: str = ''
 
     SCHEMA = "arcvellum/scene-creator-memory/v1"
 
@@ -53,6 +55,8 @@ class SceneCreatorMemoryV1:
             phase=str(payload.get("phase") or "opening")[:40],
             prompt_digest=str(payload.get("prompt_digest") or "")[:64],
             pending_request=_pending_request(payload.get("pending_request"), limit_chars=request_limit_chars),
+            deferred_editor_focus=payload.get('deferred_editor_focus') or [],
+            pending_body_source=payload.get('pending_body_source') or '',
         )
 
     def save(self, path: Path) -> None:
@@ -67,12 +71,14 @@ class SceneCreatorMemoryV1:
             "intent": self.intent.to_dict() if self.intent else None,
             "intent_source": self.intent_source,
             "candidate_ids": self.candidate_ids[-80:],
-            "material_decisions": self.material_decisions[-40:],
+            "material_decisions": self.material_decisions,
             "material_skip_reason": self.material_skip_reason,
             "unresolved_questions": self.unresolved_questions[-8:],
             "public_stage": self.public_stage[-16:],
             "phase": self.phase, "prompt_digest": self.prompt_digest,
             "pending_request": self.pending_request,
+            "deferred_editor_focus": self.deferred_editor_focus,
+            "pending_body_source": self.pending_body_source,
         }
 
     def render_context(self) -> str:
@@ -81,7 +87,11 @@ class SceneCreatorMemoryV1:
         context.pop("scene_id")
         # Rehearsal speech and description remain in read-only material files.
         context.pop("public_stage")
-        return json.dumps(context, ensure_ascii=False, separators=(",", ":"))[:5_000]
+        context["material_decisions"] = self.current_decisions()
+        return json.dumps(context, ensure_ascii=False, separators=(",", ":"))
+
+    def current_decisions(self):
+        return list({row["candidate_id"]:row for row in self.material_decisions}.values())
 
     def digest(self) -> str:
         return hashlib.sha256(self.render_context().encode("utf-8")).hexdigest()[:12]
@@ -89,6 +99,8 @@ class SceneCreatorMemoryV1:
     def record_creator(self, payload: dict[str, Any], brief: SceneBrief, *, prompt: str,
                        request_limit_chars: int = 8_000) -> None:
         proposed = payload.get("creative_intent")
+        if self.intent is not None and _empty_intention(proposed):
+            proposed = None
         if proposed is not None:
             revised = CreativeIntentV1.from_payload(proposed, prior=self.intent)
             if self.intent is None or _intent_text(revised) != _intent_text(self.intent):
@@ -98,7 +110,10 @@ class SceneCreatorMemoryV1:
             # Old cached/test responses remain readable; new prompts require an explicit intent.
             self.intent = CreativeIntentV1.from_payload({"reader_experience": brief.scene_function or brief.objective})
             self.intent_source = "brief-compatibility"
-        self.material_decisions = [*self.material_decisions, *_decisions(payload.get("material_decisions"))][-40:]
+        self.material_decisions.extend(_decisions(payload.get("material_decisions")))
+        self.pending_body_source=payload.get('pending_body_source') or (self.pending_body_source if payload.get('material_requests') else '')
+        if payload.get('deferred_editor_focus'):
+            self.deferred_editor_focus.extend(payload['deferred_editor_focus'])
         if payload.get("material_skip_reason"):
             self.material_skip_reason = str(payload["material_skip_reason"]).strip()[:300]
         if "unresolved_questions" in payload:
@@ -127,6 +142,12 @@ def _intent_text(intent: CreativeIntentV1) -> tuple[str, str, str, str]:
     return intent.reader_experience, intent.reader_knows, intent.reader_misreads, intent.withheld
 
 
+def _empty_intention(value):
+    return isinstance(value,dict) and bool(value) and all(
+        key in {'reader_experience','reader_knows','reader_misreads','withheld'} and text==''
+        for key,text in value.items())
+
+
 def _texts(value: object, *, limit: int, size: int) -> list[str]:
     if not isinstance(value, list):
         return []
@@ -137,14 +158,21 @@ def _decisions(value: object) -> list[dict[str, str]]:
     if not isinstance(value, list):
         return []
     rows = []
-    for item in value[:40]:
+    for item in value:
         if not isinstance(item, dict):
             continue
         identifier = str(item.get("candidate_id") or "")[:80].strip()
         decision = str(item.get("decision") or "").strip()
-        reason = str(item.get("reason") or "")[:240].strip()
-        if identifier and decision in {"use", "discard", "adapt"} and reason:
-            rows.append({"candidate_id": identifier, "decision": decision, "reason": reason})
+        reason = str(item.get("reason") or "").strip()
+        if identifier and decision in {"use", "discard", "adapt", "defer"} and reason:
+            row = {"candidate_id": identifier, "decision": decision, "reason": reason}
+            for key in ("source_excerpt","prose_excerpt","indirect_use","prose_location"):
+                if isinstance(item.get(key),str) and item[key].strip():
+                    row[key] = item[key].strip()
+            for key in ("body_sha256","source_excerpt_verified","prose_excerpt_verified","usage_evidence_status"):
+                if key in item:
+                    row[key] = item[key]
+            rows.append(row)
     return rows
 
 

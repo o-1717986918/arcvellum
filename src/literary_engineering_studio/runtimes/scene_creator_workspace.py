@@ -151,10 +151,12 @@ class SceneCreatorWorkspace:
                            kind: str, budget_chars: int = 24_000) -> list[dict[str, Any]]:
         if len(attachments) > 20:
             raise ValueError("too many archive attachments")
+        attachments = _merged_attachment_selectors(attachments)
         total = 0
         frozen: list[dict[str, Any]] = []
         for item in attachments:
             entry = self._freeze_one_attachment(item, kind)
+            entry["original_selectors"] = item.get("original_selectors",[])
             total += len(entry["content"])
             if total > budget_chars:
                 raise ValueError("archive attachments exceed context budget; select smaller fragments")
@@ -171,6 +173,8 @@ class SceneCreatorWorkspace:
         except UnicodeError as exc:
             raise ValueError(f"archive attachment is not UTF-8 text: {relative}") from exc
         selected, line_range = _select_attachment_lines(body, item)
+        for original in item.get("original_selectors",[]):
+            _select_attachment_lines(body,original)
         knowledge = str(item.get("knowledge") or "").strip()
         _validate_attachment_knowledge(kind, knowledge)
         return {"path": relative.as_posix(), "line_range": line_range,
@@ -248,3 +252,36 @@ def _validate_attachment_knowledge(kind: str, knowledge: str) -> None:
 
 
 __all__ = ["SceneCreatorWorkspace"]
+
+
+def _merged_attachment_selectors(attachments):
+    groups = {}
+    for item in attachments:
+        path = _relative(str(item.get("path") or "")).as_posix()
+        _select_attachment_shape(item)
+        groups.setdefault((path,item.get("knowledge") or ""),[]).append(dict(item))
+    result = []
+    for (path,knowledge),rows in groups.items():
+        if any(row.get("start_line") is None for row in rows):
+            result.append({"path":path,"knowledge":knowledge,"original_selectors":rows})
+            continue
+        merged = []
+        for row in sorted(rows,key=lambda value:value["start_line"]):
+            start,end = row["start_line"],row["end_line"]
+            if merged and start <= merged[-1]["end_line"]+1:
+                merged[-1]["end_line"] = max(end,merged[-1]["end_line"])
+                merged[-1]["original_selectors"].append(row)
+            else:
+                merged.append({"path":path,"knowledge":knowledge,"start_line":start,"end_line":end,
+                               "original_selectors":[row]})
+        result.extend(merged)
+    return result
+
+
+def _select_attachment_shape(item):
+    start,end = item.get("start_line"),item.get("end_line")
+    if (start is None) != (end is None):
+        raise ValueError("attachment line range needs both endpoints")
+    if start is not None and (isinstance(start,bool) or isinstance(end,bool) or
+            not isinstance(start,int) or not isinstance(end,int) or start < 1 or end < start):
+        raise ValueError("attachment line range is invalid")

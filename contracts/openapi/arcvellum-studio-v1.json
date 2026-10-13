@@ -631,6 +631,33 @@
         "title": "CharacterChatMessageRequest",
         "type": "object"
       },
+      "CreativeConfigurationRequest": {
+        "properties": {
+          "expected_revision": {
+            "minimum": 0.0,
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "overrides": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "title": "Overrides",
+            "type": "object"
+          },
+          "project_root": {
+            "title": "Project Root",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_root",
+          "expected_revision",
+          "overrides"
+        ],
+        "title": "CreativeConfigurationRequest",
+        "type": "object"
+      },
       "CreativeQualityPreviewRequest": {
         "properties": {
           "profile": {
@@ -683,6 +710,39 @@
           "profile"
         ],
         "title": "CreativeQualityRequest",
+        "type": "object"
+      },
+      "CreatorPersonaRequest": {
+        "properties": {
+          "expected_version": {
+            "minimum": 0.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "project_root": {
+            "title": "Project Root",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 1000,
+            "minLength": 6,
+            "title": "Reason",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 4000,
+            "minLength": 20,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_root",
+          "expected_version",
+          "text",
+          "reason"
+        ],
+        "title": "CreatorPersonaRequest",
         "type": "object"
       },
       "DemoCloneRequest": {
@@ -760,6 +820,19 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "InitialPresetsRequest": {
+        "properties": {
+          "project_root": {
+            "title": "Project Root",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_root"
+        ],
+        "title": "InitialPresetsRequest",
         "type": "object"
       },
       "LiteraryKernelMigrationRequest": {
@@ -851,6 +924,25 @@
           "credential"
         ],
         "title": "PiWorkerCredentialRequest",
+        "type": "object"
+      },
+      "PresetRecalculationRequest": {
+        "properties": {
+          "expected_revision": {
+            "minimum": 0.0,
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "project_root": {
+            "title": "Project Root",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_root",
+          "expected_revision"
+        ],
+        "title": "PresetRecalculationRequest",
         "type": "object"
       },
       "ProjectAgentSessionRequest": {
@@ -1403,6 +1495,103 @@
           "content_hash"
         ],
         "title": "StyleMountRequest",
+        "type": "object"
+      },
+      "StylePresetRequest": {
+        "properties": {
+          "active": {
+            "default": true,
+            "title": "Active",
+            "type": "boolean"
+          },
+          "combine": {
+            "default": "append",
+            "title": "Combine",
+            "type": "string"
+          },
+          "literary_intent": {
+            "default": "",
+            "title": "Literary Intent",
+            "type": "string"
+          },
+          "narrative_modes": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Narrative Modes",
+            "type": "array"
+          },
+          "preset_id": {
+            "title": "Preset Id",
+            "type": "string"
+          },
+          "reference_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Reference Ids",
+            "type": "array"
+          },
+          "stylometry_version_id": {
+            "title": "Stylometry Version Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "usage": {
+            "default": "guide",
+            "title": "Usage",
+            "type": "string"
+          }
+        },
+        "required": [
+          "preset_id",
+          "title",
+          "stylometry_version_id"
+        ],
+        "title": "StylePresetRequest",
+        "type": "object"
+      },
+      "StylePresetsRequest": {
+        "properties": {
+          "default_preset_id": {
+            "title": "Default Preset Id",
+            "type": "string"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "expected_revision": {
+            "minimum": 0.0,
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "presets": {
+            "items": {
+              "$ref": "#/components/schemas/StylePresetRequest"
+            },
+            "maxItems": 32,
+            "title": "Presets",
+            "type": "array"
+          },
+          "project_root": {
+            "title": "Project Root",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_root",
+          "expected_revision",
+          "default_preset_id",
+          "presets"
+        ],
+        "title": "StylePresetsRequest",
         "type": "object"
       },
       "StyleSourceCreateRequest": {
@@ -4575,6 +4764,148 @@
         "summary": "Creative Artifact Revision"
       }
     },
+    "/creative-live/config": {
+      "get": {
+        "operationId": "creative_configuration_creative_live_config_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Creative Configuration"
+      },
+      "put": {
+        "operationId": "save_configuration_creative_live_config_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreativeConfigurationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Configuration"
+      }
+    },
+    "/creative-live/persona": {
+      "get": {
+        "operationId": "creator_persona_creative_live_persona_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Creator Persona"
+      },
+      "put": {
+        "operationId": "save_creator_persona_creative_live_persona_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatorPersonaRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Creator Persona"
+      }
+    },
     "/creative-live/runs/{controller_id}/snapshot": {
       "get": {
         "operationId": "creative_run_snapshot_creative_live_runs__controller_id__snapshot_get",
@@ -4610,6 +4941,98 @@
           }
         },
         "summary": "Creative Run Snapshot"
+      }
+    },
+    "/creative-live/scene-materials/{transaction_id}": {
+      "get": {
+        "operationId": "scene_materials_creative_live_scene_materials__transaction_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "transaction_id",
+            "required": true,
+            "schema": {
+              "title": "Transaction Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Scene Materials"
+      }
+    },
+    "/creative-live/scene-prompts/{transaction_id}": {
+      "get": {
+        "operationId": "scene_prompts_creative_live_scene_prompts__transaction_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "transaction_id",
+            "required": true,
+            "schema": {
+              "title": "Transaction Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Scene Prompts"
       }
     },
     "/creative-live/scene-rehearsals": {
@@ -8926,6 +9349,172 @@
           }
         },
         "summary": "Parameters",
+        "tags": [
+          "stylometry"
+        ]
+      }
+    },
+    "/stylometry/presets": {
+      "get": {
+        "operationId": "presets_stylometry_presets_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_root",
+            "required": true,
+            "schema": {
+              "title": "Project Root",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Presets",
+        "tags": [
+          "stylometry"
+        ]
+      },
+      "put": {
+        "operationId": "save_presets_stylometry_presets_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StylePresetsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Presets",
+        "tags": [
+          "stylometry"
+        ]
+      }
+    },
+    "/stylometry/presets/initialize": {
+      "post": {
+        "operationId": "initialize_presets_stylometry_presets_initialize_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InitialPresetsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Initialize Presets",
+        "tags": [
+          "stylometry"
+        ]
+      }
+    },
+    "/stylometry/presets/{preset_id}/recalculate": {
+      "post": {
+        "operationId": "recalculate_preset_stylometry_presets__preset_id__recalculate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "preset_id",
+            "required": true,
+            "schema": {
+              "title": "Preset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PresetRecalculationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Recalculate Preset",
         "tags": [
           "stylometry"
         ]

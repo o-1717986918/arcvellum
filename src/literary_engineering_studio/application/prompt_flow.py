@@ -63,6 +63,9 @@ _SCENE_ASSET_STAGES = (
 )
 
 _V2_SCENE_STAGES = {
+    "planning.v2.initial": "planning.story",
+    "planning.v2.window": "planning.story",
+    "planning.v2.future": "planning.story",
     "scene.v2.transport.extractor": "scene.transport",
     "scene.v2.creator.identity": "scene.entry",
     "scene.v2.creator.protocol": "scene.entry",
@@ -79,6 +82,7 @@ _V2_SCENE_STAGES = {
     "scene.v2.material.shared.protocol": "scene.observation",
     "scene.v2.material.output.protocol": "scene.observation",
     "scene.v2.material.actor": "scene.actor",
+    "scene.v2.actor.turn": "scene.actor",
     "scene.v2.material.environment": "scene.environment",
     "scene.v2.material.character-description": "scene.character",
     "scene.v2.material.event-narration": "scene.event",
@@ -115,6 +119,8 @@ def stage_for_prompt(row: dict[str, Any]) -> str:
     layer_id = str(row["layer_id"])
     if row["responsibility"] == "formal-asset":
         return _formal_stage(row)
+    if layer_id.startswith("planning.v2."):
+        return "planning.story"
     if layer_id.startswith("project_agent."):
         return "direction.project"
     if layer_id.startswith("experiment.less_ai_tone."):

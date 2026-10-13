@@ -18,7 +18,9 @@ from literary_engineering_studio_engine.public.literary import (
 )
 from ..runtime.role_conversation import RoleConversationGateway
 from ..application.style.owner_directive import read_owner_style_directive
+from ..application.creative_configuration import effective_creative_config
 from ..infrastructure.project_scene_transactions import known_scene_refs
+from .scene_prompt_record import record_scene_prompt
 from .scene_conversation_invocation import invoke_actor_turn, invoke_initialized_role_turn, invoke_role
 from .pi_scene_payload import _answer_payload, creative_result_from_payload, review_result_from_payload
 from .pi_scene_author_prompt import render_scene_create_prompt, render_scene_revision_prompt
@@ -33,10 +35,12 @@ from .scene_creator_material_policy import repair_material_choice
 from .scene_creator_v2_transaction import SceneCreatorV2Mixin
 from .less_ai_tone_experiment import LessAiToneExperimentMixin
 from .creator_stylometry import CreatorStylometryMixin
+from .transaction_style_selection import TransactionStyleSelectionMixin
 from ..application.style.stylometry_contracts import CreatorStyleSnapshot, LabDocument
 from .scene_material_library import SceneMaterialLibrary
 from ..runtime.prompt_recipes import lean_scene_prompt_recipe
 from .scene_source_evidence import scene_source_evidence
+from .scene_prompt_snapshot import _frozen_legacy_prompts, _validated_prompt_assembly, _migrate_prompt_assembly, direct_environment_identity
 from .pi_scene_review_prompt import render_scene_review_prompt
 
 @dataclass(frozen=True)
@@ -44,7 +48,7 @@ class PiSceneRuntimeMetrics:
     provider_calls: int
     cache_hits: int
 
-class PiSceneTransactionRuntime(CreatorStylometryMixin, LessAiToneExperimentMixin, SceneCreatorV2Mixin):
+class PiSceneTransactionRuntime(CreatorStylometryMixin, LessAiToneExperimentMixin, TransactionStyleSelectionMixin, SceneCreatorV2Mixin):
     """Use the embedded Pi conversation transport behind K2 runtime ports."""
     def __init__(
         self,
@@ -58,8 +62,9 @@ class PiSceneTransactionRuntime(CreatorStylometryMixin, LessAiToneExperimentMixi
         prompt_snapshot_provider: Callable[[tuple[str, ...], Path], dict[str, Any]] | None = None,
         creator_style_snapshot_provider: Callable[[Path], CreatorStyleSnapshot] | None = None,
         creator_style_measure_provider: Callable[[Path, str, str], LabDocument] | None = None,
+        style_preset_catalog_provider: Callable[[Path], dict[str, Any]] | None = None,
     ):
-        self._config = config
+        self._config = effective_creative_config(config, project_root)
         self._project_root = project_root.resolve()
         self._data_root = data_root.resolve()
         self._gateway = gateway or RoleConversationGateway(
@@ -71,6 +76,7 @@ class PiSceneTransactionRuntime(CreatorStylometryMixin, LessAiToneExperimentMixi
         self._prompt_snapshot_provider = prompt_snapshot_provider
         self._creator_style_snapshot_provider = creator_style_snapshot_provider
         self._creator_style_measure_provider = creator_style_measure_provider
+        self._style_preset_catalog_provider = style_preset_catalog_provider
         self._provider_calls = 0
         self._cache_hits = 0
 
@@ -78,6 +84,7 @@ class PiSceneTransactionRuntime(CreatorStylometryMixin, LessAiToneExperimentMixi
     def metrics(self) -> PiSceneRuntimeMetrics:
         return PiSceneRuntimeMetrics(self._provider_calls, self._cache_hits)
 
+    @_frozen_legacy_prompts
     def _create_scene(self, transaction_id: str, brief: SceneBrief) -> CreativeResult:
         if self._uses_creator_v2(transaction_id):
             return self._create_scene_v2(transaction_id, brief)
@@ -136,6 +143,7 @@ class PiSceneTransactionRuntime(CreatorStylometryMixin, LessAiToneExperimentMixi
         _atomic_json(cache, result.to_dict())
         return result
 
+    @_frozen_legacy_prompts
     def review_scene(
         self,
         transaction_id: str,
@@ -198,6 +206,7 @@ class PiSceneTransactionRuntime(CreatorStylometryMixin, LessAiToneExperimentMixi
         )
         return review
 
+    @_frozen_legacy_prompts
     def _revise_scene(
         self,
         transaction_id: str,
@@ -261,13 +270,12 @@ class PiSceneTransactionRuntime(CreatorStylometryMixin, LessAiToneExperimentMixi
                 intent = json.dumps(memory.intent.to_dict(), ensure_ascii=False) if memory.intent else ""
                 prompt = render_prompt(self._material_prompt(transaction_id, materials),
                                        intent, memory.render_context())
-                payload = _answer_payload(self._run(prompt, role="worker", transaction_id=transaction_id))
+                payload = self._cached_creator_payload(transaction_id, prompt)
                 if _scene_performance_enabled(self._config):
                     payload, prompt = repair_material_choice(
                         payload, prompt, phase=memory.phase, candidate_ids=memory.candidate_ids,
                         prior_decisions=memory.material_decisions,
-                        invoke=lambda current: _answer_payload(self._run(
-                            current, role="worker", transaction_id=transaction_id)),
+                        invoke=lambda current: self._cached_creator_payload(transaction_id, current),
                     )
                 memory.record_creator(payload, brief, prompt=prompt)
                 memory.save(memory_path)
@@ -285,6 +293,7 @@ class PiSceneTransactionRuntime(CreatorStylometryMixin, LessAiToneExperimentMixi
                     role, initialization, history, prompt, transaction_id=transaction_id),
                 creative_intent=json.dumps(memory.intent.to_dict(), ensure_ascii=False) if memory.intent else "",
                 prompt_layers=self._prompt_snapshot(transaction_id)["texts"],
+                direct_environment_identity=direct_environment_identity(self._prompt_snapshot(transaction_id)),
                 request_batch_id=memory.prompt_digest,
                 emit=(lambda event, data: self._event_sink(event, {**data, "scene_transaction_id": transaction_id}))
                 if self._event_sink is not None else None,
@@ -305,6 +314,7 @@ class PiSceneTransactionRuntime(CreatorStylometryMixin, LessAiToneExperimentMixi
                 "material_root": str(self._cache_path(transaction_id, "materials")),
                 "prompt": prompt,
             }, ensure_ascii=False)
+        record_scene_prompt(self, transaction_id, role, prompt)
         return invoke_role(self._gateway, self._project_root, self._timeout, self._event_sink,
                            transaction_id, prompt, role)
 
@@ -322,6 +332,7 @@ class PiSceneTransactionRuntime(CreatorStylometryMixin, LessAiToneExperimentMixi
         history: tuple[tuple[str, str], ...], prompt: str, *, transaction_id: str,
     ) -> tuple[str, str]:
         self._provider_calls += 1 if history else 2
+        record_scene_prompt(self, transaction_id, "character-actor", prompt, initialization=initialization, history=history)
         return invoke_actor_turn(self._gateway, self._project_root, self._timeout, self._event_sink,
                                  transaction_id, initialization, initialization_answer, history, prompt)
 
@@ -330,6 +341,7 @@ class PiSceneTransactionRuntime(CreatorStylometryMixin, LessAiToneExperimentMixi
         prompt: str, *, transaction_id: str,
     ) -> tuple[str, str]:
         self._provider_calls += 1
+        record_scene_prompt(self, transaction_id, role, prompt, initialization=initialization, history=history)
         return invoke_initialized_role_turn(
             self._gateway, self._project_root, self._timeout, self._event_sink,
             transaction_id, role, initialization, history, prompt,
@@ -370,7 +382,7 @@ class PiSceneTransactionRuntime(CreatorStylometryMixin, LessAiToneExperimentMixi
         if transaction_id:
             cache = self._cache_path(transaction_id, "style_selection.json")
             saved = _read_json(cache)
-            if saved and saved.get("brief_digest") == brief_digest and saved.get("style_mount_snapshot") == mount:
+            if saved and saved.get("scene_id") == brief.scene_id:
                 return saved["selection"]
         recent = (*recent_formal_reference_ids(self._project_root, exclude_scene_id=brief.scene_id),
                   *recent_lean_reference_ids(self._data_root, brief.scene_id, mount))
@@ -440,31 +452,6 @@ def _scene_performance_enabled(config: dict[str, Any]) -> bool:
     application = config.get("application")
     settings = application.get("scene_performance_agents") if isinstance(application, dict) else None
     return isinstance(settings, dict) and settings.get("enabled") is True
-
-
-def _validated_prompt_assembly(path: Path) -> dict[str, Any] | None:
-    saved = _read_json(path)
-    if saved is not None and (
-        saved.get("schema") != "arcvellum/prompt-assembly/v1"
-        or not isinstance(saved.get("texts"), dict)
-    ):
-        raise ValueError("scene prompt assembly cache is invalid")
-    return saved
-
-
-def _migrate_prompt_assembly(saved: dict[str, Any], current: dict[str, Any]) -> dict[str, Any]:
-    old_layers = {entry["layer_id"]: entry for entry in saved.get("layers", [])
-                  if isinstance(entry, dict) and isinstance(entry.get("layer_id"), str)}
-    for entry in current["layers"]:
-        old = old_layers.get(entry["layer_id"])
-        if old and old.get("source") in {"global", "project"}:
-            entry.update(old)
-            current["texts"][entry["layer_id"]] = saved["texts"][entry["layer_id"]]
-    current["digest"] = hashlib.sha256(
-        json.dumps(current["layers"], sort_keys=True, ensure_ascii=False).encode("utf-8")
-    ).hexdigest()
-    current["migration"] = "scene-layers-expanded-v2"
-    return current
 
 
 def _read_json(path: Path) -> dict[str, Any] | None:

@@ -41,7 +41,7 @@ class ActorCharacterCardTests(unittest.TestCase):
                 parse_actor_character_card(value, "阿青")
 
     def test_card_budget_is_explicit_and_never_clips(self):
-        self.payload["sections"] = {key: "字" * 800 for key in ACTOR_CARD_SECTIONS}
+        self.payload["sections"] = {key: "字" * 1200 for key in ACTOR_CARD_SECTIONS}
         with self.assertRaisesRegex(ValueError, "total context budget"):
             parse_actor_character_card(self.payload, "阿青")
 

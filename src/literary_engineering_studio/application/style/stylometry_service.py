@@ -7,6 +7,7 @@ from pathlib import Path
 from uuid import uuid4
 from literary_engineering_studio_engine.public.literary import active_style_prompt_text
 from .owner_directive import read_owner_style_directive
+from .presets import StylePresetService
 from .stylometry_contracts import (
     CorpusTextSource, CreatorStyleSnapshot, StylometryAnalysisPort, StylometryRepositoryPort,
     StylometryProfile, StylometryVersion,
@@ -20,11 +21,29 @@ class StylometryError(ValueError):
 class StylometryService:
     def __init__(self, analysis: StylometryAnalysisPort, repository: StylometryRepositoryPort):
         self.analysis, self.repository = analysis, repository
+        self.preset_service = StylePresetService(repository)
+
+    def preset_catalog(self, root: Path):
+        _project(root)
+        return self.preset_service.catalog(root)
+
+    def save_presets(self, root: Path, collection, expected_revision: int):
+        _project(root)
+        return self.preset_service.save(root, collection, expected_revision)
+
+    def recalculate_preset(self, root: Path, preset_id: str, expected_revision: int):
+        from .recalculate_preset import recalculate_style_preset
+        _project(root)
+        return recalculate_style_preset(self, root, preset_id, expected_revision=expected_revision)
+
+    def preset_snapshot(self, root: Path, preset_id: str):
+        _project(root)
+        return self.preset_service.snapshot(root, preset_id)
 
     def workbench(self, root: Path):
         _project(root)
         return {"schema": "arcvellum/stylometry-workbench/v1",
-            "capabilities": _decode(self.analysis.capabilities().json_text),
+            "capabilities": {**_decode(self.analysis.capabilities().json_text), "preset_reference_recalculation": True},
             "profiles": [_profile_view(row) for row in self.repository.profiles(root)],
             "versions": [_version_view(row) for row in self.repository.versions(root)],
             "mount": self.repository.snapshot(root).to_dict(),

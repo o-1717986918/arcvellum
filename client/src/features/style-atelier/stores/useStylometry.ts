@@ -13,7 +13,7 @@ export function useStylometry(root: Ref<string>) {
   const compiled = ref<StyloCompiled | null>(null), selectedVersion = ref<StyloVersion | null>(null);
   const report = ref<StyloMeasurement | null>(null), text = ref("");
   const busy = ref(false), error = ref(""), notice = ref(""), job = ref<StyloJob | null>(null);
-  const jobs = ref<StyloJob[]>([]), tab = ref("corpus");
+  const jobs = ref<StyloJob[]>([]), tab = ref("corpus"), presetId = ref("");
   const combine = ref<"append" | "replace">("append"), usage = ref<"guide" | "observe">("guide");
   let generation = 0, timer: ReturnType<typeof setTimeout> | undefined;
   const running = computed(() => ["queued", "running", "cancelling"].includes(job.value?.status || ""));
@@ -89,6 +89,16 @@ export function useStylometry(root: Ref<string>) {
     return run(async project => {
       if (enabled && (!selectedVersion.value || dirty.value)) throw new Error("请先保存当前修改，再挂载该版本。");
       await client.mount(project, selectedVersion.value?.version_id || "", enabled, workbench.value?.mount.revision || 0, combine.value, usage.value);
+      if (presetId.value) {
+        const catalog = await client.presets(project);
+        catalog.enabled = enabled;
+        const preset = catalog.presets.find(row => row.preset_id === presetId.value);
+        if (enabled && preset && selectedVersion.value) {
+          preset.active = true; preset.stylometry_version_id = selectedVersion.value.version_id;
+          preset.combine = combine.value; preset.usage = usage.value; catalog.default_preset_id = presetId.value;
+        }
+        await client.savePresets(project, catalog);
+      }
       return client.workbench(project);
     }, result => { workbench.value = result; notice.value = enabled ? "已挂载，后续新场景生效。" : "已卸载，后续新场景生效。"; });
   }
@@ -114,6 +124,14 @@ export function useStylometry(root: Ref<string>) {
         fragment_override: body === compiled.value?.fragment_text ? null : body });
       if (!current() || key !== JSON.stringify(tuningInput.value) || fragment.value !== body) return null;
       await client.mount(project, version.version_id, true, workbench.value?.mount.revision || 0, combine.value, usage.value);
+      if (presetId.value) {
+        const catalog = await client.presets(project);
+        const preset = catalog.presets.find(row => row.preset_id === presetId.value);
+        if (!preset) throw new Error("当前预设已变更，请重新选择。");
+        preset.stylometry_version_id = version.version_id; preset.combine = combine.value; preset.usage = usage.value;
+        preset.active = true; catalog.enabled = true;
+        await client.savePresets(project, catalog);
+      }
       return { version, workbench: await client.workbench(project) };
     }, result => {
       if (!result) return;
@@ -181,7 +199,7 @@ export function useStylometry(root: Ref<string>) {
   watch([text, candidateTree], () => { report.value = null; }, { flush: "sync" });
   watch(controls, () => { report.value = null; }, { deep: true, flush: "sync" });
   watch(root, () => {
-    tuning.reset();
+    tuning.reset(); presetId.value = "";
     generation++; clearTimeout(timer); workbench.value = null; profile.value = null; selectedVersion.value = null;
     sources.value = []; metrics.value = []; controls.value = null; dependency.value = ""; candidateTree.value = "";
     fragment.value = ""; text.value = ""; report.value = null; compiled.value = null; intent.value = "";
@@ -194,5 +212,5 @@ export function useStylometry(root: Ref<string>) {
     previewBusy: tuning.previewBusy, previewError: tuning.previewError, previewCurrent: tuning.previewCurrent,
     autoMount: tuning.autoMount, publishing: tuning.publishing, manualFragment: tuning.manualFragment,
     takePreview: tuning.takePreview, applyAndMount: tuning.applyAndMount,
-    importFiles, load, selectProfile, selectVersion, compile, save, mount, measure, launch, jobAction, loadDependency, restore, selectJob };
+    presetId, importFiles, load, selectProfile, selectVersion, compile, save, mount, measure, launch, jobAction, loadDependency, restore, selectJob };
 }

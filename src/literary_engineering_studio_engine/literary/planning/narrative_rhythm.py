@@ -9,6 +9,7 @@ from typing import Any
 
 from ..scene.facts import parse_scene_mapping
 from .rhythm_sources import plan_payload_source, scene_text_source
+from .rhythm_strategy import literary_rhythm_strategy, rhythm_defaults as _rhythm_defaults
 
 RHYTHM_SCHEMA = "literary-engineering-workbench/narrative-rhythm-contract/v0.1"
 RHYTHM_CURVE_SCHEMA = "literary-engineering-workbench/narrative-rhythm-curve/v0.1"
@@ -91,7 +92,7 @@ def narrative_rhythm_contract(
     # Composition is a derived planning artifact. A later formal scene-contract
     # task must be able to repair it before composition is rebuilt, and a user
     # rhythm plan remains the highest authority.
-    rhythm = _merge_dict(DEFAULT_RHYTHM, composition_rhythm, scene_rhythm, plan_rhythm)
+    rhythm = _merge_dict(_rhythm_defaults(DEFAULT_RHYTHM, composition_rhythm, scene_rhythm, plan_rhythm), composition_rhythm, scene_rhythm, plan_rhythm)
     bridge = _merge_dict(DEFAULT_BRIDGE, composition_bridge, scene_bridge)
     explicit = bool(composition_rhythm or composition_bridge or scene_rhythm or scene_bridge or plan_rhythm)
     missing_required = _missing_contract_fields(rhythm, bridge) if explicit else []
@@ -182,6 +183,8 @@ def normalize_tension_curve(value: object) -> dict[str, int] | None:
     return {"entry": entry, "peak": peak, "exit": exit_value}
 
 
+
+
 def analyze_narrative_rhythm_sequence(scenes: list[dict[str, Any]]) -> dict[str, Any]:
     """Audit a chapter sequence without pretending numbers replace editorial judgment."""
 
@@ -197,7 +200,7 @@ def analyze_narrative_rhythm_sequence(scenes: list[dict[str, Any]]) -> dict[str,
             "scene_function": _sequence_function(scene.get("scene_function")),
             "tension": curve,
         })
-        if curve is None:
+        if not _rhythm_strategy_present(curve, scene.get("tension_curve")):
             issues.append(_curve_issue("missing_tension_curve", "blocking", [scene_id], "缺少可检查的 entry / peak / exit 张力曲线。"))
 
     _append_repetition_issues(points, "pace", "flat_pace_run", "连续场景采用同一种推进速度", issues)
@@ -289,7 +292,7 @@ def _missing_contract_fields(rhythm: dict[str, Any], bridge: dict[str, Any]) -> 
         missing.append("narrative_rhythm.scene_turn")
     if not _meaningful_value(rhythm.get("reader_effect")):
         missing.append("narrative_rhythm.reader_effect")
-    if normalize_tension_curve(rhythm.get("tension_curve")) is None:
+    if normalize_tension_curve(rhythm.get("tension_curve")) is None and not literary_rhythm_strategy(rhythm.get("tension_curve")):
         missing.append("narrative_rhythm.tension_curve(entry/peak/exit:1-5)")
     if not _meaningful_value(bridge.get("incoming_pressure")):
         missing.append("scene_bridge.incoming_pressure")
@@ -480,3 +483,7 @@ def _append_repetition_issues(
             run = points[start:end]
             issues.append(_curve_issue(code, "warning", [point["scene_id"] for point in run], f"{message}（{value}），需要证明这是有意设计而非平均化惯性。"))
         start = end
+
+
+def _rhythm_strategy_present(curve, value):
+    return curve is not None or bool(literary_rhythm_strategy(value))

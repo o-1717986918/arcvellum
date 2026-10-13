@@ -7,6 +7,8 @@ const route = useRoute();
 const router = useRouter();
 </script>
 <template>
-  <CharacterChatPanel :key="app.currentProjectPath" :project-root="app.currentProjectPath" :initial-target="String(route.query.target || '')"
-    @close="router.push('/archive')" />
+  <div class="character-chat-page">
+    <CharacterChatPanel :key="app.currentProjectPath" :project-root="app.currentProjectPath" :initial-target="String(route.query.target || '')"
+      @close="router.push('/archive')" />
+  </div>
 </template>

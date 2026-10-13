@@ -9,6 +9,7 @@ const emit = defineEmits<{ close: [] }>();
 const setup = ref<CharacterChatSetup | null>(null);
 const session = ref<CharacterChatSession | null>(null);
 const sections = ref<Record<string, string>>({});
+const cardSchema = ref<CharacterCard['schema']>('arcvellum/actor-character-card/v2');
 const target = ref(props.initialTarget || "");
 const context = ref("");
 const sourceRefs = ref("");
@@ -53,6 +54,8 @@ async function load(): Promise<void> {
     const loaded = await client.setup(root);
     if(!current()) return;
     setup.value = loaded;
+    cardSchema.value = loaded.card_schema || (loaded.sections.includes('PERSONALITY_CORE')
+      ? 'arcvellum/actor-character-card/v1' : 'arcvellum/actor-character-card/v2');
     sections.value = Object.fromEntries(setup.value.sections.map((key) => [key, ""]));
     entries.value = [];
     cursor.value = 0;
@@ -71,6 +74,7 @@ function chooseCard(): void {
   if (!found) { showEditor.value = true; return; }
   target.value = found.card.target;
   sections.value = { ...found.card.sections };
+  cardSchema.value = found.card.schema;
   sourceRefs.value = found.card.source_refs.join("\n");
 }
 function attach(): void {
@@ -88,7 +92,7 @@ async function showSource(more = false): Promise<void> {
 }
 async function create(): Promise<void> {
   await action(async (current,root) => {
-    const card: CharacterCard = { schema: "arcvellum/actor-character-card/v1", target: target.value,
+    const card: CharacterCard = { schema: cardSchema.value, target: target.value,
       sections: { ...sections.value }, source_refs: sourceRefs.value.split("\n").map((s) => s.trim()).filter(Boolean),
       notes: "" };
     const created = await client.create(root, card, attachments.value, context.value);
@@ -103,6 +107,7 @@ async function draftCard(): Promise<void> {
     const draft = await client.draftCard(root, target.value, attachments.value, context.value);
     if(!current()) return;
     sections.value = { ...draft.card.sections };
+    cardSchema.value = draft.card.schema;
     sourceRefs.value = draft.card.source_refs.join("\n");
     selectedCard.value = "";
     showEditor.value = true;
@@ -162,7 +167,7 @@ onMounted(async () => { panel.value?.focus(); await load(); });
             <label>人物名<input v-model="target" :disabled="busy" /></label>
             <button @click="showEditor = !showEditor">{{ showEditor ? '收起角色卡' : '查看与编辑角色卡' }}</button>
             <div v-if="showEditor" class="character-card-fields">
-              <label v-for="key in setup?.sections" :key="key">{{ labels[key] || key }}
+              <label v-for="key in Object.keys(sections)" :key="key">{{ labels[key] || key }}
                 <textarea v-model="sections[key]" :disabled="busy" rows="3" />
               </label>
               <label>角色卡来源（每行一个）<textarea v-model="sourceRefs" :disabled="busy" rows="2" /></label>
@@ -219,7 +224,7 @@ onMounted(async () => { panel.value?.focus(); await load(); });
             </template>
             <div v-else class="character-chat-empty"><h3>给人物一个此刻</h3>
               <p>选择角色卡和他已知的资料，写下这段对话的场景，然后开始交谈。</p>
-              <p v-if="setup && !setup.cards.length">主创生成的角色卡会显示在左侧。你也可以展开十六区块，填写自己的卡。</p>
+              <p v-if="setup && !setup.cards.length">主创生成的角色卡会显示在左侧。你也可以展开当前角色卡区块，填写自己的卡。</p>
             </div>
           </main>
         </div>

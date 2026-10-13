@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 from literary_engineering_studio.runtime.role_conversation import RoleConversationResult
 from literary_engineering_studio.runtimes.pi_scene_transaction import PiSceneTransactionRuntime
-from literary_engineering_studio.runtimes.scene_interaction import new_scene_session, continue_scene_actor, _character_context, _actor_turn
+from literary_engineering_studio.runtimes.scene_interaction import new_scene_session, continue_scene_actor, _character_card, _actor_turn
 from literary_engineering_studio.runtimes.scene_performance import _cached_payload, fulfill_scene_material_requests
 from literary_engineering_studio.runtimes.scene_performance_ownership import author_handoff_materials, compact_performance_materials
 from literary_engineering_studio_engine.public.literary import (
@@ -35,10 +35,6 @@ def _fixture(participants: list[str]):
         "scene_id": brief["scene_id"], "beats": [{"beat_id": "b1", "event": "桌上的旧信被打开"}],
         "opening_direction": {"finish": False, "next_speaker": participants[0], "beat_id": "b1",
                               "scene_change": "", "cue": "面对已经打开的信", "director_note": ""},
-        "actor_prompts": {
-            speaker: "【PERSONA_LOAD】\nSELF_CLAIM_ACTOR\n\n【PERSONALITY_CORE】\nTRAIT_ALERT\n\n【PERSONALITY_PUBLIC】\nTRAIT_EXPRESSIVE"
-            for speaker in participants
-        },
         "actor_tasks": {speaker: "面对已经打开的信，按自己的关系与处境回应。" for speaker in participants},
         "environment_initialization": (
             "【SCENE_LOAD】\nSCENE_CLAIM_LANDSCAPE_DESCRIBER\n\n[COMPOSITION_MODE]\nSCENE_RENDER\n\n"
@@ -48,6 +44,17 @@ def _fixture(participants: list[str]):
         "unknown_slots": [],
     }
     return brief, plan
+
+
+def _write_cards(root, participants):
+    folder = root / "characters"
+    folder.mkdir(exist_ok=True)
+    cards = {}
+    for speaker in participants:
+        identifier = speaker.rsplit("/", 1)[-1]
+        cards[speaker] = f"name: {identifier}\nspeech_style:\n  rhythm: 短句，像交接记录。\n"
+        (folder / f"{identifier}.yaml").write_text(cards[speaker], encoding="utf-8", newline="")
+    return cards
 
 
 class SceneInteractionTests(unittest.TestCase):
@@ -67,7 +74,7 @@ class SceneInteractionTests(unittest.TestCase):
                         request_batch_id="limited",
                     )
         self.assertEqual(calls, [])
-        packet = json.loads(block.split("\n", 1)[1])
+        packet = json.loads(block.rsplit("\n", 1)[1])
         self.assertEqual(len(packet["material_notices"]), 1)
         self.assertIn("达到设置上限", packet["material_notices"][0]["reason"])
         self.assertIn("达到设置上限", author_handoff_materials(block))
@@ -93,12 +100,13 @@ class SceneInteractionTests(unittest.TestCase):
             "【PERSONALITY_PUBLIC】\nTRAIT_WRY\n\n[LITERATURE_STYLE]\nKAFKA_LIKE"}}
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
+            cards = _write_cards(root, ["character/solo"])
             with patch("literary_engineering_studio.runtimes.scene_performance._generate_performance_plan", return_value=plan) as planner:
                 first = fulfill_scene_material_requests(
                     brief=brief, expression=expression, sources="", style_reference="",
                     payload={"material_requests": [{"kind": "event-narration", "target": "昨夜取信",
                         "purpose": "延后交代已发生事件", "scene_moment": "按住信时", "cue": "信昨夜被取走"}]},
-                    cache_root=root, config=config, invoke=lambda prompt, role: "",
+                    cache_root=root, config=config, project_root=root, invoke=lambda prompt, role: "",
                     invoke_actor_turn=actor_turn, invoke_role_turn=role_turn, request_batch_id="describer",
                 )
                 planner.assert_not_called()
@@ -106,7 +114,7 @@ class SceneInteractionTests(unittest.TestCase):
                     brief=brief, expression=expression, sources="", style_reference="",
                     payload={"material_requests": [{"kind": "actor", "target": "character/solo",
                         "purpose": "让他自行选择是否留下信", "scene_moment": "信封被看见后", "cue": "对方望着信封"}]},
-                    cache_root=root, config=config, invoke=lambda prompt, role: "",
+                    cache_root=root, config=config, project_root=root, invoke=lambda prompt, role: "",
                     invoke_actor_turn=actor_turn, invoke_role_turn=role_turn, request_batch_id="actor",
                 )
             self.assertEqual(planner.call_count, 1)
@@ -114,8 +122,8 @@ class SceneInteractionTests(unittest.TestCase):
         self.assertIn("昨夜取信的传闻", second)
         self.assertIn("信留在这里", second)
         self.assertEqual(len(actor_calls), 1)
-        self.assertIn("【PERSONA_LOAD】", actor_calls[0])
-        self.assertIn("KAFKA_LIKE", actor_calls[0])
+        self.assertEqual(actor_calls[0], cards["character/solo"])
+        self.assertNotIn("KAFKA_LIKE", actor_calls[0])
         self.assertNotIn("TRAIT_ALERT", actor_calls[0])
 
     def test_environment_requests_continue_one_scene_history(self):
@@ -142,7 +150,7 @@ class SceneInteractionTests(unittest.TestCase):
                         invoke_role_turn=role_turn, request_batch_id=batch,
                         prompt_layers={"scene.environment.turn": "选择有用的桌沿细节"},
                     )
-            packet = json.loads(result.split("\n", 1)[1])
+            packet = json.loads(result.rsplit("\n", 1)[1])
         self.assertEqual(histories, [0, 1])
         self.assertEqual([passage["candidate_id"] for passage in packet["environment_candidates"]["passages"]],
                          ["environment:1", "environment:2"])
@@ -176,27 +184,55 @@ class SceneInteractionTests(unittest.TestCase):
         self.assertEqual(result["response"]["entries"][0]["spoken"], "我说真的。")
 
 
-    def test_actor_receives_own_background_after_pure_initialization(self):
+    def test_actor_receives_full_card_as_sole_personality_initialization(self):
         brief, plan = _fixture(["纪蔚"])
+        card = ("name: 纪蔚\nrole: 修复师\nbackground_story:\n  hidden_wound: 她欠朋友一个夜班。\n"
+                "bdi:\n  belief: [声音会留下人的选择]\nrelationships: [她与旧友仍有未说的话]\n"
+                "speech_style:\n  rhythm: 短句，像交接记录。\n  examples: [灯留着，我回来。]\n")
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "characters").mkdir()
-            (root / "characters" / "纪蔚.yaml").write_text(
-                "name: 纪蔚\nrole: 修复师\nbackground_story:\n  hidden_wound: 她欠朋友一个夜班。\n"
-                "bdi:\n  belief: [声音会留下人的选择]\nrelationships: [她与旧友仍有未说的话]\n"
-                "speech_style:\n  rhythm: 短句，像交接记录。\n",
-                encoding="utf-8",
-            )
-            context = _character_context(root, "纪蔚")
-        direction = plan["opening_direction"]
-        prompt = render_actor_interaction_prompt(brief, plan, direction, [], "", context)
-        self.assertIn("她欠朋友一个夜班", prompt)
-        self.assertIn("声音会留下人的选择", prompt)
-        self.assertNotIn("交接记录", prompt)
+            (root / "characters" / "纪蔚.yaml").write_text(card, encoding="utf-8", newline="")
+            state = new_scene_session(brief, None, project_root=root,
+                prompt_layers={"scene.actor.identity": "额外身份指令"})
+            self.assertEqual(state["initializations"]["纪蔚"], card)
+            self.assertEqual(_character_card(root, "纪蔚"), card)
+        prompt = render_actor_interaction_prompt(brief, plan, plan["opening_direction"], [], "")
+        self.assertNotIn("她欠朋友一个夜班", prompt)
         self.assertIn("一次真实回应", prompt)
-        self.assertNotIn("我在这场戏里的处境", prompt)
-        self.assertNotIn("至多四条 JSON 候选", prompt)
-        self.assertNotIn("她欠朋友一个夜班", new_scene_session(brief, {}, plan, None)["initializations"]["纪蔚"])
+
+    def test_old_session_uses_card_for_new_calls_and_retains_old_initialization(self):
+        brief, plan = _fixture(["纪蔚"])
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            cards = _write_cards(root, brief["participants"])
+            state = new_scene_session(brief, None, project_root=root)
+            state.pop("initialization_sources")
+            state["initializations"]["纪蔚"] = "POLISHED\nANTI_SHORT_SENTENCES"
+            state["initialization_answers"]["纪蔚"] = "旧人格确认"
+            calls = []
+            def actor(initialization, initialized, history, prompt):
+                calls.append((initialization, initialized))
+                return json.dumps({"scene_id": brief["scene_id"], "speaker": "纪蔚", "entries": [
+                    {"beat_id": "b1", "spoken": "灯留着。", "first_person_action": "", "private_impulse": ""}]},
+                    ensure_ascii=False), "角色卡已加载"
+            request = {"speaker": "纪蔚", "beat_id": "b1", "cue": "旧友走到门边"}
+            continue_scene_actor(brief, plan, request, state, root, "old", actor, _cached_payload, project_root=root)
+            continue_scene_actor(brief, plan, request, state, root, "old", actor, _cached_payload, project_root=root)
+            self.assertEqual(calls, [(cards["纪蔚"], ""), (cards["纪蔚"], "角色卡已加载")])
+            self.assertEqual(state["initializations"]["纪蔚"], "POLISHED\nANTI_SHORT_SENTENCES")
+            self.assertEqual(state["initialization_answers"]["纪蔚"], "旧人格确认")
+
+    def test_missing_or_ambiguous_card_is_explicit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with self.assertRaisesRegex(ValueError, "exactly one matching character card"):
+                _character_card(root, "纪蔚")
+            (root / "characters").mkdir()
+            for name in ("one", "two"):
+                (root / "characters" / f"{name}.yaml").write_text("name: 纪蔚\n", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "found 2"):
+                _character_card(root, "纪蔚")
 
     def test_actor_prompt_keeps_addressee_and_evidence_visible(self):
         brief, plan = _fixture(["江岫", "阿澍", "温泠"])
@@ -216,7 +252,7 @@ class SceneInteractionTests(unittest.TestCase):
             "spoken": "信是我的。", "first_person_action": "我压住信封。", "private_impulse": "我害怕。",
         }], None, viewpoint=brief["viewpoint"])
         self.assertIn("只读素材文件目录", block)
-        self.assertIn("按作者意图把候选分成可用", block)
+        self.assertIn("记录采用、改写或舍下的理由", block)
         self.assertIn('"entry_id":"t1:1"', block)
 
     def test_author_handoff_keeps_new_events_once_and_omits_repetitive_notes(self):
@@ -231,7 +267,7 @@ class SceneInteractionTests(unittest.TestCase):
         self.assertIn('"director_turns"', block)
         self.assertNotIn("重复的导演解释", block)
         self.assertEqual(block.count("重复场景说明" * 60), 1)
-        self.assertIn("scene-context 保存节拍", block)
+        self.assertIn("candidate_ids 读取完整候选", block)
 
     def test_author_handoff_retains_distinct_external_changes_in_order(self):
         _, plan = _fixture(["character/a", "character/b"])
@@ -342,6 +378,7 @@ class SceneInteractionTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
+            cards = _write_cards(root, _brief().participants)
             gateway = Gateway()
             runtime = PiSceneTransactionRuntime(
                 {"application": {"scene_performance_agents": {"enabled": True}}},
@@ -353,7 +390,7 @@ class SceneInteractionTests(unittest.TestCase):
             self.assertEqual(len(gateway.actor_turns), 2)
             self.assertEqual(len(creator_prompts), 1)
             self.assertEqual(len(gateway.environment_turns), 1)
-            self.assertTrue(gateway.environment_turns[0][1].startswith("【SCENE_LOAD】"))
+            self.assertTrue(gateway.environment_turns[0][1].startswith("你是一位以地方"))
             self.assertTrue(gateway.environment_turns[0][3].startswith("# Independent Environment Writing"))
             self.assertNotIn("你把信拿走了？", creator_prompts[0])
             self.assertNotIn("是我拿的，先听我说完。", creator_prompts[0])
@@ -363,13 +400,10 @@ class SceneInteractionTests(unittest.TestCase):
             self.assertNotIn('"actor_prompts"', creator_prompts[0])
             self.assertNotIn('"environment_initialization"', creator_prompts[0])
             self.assertIn("希望读者怎样经历这一场", creator_prompts[0])
-            self.assertIn("先把作者意图落实成需要观察", creator_prompts[0])
+            self.assertIn("先判断当前章节在全书中的文学意义", creator_prompts[0])
             material_index = json.loads((root / ".studio/scene-transactions/tx-interaction/materials/index.json").read_text(encoding="utf-8"))
             self.assertTrue(any(item["kind"] == "actor" for item in material_index["entries"]))
-            self.assertTrue(all("[LANGUAGE_STYLE]\nANTI_PLAIN\nPOLISHED\nANTI_SHORT_SENTENCES" in call[1]
-                                for call in gateway.actor_turns))
-            self.assertTrue(all("[LITERATURE_STYLE]" in call[1] and "【角色沉浸要求】" in call[1]
-                                for call in gateway.actor_turns))
+            self.assertTrue(all(call[1] == cards[call[0]] for call in gateway.actor_turns))
             self.assertTrue(all("面对他人时，我有权试探" in call[-1]
                                 for call in gateway.actor_turns))
             self.assertTrue(result.prose)
@@ -437,6 +471,7 @@ class SceneInteractionTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
+            cards = _write_cards(root, ["character/solo"])
             gateway = Gateway()
             brief = replace(_brief(), participants=("character/solo",), length=type(_brief().length)(100, 0, 200))
             runtime = PiSceneTransactionRuntime(
@@ -451,7 +486,7 @@ class SceneInteractionTests(unittest.TestCase):
             self.assertNotIn("窗上的雨光慢慢漫到信封背面", gateway.create_prompts[1])
             self.assertIn("scene-context", gateway.create_prompts[1])
             self.assertEqual(len(gateway.environment_prompts), 1)
-            self.assertTrue(all(item["initialization"].startswith("【SCENE_LOAD】")
+            self.assertTrue(all(item["initialization"].startswith("你是一位以地方")
                                 for item in gateway.environment_prompts))
             self.assertEqual(runtime.metrics.provider_calls,
                              len(gateway.calls) + len(gateway.environment_prompts)
@@ -462,12 +497,14 @@ class SceneInteractionTests(unittest.TestCase):
         requests = parse_scene_material_requests({"material_requests": [
             {"kind": "actor", "speaker": "character/solo", "cue": "多说些眼前的事",
              "purpose": "显出他对旧信的回避", "scene_moment": "信打开时"},
-            {"kind": "environment", "cue": "观察雨后的桌面",
+            {"kind": "environment", "target": "雨后的桌面", "cue": "观察桌面上水痕的变化",
              "purpose": "让读者感到雨后的空寂", "scene_moment": "停顿时"},
         ]}, brief, plan)
         self.assertEqual([item["kind"] for item in requests], ["actor", "environment"])
         self.assertEqual([item["beat_id"] for item in requests], ["b1", "b1"])
         self.assertEqual(requests[0]["scene_change"], "")
+        self.assertEqual(requests[1]["target"], "雨后的桌面")
+        self.assertEqual(requests[1]["speaker"], "雨后的桌面")
         from_entry = parse_scene_material_requests({"material_requests": [
             {"kind": "actor", "speaker": "character/solo", "beat_id": "t2:1", "cue": "继续回应",
              "purpose": "让承认继续改变信任", "scene_moment": "上一句之后"},
@@ -477,9 +514,16 @@ class SceneInteractionTests(unittest.TestCase):
             parse_scene_material_requests({"material_requests": [{
                 "kind": "actor", "speaker": "character/solo", "cue": "继续回应",
             }]}, brief, plan)
-        with self.assertRaisesRegex(ValueError, "speaker"):
+        with self.assertRaisesRegex(ValueError, "target must be a scene participant"):
             parse_scene_material_requests({"material_requests": [{"kind": "actor", "speaker": "unknown", "cue": "说话",
                                                                 "purpose": "揭示回避", "scene_moment": "此刻"}]}, brief, plan)
+        with self.assertRaisesRegex(ValueError, "event-narration requires a subject target"):
+            parse_scene_material_requests({"material_requests": [{"kind": "event-narration", "cue": "传来消息",
+                                                                "purpose": "让局势发生偏移", "scene_moment": "此刻"}]}, brief, plan)
+        with self.assertRaisesRegex(ValueError, "scene_change only applies to actor requests"):
+            parse_scene_material_requests({"material_requests": [{"kind": "environment", "target": "雨后的桌面",
+                                                                "scene_change": "雨突然停了", "cue": "观察",
+                                                                "purpose": "让静默落下", "scene_moment": "此刻"}]}, brief, plan)
         with self.assertRaisesRegex(ValueError, "known beat"):
             parse_scene_material_requests({"material_requests": [{"kind": "environment", "beat_id": "b9", "cue": "观察",
                                                                 "purpose": "显示距离", "scene_moment": "此刻"}]}, brief, plan)
@@ -491,7 +535,6 @@ class SceneInteractionTests(unittest.TestCase):
              "scene_change": "门外传来一声敲门", "cue": "我认得这个敲门习惯",
              "purpose": "让旧关系在敲门声里浮现", "scene_moment": "敲门之后"},
         ]}, brief, plan)
-        state = new_scene_session(brief, {}, plan, None)
         prompts = []
 
         def actor(initialization, initialization_answer, history, prompt):
@@ -501,6 +544,8 @@ class SceneInteractionTests(unittest.TestCase):
             ]}, ensure_ascii=False), ""
 
         with tempfile.TemporaryDirectory() as directory:
+            _write_cards(Path(directory), brief["participants"])
+            state = new_scene_session(brief, None, project_root=Path(directory))
             for request in requests:
                 continue_scene_actor(brief, plan, request, state, Path(directory), "digest", actor, _cached_payload)
         self.assertIn("门外传来一声敲门", prompts[0])

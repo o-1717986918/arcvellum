@@ -308,7 +308,7 @@ class LongformMaterializerTests(unittest.TestCase):
             self.assertIn("word_count_target: 1200", first)
             self.assertIn("林昭", first)
             self.assertIn("tension_curve:\n    entry: 1\n    peak: 3\n    exit: 2", first)
-            self.assertIn('incoming_pressure: "全书开场：人物原有生活秩序即将被当前事件打破。"', first)
+            self.assertIn('incoming_pressure: "全书开场：按作品方向建立读者进入这部作品的经验。"', first)
             self.assertIn('scene_id: "scene_0002"', second)
             self.assertIn('incoming_pressure: "林昭带着疑问入学"', second)
             self.assertIn("正式长篇大纲", result.outline_path.read_text(encoding="utf-8"))

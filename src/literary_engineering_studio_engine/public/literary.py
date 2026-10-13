@@ -1,6 +1,15 @@
 """Stable literary-domain API consumed by Studio application services."""
 
+from ..literary.scene.transaction.consistency_contract import (
+    CONSISTENCY_CONTRACT, SceneConsistencyError, delta_inventory, validate_creator_consistency,
+)
+from ..literary.review.current_evidence import CONSISTENCY_CATEGORIES, validate_current_review
+from ..literary.review.fact_alerts import current_fact_alerts
+
 from ..foundation.draft_text import final_body_from_draft_path
+from ..literary.scene.natural_source import (
+    natural_source_index, resolve_natural_source_references, natural_source_reference_span,
+)
 from ..literary.assets.continuity.architecture import REQUIRED_FIELDS
 from ..literary.assets.continuity.ledger import continuity_ledger_status
 from ..literary.assets.canon.contracts import (
@@ -41,6 +50,7 @@ from ..literary.planning.materializer import (
     materialize_lean_window,
     scene_inventory_contract_issues,
 )
+from ..literary.planning.materialization_scaffold import is_blank_scene_scaffold
 from ..literary.planning.lean_plan import (
     PLAN_SCHEMA,
     chapter_obligations,
@@ -121,6 +131,11 @@ from ..literary.scene.roleplay.character_card import (
     ACTOR_CARD_SCHEMA,
     ACTOR_CARD_SECTIONS,
     ActorCharacterCardV1,
+    ActorCharacterCardV2,
+    LEGACY_ACTOR_CARD_SCHEMA,
+    LEGACY_ACTOR_CARD_SECTIONS,
+    actor_card_section_names,
+    actor_card_schema_for_template,
     parse_actor_character_card,
     render_actor_character_card,
 )
@@ -131,6 +146,7 @@ from ..literary.style.reference_projection import (
     recent_formal_reference_ids,
     render_style_reference_selection,
     select_active_style_references,
+    active_style_reference_catalog,
 )
 from ..literary.scene.transaction import (
     ChangeProposal,
@@ -220,16 +236,29 @@ from ..literary.style.version import (
 )
 
 __all__ = sorted([
+    "CONSISTENCY_CONTRACT", "CONSISTENCY_CATEGORIES", "SceneConsistencyError",
+    "delta_inventory", "validate_creator_consistency", "validate_current_review", "current_fact_alerts",
+    "natural_source_index",
+    "natural_source_reference_span",
+    "resolve_natural_source_references",
     "ACTOR_CARD_SCHEMA",
     "ACTOR_CARD_SECTIONS",
     "ActorCharacterCardV1",
+    "ActorCharacterCardV2",
+    "LEGACY_ACTOR_CARD_SCHEMA",
+    "LEGACY_ACTOR_CARD_SECTIONS",
+    "actor_card_section_names",
+    "actor_card_schema_for_template",
     "ArchiveAttachmentRefV1",
     "CreatorMaterialPlanV1",
+    "MaterialCandidateAttachmentRefV1",
     "SceneMaterialRequestV3",
+    "SceneMaterialRequestV4",
     "assert_required_material_calls",
     "parse_actor_character_card",
     "parse_creator_material_plan",
     "parse_scene_material_requests_v3",
+    "parse_scene_material_requests_v4",
     "render_actor_character_card",
     "PLAN_SCHEMA",
     "ASSET_CANDIDATE_DIRS",
@@ -256,6 +285,7 @@ __all__ = sorted([
     "SceneTransactionStatus",
     "calculate_word_budget",
     "chapter_obligations",
+    "is_blank_scene_scaffold",
     "longform_materialization_status",
     "materialize_lean_window",
     "normalize_initial_plan",
@@ -363,6 +393,7 @@ __all__ = sorted([
     "verify_creative_result",
     "project_committed_scene_delta",
     "select_active_style_references",
+    "active_style_reference_catalog",
     "recent_formal_reference_ids",
     "render_style_reference_selection",
     "project_brief_expression_context",

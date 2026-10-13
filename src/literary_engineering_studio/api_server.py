@@ -344,19 +344,7 @@ def create_app(
         )
     )
 
-    app.include_router(
-        build_creative_live_router(
-            CreativeLiveRouterDependencies(
-                jobs=jobs,
-                autopilot=autopilot,
-                live_events=lifecycle.live_events,
-                context_ledgers=lifecycle.persistence.context_ledgers,
-                scene_transactions=autopilot.scene_transactions,
-                sse=_sse,
-                data_root=Path(str(config.get("application", {}).get("data_root") or ".")).expanduser().resolve(),
-            )
-        )
-    )
+    _mount_creative_live_routes(app, config, lifecycle, jobs, autopilot)
 
     app.include_router(
         build_workflow_router(
@@ -486,3 +474,20 @@ def _register_desktop_auth(app, api_token: str) -> str:
         return JSONResponse(status_code=401, content={"detail": "Studio desktop session is not authenticated"})
 
     return desktop_session_token
+
+
+def _mount_creative_live_routes(app, config, lifecycle, jobs, autopilot):
+    app.include_router(
+        build_creative_live_router(
+            CreativeLiveRouterDependencies(
+                jobs=jobs,
+                autopilot=autopilot,
+                live_events=lifecycle.live_events,
+                context_ledgers=lifecycle.persistence.context_ledgers,
+                scene_transactions=autopilot.scene_transactions,
+                sse=_sse,
+                config=config,
+                data_root=Path(str(config.get("application", {}).get("data_root") or ".")).expanduser().resolve(),
+            )
+        )
+    )

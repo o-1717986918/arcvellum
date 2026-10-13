@@ -10,7 +10,7 @@ from typing import Any, Callable
 from uuid import uuid4
 
 from literary_engineering_studio_engine.public.literary import (
-    ACTOR_CARD_SECTIONS, parse_actor_character_card, render_actor_character_card,
+    ACTOR_CARD_SECTIONS, ACTOR_CARD_SCHEMA, parse_actor_character_card, render_actor_character_card,
 )
 from literary_engineering_studio_engine.public.prompting import prompt_layer_spec
 from .character_chat_ports import CharacterChatArchivePort, CharacterChatRepositoryPort, CharacterConversationPort
@@ -27,7 +27,7 @@ class CharacterChatService:
     def setup(self, project_root: Path) -> dict[str, Any]:
         root = _work(project_root)
         spec = prompt_layer_spec("scene.v2.material.actor")
-        return {"sections": list(ACTOR_CARD_SECTIONS), "system_template": spec.default_text,
+        return {"sections": list(ACTOR_CARD_SECTIONS), "card_schema": ACTOR_CARD_SCHEMA, "system_template": spec.default_text,
                 "cards": self.repository.cards(root), "sessions": self.repository.list(root)}
 
     def archive_list(self, project_root: Path, *, prefix="", cursor=0):

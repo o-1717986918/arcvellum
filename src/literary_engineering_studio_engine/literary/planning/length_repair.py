@@ -62,15 +62,11 @@ def build_target_length_repair_plan(
         "creative_contract": {
             "goal": "Meet the explicit whole-work Chinese-content target through meaningful scene development.",
             "required": [
-                "Add causal action, relationship pressure, information release, consequence, or earned aftermath.",
+                "Develop the chapter literary task through world, custom, time, imagination, reflection, emotion, group experience or character encounters.",
                 "Preserve current canon, viewpoint, scene turn, outgoing hook, style mount, and punctuation contract.",
                 "Re-run exact-candidate AgentReview, promotion, static review, state, canon, and continuity gates.",
             ],
-            "forbidden": [
-                "Do not pad with repeated emotion, redundant scenery, paraphrased recap, or cosmetic dialogue.",
-                "Do not change formal canon or character assets from a prose repair task.",
-                "Do not satisfy the project target by counting Markdown or workflow traces.",
-            ],
+            "forbidden": [],
         },
     }
     json_path.parent.mkdir(parents=True, exist_ok=True)
@@ -228,7 +224,7 @@ def _allocation_row(candidate: dict[str, Any], growth: int) -> dict[str, Any]:
         **candidate,
         "required_growth_chars": growth,
         "minimum_scene_chars": int(candidate["current_scene_chars"]) + growth,
-        "repair_focus": "Add an earned beat that strengthens the existing scene function; do not append generic filler.",
+        "repair_focus": "Develop the unit's literary purpose, reading experience and expression at its chosen narrative scale.",
     }
 
 

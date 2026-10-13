@@ -38,6 +38,11 @@
 .scene-rehearsal-connection button { display: grid; place-items: center; width: 30px; height: 30px; margin-left: 8px; color: #3a5c4c; background: #fff; border: 1px solid #ceddd2; border-radius: 8px; cursor: pointer; }
 .scene-rehearsal-error { margin: 0; padding: 8px 22px; color: #a44434; background: #fff0ec; font-size: 12px; }
 .scene-rehearsal-layout { display: grid; grid-template-columns: minmax(205px, 26%) minmax(0, 1fr); flex: 1; min-height: 0; }
+.scene-material-tabs { display: flex; gap: 8px; flex: none; padding: 8px 20px; border-bottom: 1px solid #dbe5dc; }
+.scene-material-tabs button { padding: 8px 12px; border: 1px solid #bdd7c7; border-radius: 7px; background: #fff; color: #60766a; cursor: pointer; font: inherit; font-size: 12px; }
+.scene-material-tabs button[aria-selected="true"] { background: #e1efe6; color: #2f705d; }
+.scene-material-tabs button:focus-visible { outline: 2px solid #2f705d; outline-offset: 2px; }
+.scene-material-scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
 .scene-rehearsal-list { min-width: 0; overflow-y: auto; border-right: 1px solid #dbe5dc; background: #f4f7f3; }
 .scene-rehearsal-list-head { display: flex; align-items: center; justify-content: space-between; padding: 18px 18px 9px; color: #5e7568; font-size: 11px; letter-spacing: .05em; }
 .scene-rehearsal-list-head strong { color: #759081; font: 700 11px/1 var(--font-utility); }

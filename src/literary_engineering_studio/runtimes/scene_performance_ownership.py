@@ -138,7 +138,7 @@ def repair_actor_ownership(
 
 def _material_entries(materials: str) -> list[dict[str, Any]]:
     try:
-        packet = json.loads(materials.split("\n", 1)[1])
+        packet = json.loads(materials.rsplit("\n", 1)[1])
     except (IndexError, json.JSONDecodeError) as exc:
         raise ValueError("first-level performance material block is malformed") from exc
     entries = _actor_entries(packet)
@@ -153,7 +153,7 @@ def compact_performance_materials(materials: str) -> str:
     if not materials:
         return ""
     try:
-        packet = json.loads(materials.split("\n", 1)[1])
+        packet = json.loads(materials.rsplit("\n", 1)[1])
     except (IndexError, json.JSONDecodeError) as exc:
         raise ValueError("first-level performance material block is malformed") from exc
     if not isinstance(packet, dict):
@@ -176,7 +176,7 @@ def author_handoff_materials(materials: str) -> str:
     if not materials:
         return ""
     try:
-        packet = json.loads(materials.split("\n", 1)[1])
+        packet = json.loads(materials.rsplit("\n", 1)[1])
     except (IndexError, json.JSONDecodeError) as exc:
         raise ValueError("first-level performance material block is malformed") from exc
     if not isinstance(packet, dict):
@@ -224,7 +224,7 @@ def has_actor_entries(materials: str) -> bool:
     if not materials:
         return False
     try:
-        packet = json.loads(materials.split("\n", 1)[1])
+        packet = json.loads(materials.rsplit("\n", 1)[1])
     except (IndexError, json.JSONDecodeError) as exc:
         raise ValueError("first-level performance material block is malformed") from exc
     return bool(_actor_entries(packet))

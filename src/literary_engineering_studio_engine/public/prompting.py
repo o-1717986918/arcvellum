@@ -7,6 +7,7 @@ from ..prompting.layers import (
     list_prompt_layer_specs, prompt_assembly_manifest, prompt_layer_spec, render_prompt_template, render_prompt_text,
     scene_prompt_fallback,
     resolve_prompt_layer,
+    prompt_layer_scope,
 )
 
 __all__ = [
@@ -23,5 +24,6 @@ __all__ = [
     "render_prompt_text",
     "scene_prompt_fallback",
     "resolve_prompt_layer",
+    "prompt_layer_scope",
     "validate_payload",
 ]

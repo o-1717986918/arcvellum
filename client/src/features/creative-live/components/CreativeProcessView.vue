@@ -6,6 +6,8 @@ import type { CreativeActivity, CreativeLiveEvent, CreativeSession, SceneRehears
 import { sessionDisplayName } from "../creativePresentation";
 import ExecutionTimeline from "./ExecutionTimeline.vue";
 import SessionTranscript from "./SessionTranscript.vue";
+import ScenePromptInspector from "./ScenePromptInspector.vue";
+import SceneMaterialInspector from "./SceneMaterialInspector.vue";
 
 const props = defineProps<{
   activity?: CreativeActivity[];
@@ -24,6 +26,9 @@ const activeSession = computed(() => {
 const rehearsal = shallowRef<SceneRehearsalDetail | null>(null);
 const latestTurn = computed(() => (props.events || []).filter((item) =>
   item.event === "scene.performance.interaction.turn" && item.data.scene_transaction_id === props.transactionId,
+).at(-1)?.sequence || 0);
+const latestMaterial = computed(() => (props.events || []).filter((item) =>
+  item.data.scene_transaction_id === props.transactionId && (item.event.includes("material") || item.event === "scene.created"),
 ).at(-1)?.sequence || 0);
 let loadGeneration = 0;
 
@@ -89,6 +94,8 @@ function timeLabel(value?: string): string {
       </section>
 
       <ExecutionTimeline :items="activity" />
+      <ScenePromptInspector v-if="transactionId" :project-root="projectRoot" :transaction-id="transactionId" :refresh-key="latestMaterial" />
+      <SceneMaterialInspector v-if="transactionId" :project-root="projectRoot" :transaction-id="transactionId" :refresh-key="latestMaterial" />
     </div>
   </section>
 </template>

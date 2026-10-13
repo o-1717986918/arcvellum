@@ -8,14 +8,11 @@ from typing import Any
 
 from literary_engineering_studio_engine.prompting.layers import prompt_layer_spec, render_prompt_template
 
-from .actor_personas import DEFAULT_LANGUAGE_STYLE
 from .interaction import parse_interaction_direction
 from .relay_context import render_relay_context, validated_knowledge_quotes, validated_opening_situation, validated_public_log
 
 
-PERFORMANCE_SCHEMA = "arcvellum/scene-performance/v11"
-LITERATURE_STYLE_HEADER = "[LITERATURE_STYLE]"
-ACTOR_IMMERSION_REQUIREMENTS = prompt_layer_spec("scene.actor.immersion.protocol").default_text
+PERFORMANCE_SCHEMA = "arcvellum/scene-performance/v12"
 MAX_BEATS = 4
 MAX_ACTOR_ENTRIES = 12
 ENVIRONMENT_SECTIONS = (
@@ -32,18 +29,11 @@ def render_performance_plan_prompt(
 ) -> str:
     """Ask the main creative model to direct actors without drafting prose."""
 
-    actor_prompts = {str(name): (
-        "【PERSONA_LOAD】\nSELF_CLAIM_ROMANIZED_NAME\nLANG_ZH_CN_ONLY\n\n"
-        "【PERSONALITY_CORE】\nTRAIT_OWN_ARCHETYPE\nTRAIT_INNER_CONTRADICTION\nEMOTION_RELATIONALLY_ALIVE\nEMOTION_OWN_CONTRADICTION\n\n"
-        "【PERSONALITY_PUBLIC】\nTRAIT_VISIBLE_PERSONALITY\n\n"
-        "[LANGUAGE_STYLE]\n" + "\n".join(DEFAULT_LANGUAGE_STYLE) + "\nVOICE_RELATIONAL_TEMPERAMENT\n\n"
-        "[LITERATURE_STYLE]\nAUTHOR_LIKE_SOMEBODY\nMOVEMENT_STYLE_SOMESTYLE\nCADENCE_OWN_LITERARY_RHYTHM"
-    ) for name in brief.get("participants") or ()}
     actor_tasks = {str(name): "此人的兴趣、与他人的关系、眼前已知的事和仍可自行决定的事" for name in brief.get("participants") or ()}
     opening_example = {
-        "finish": not bool(actor_prompts), "next_speaker": next(iter(actor_prompts), ""),
-        "beat_id": "b1" if actor_prompts else "", "scene_change": "开场进入的已确认变化" if actor_prompts else "",
-        "cue": "此人主要面对谁、凭什么开口、关系压力何在" if actor_prompts else "", "director_note": "留给主创正文的判断" if actor_prompts else "",
+        "finish": not bool(actor_tasks), "next_speaker": next(iter(actor_tasks), ""),
+        "beat_id": "b1" if actor_tasks else "", "scene_change": "开场进入的已确认变化" if actor_tasks else "",
+        "cue": "此人主要面对谁、凭什么开口、关系压力何在" if actor_tasks else "", "director_note": "留给主创正文的判断" if actor_tasks else "",
     }
     return render_prompt_template("scene.performance.plan.protocol", (
         ENVIRONMENT_INITIALIZATION_EXAMPLE,
@@ -54,7 +44,6 @@ def render_performance_plan_prompt(
         json.dumps(expression, ensure_ascii=False),
         sources[:10000] or '无额外来源。',
         json.dumps(opening_example, ensure_ascii=False),
-        json.dumps(actor_prompts, ensure_ascii=False),
         json.dumps(actor_tasks, ensure_ascii=False),
         json.dumps(ENVIRONMENT_INITIALIZATION_EXAMPLE, ensure_ascii=False),
     ))
@@ -72,7 +61,6 @@ def parse_performance_plan(payload: dict[str, Any], brief: dict[str, Any]) -> di
     if "environment_task" in payload:
         raise ValueError("performance director must not assign an environment task")
     participants = [str(name) for name in brief.get("participants") or ()]
-    prompts = _parse_actor_plan_map(payload, "actor_prompts", participants)
     tasks = _parse_actor_plan_map(payload, "actor_tasks", participants)
     opening = parse_interaction_direction(payload.get("opening_direction"), brief, {"beats": normalized})
     if participants and opening["finish"]:
@@ -81,7 +69,7 @@ def parse_performance_plan(payload: dict[str, Any], brief: dict[str, Any]) -> di
     unknown_slots = _parse_unknown_slots(payload.get("unknown_slots"))
     return {
         "schema": PERFORMANCE_SCHEMA, "scene_id": brief["scene_id"], "beats": normalized,
-        "actor_prompts": prompts, "actor_tasks": tasks, "opening_direction": opening,
+        "actor_tasks": tasks, "opening_direction": opening,
         "environment_initialization": environment_initialization, "unknown_slots": unknown_slots,
     }
 
@@ -142,42 +130,12 @@ def render_actor_prompt(
     return render_actor_scene_prompt(brief, [beat], {**voice, "speaker": voice.get("speaker") or beat.get("speaker") or ""})
 
 
-def render_actor_initialization_prompt(voice: dict[str, Any]) -> str:
-    """Keep the director-authored English persona tags as the first message."""
+def render_actor_initialization_prompt(character_card: str) -> str:
+    """Use the complete character card verbatim as the actor's sole personality initialization."""
 
-    name = str(voice.get("name") or voice.get("speaker") or "").strip()
-    persona = str(voice.get("roleplay_direction") or "").strip()
-    if not name or not persona:
-        raise ValueError("actor initialization requires name and persona direction")
-    style_header = "[LANGUAGE_STYLE]"
-    headers = ("【PERSONA_LOAD】", "【PERSONALITY_CORE】", "【PERSONALITY_PUBLIC】", style_header, LITERATURE_STYLE_HEADER)
-    if not persona.startswith(headers[0]) or any(header not in persona for header in headers[1:3]):
-        raise ValueError("actor initialization requires the three persona sections")
-    if any(not re.fullmatch(r"[A-Z_]+", line) for line in persona.splitlines() if line and line not in headers):
-        raise ValueError("actor initialization tags must use uppercase English letters and underscores")
-    mounted = _mount_default_language_style(persona, style_header)
-    mounted = _mount_default_emotion(mounted)
-    if LITERATURE_STYLE_HEADER not in mounted.splitlines():
-        mounted += f"\n\n{LITERATURE_STYLE_HEADER}"
-    return f"{mounted}\n\n{ACTOR_IMMERSION_REQUIREMENTS}"
-
-
-def _mount_default_emotion(persona: str) -> str:
-    if any(line.startswith("EMOTION_") for line in persona.splitlines()):
-        return persona
-    return persona.replace("【PERSONALITY_CORE】", "【PERSONALITY_CORE】\nEMOTION_RELATIONALLY_ALIVE", 1)
-
-
-def _mount_default_language_style(persona: str, style_header: str) -> str:
-    if style_header not in persona.splitlines():
-        block = f"{style_header}\n" + "\n".join(DEFAULT_LANGUAGE_STYLE)
-        if LITERATURE_STYLE_HEADER in persona.splitlines():
-            return persona.replace(LITERATURE_STYLE_HEADER, f"{block}\n\n{LITERATURE_STYLE_HEADER}", 1)
-        return f"{persona}\n\n{block}"
-    before, after = persona.split(style_header, 1)
-    style_tags = after.splitlines()
-    missing = [tag for tag in DEFAULT_LANGUAGE_STYLE if tag not in style_tags]
-    return before + style_header + ("\n" + "\n".join(missing) if missing else "") + after
+    if not isinstance(character_card, str) or not character_card.strip():
+        raise ValueError("actor initialization requires the complete character card")
+    return character_card
 
 
 def render_actor_scene_prompt(
@@ -382,7 +340,7 @@ def _parse_environment_passage(item: Any, ids: set[str], focal_options: set[str]
     values = {key: str(item.get(key) or "").strip() for key in ("focal_character", "description", "scene_function")}
     if values["focal_character"] and values["focal_character"] not in focal_options:
         raise ValueError("environment focal character is outside scene participants")
-    if not values["description"] or len(values["description"]) > 600 or len(values["scene_function"]) > 250:
+    if not values["description"] or len(values["description"]) > 12_000 or len(values["scene_function"]) > 250:
         raise ValueError("environment passage is missing or too long")
     if re.search(r"(?:说|问|答|喊|叫|应|道|开口)\s*[：:]?\s*[“\"]", values["description"]):
         raise ValueError("environment passage contains dialogue")

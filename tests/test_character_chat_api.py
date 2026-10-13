@@ -36,7 +36,9 @@ class CharacterChatApiTests(unittest.TestCase):
                 stream=client.get("/project/workspace/stream",params={**params,"max_events":1})
                 self.assertEqual(stream.status_code,200)
                 self.assertIn("event: workspace.snapshot",stream.text)
-                self.assertEqual(len(client.get("/character-chat/setup",params=params).json()["sections"]),16)
+                setup=client.get("/character-chat/setup",params=params).json()
+                self.assertEqual(len(setup["sections"]),11)
+                self.assertEqual(setup['card_schema'],'arcvellum/actor-character-card/v2')
                 attachment={"path":"dialogue-known.md","start_line":1,"end_line":1,"knowledge":"known"}
                 payload={**params,"target":"阿青","card":actor_card_payload(),"context":"雨停了。",
                          "attachments":[attachment]}

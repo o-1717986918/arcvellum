@@ -36,11 +36,13 @@ def review_continuity(root: Path, prose: str) -> dict[str, Any]:
 
 def record_review(
     root: Path, prose: str, extracted: Mapping[str, Any], formal: Mapping[str, Any], source: str,
+    *, context_digest: str = "",
 ) -> dict[str, Any]:
     ledger = _read_ledger(root) or {"schema": LEDGER_SCHEMA, "entries": []}
     entries = sorted(ledger["entries"], key=lambda item: int(item["sequence"]))
     digest = sha256(prose.encode("utf-8")).hexdigest()
-    existing = next((item for item in entries if item.get("prose_sha256") == digest), None)
+    existing = next((item for item in entries if item.get("prose_sha256") == digest
+                     and item.get("context_digest","") == context_digest), None)
     if existing is not None:
         return existing
     previous = entries[-1] if entries else None
@@ -48,6 +50,7 @@ def record_review(
     entry = {
         "sequence": (int(previous["sequence"]) + 1) if previous else 1,
         "prose_sha256": digest,
+        "context_digest": context_digest,
         "source": Path(source).name if source else "",
         "review": dict(formal),
         "strengths": _rows(extracted.get("strengths")),
@@ -196,7 +199,7 @@ def _write_ledger(root: Path, ledger: Mapping[str, Any]) -> None:
 
 
 def _revision_count(root: Path) -> int:
-    return len(list(root.glob("revision_result_v2_*.json")))
+    return len(list(root.glob("revision_result_v2_*.json")))+len(list(root.glob("revision_result_v3_*.json")))
 
 
 def _next_sequence(previous: Mapping[str, Any] | None) -> int:

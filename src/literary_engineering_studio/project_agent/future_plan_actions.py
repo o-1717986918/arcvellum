@@ -15,9 +15,9 @@ def future_replan_action(
 ) -> Callable[[Path, Mapping[str, Any]], Mapping[str, Any]]:
     def execute(root: Path, arguments: Mapping[str, Any]) -> Mapping[str, Any]:
         raw = arguments.get("chapter_scene_counts")
-        if not isinstance(raw, Mapping) or not raw:
+        if raw is not None and (not isinstance(raw, Mapping) or not raw):
             raise ValueError("project_future_replan requires chapter_scene_counts")
-        counts = {str(key): int(value) for key, value in raw.items()}
+        counts = {str(key): int(value) for key, value in raw.items()} if raw is not None else None
         result = replan_future(
             root,
             chapter_scene_counts=counts,

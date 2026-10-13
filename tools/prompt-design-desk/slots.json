@@ -456,5 +456,15 @@
       "project_agent.goal_followup.protocol",
       "project_agent.goal_followup.protocol@2026-10-03"
     ]
+  },
+  {
+    "id": "scene.v2.actor.turn",
+    "group": "五类取材",
+    "title": "角色当轮扮演邀请",
+    "fixed": false,
+    "purpose": "面向人物本人提供当前来话与刺激，沿角色卡直接扮演回应。",
+    "note": "位于当轮任务，角色卡继续单独作为系统人格。",
+    "refs": [],
+    "scope": "v2"
   }
 ]

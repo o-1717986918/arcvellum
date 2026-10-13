@@ -5,6 +5,8 @@ import { friendlyError, useAppStore } from "@/stores/app";
 import { creativeLiveClient } from "./services/creativeLiveClient";
 import { applyRehearsalTurn, rehearsalSpeakerSide, rehearsalTurnFromEvent } from "./sceneRehearsalProjection";
 import type { CreativeLiveEvent, SceneRehearsalDetail, SceneRehearsalSummary } from "./types";
+import ScenePromptInspector from "./components/ScenePromptInspector.vue";
+import SceneMaterialInspector from "./components/SceneMaterialInspector.vue";
 
 const app = useAppStore();
 const scenes = ref<SceneRehearsalSummary[]>([]);
@@ -14,6 +16,8 @@ const loading = ref(false);
 const connected = ref(false);
 const error = ref("");
 const followLive = ref(true);
+const viewMode = ref("materials");
+const materialRevision = ref(0);
 const chatScroll = ref<HTMLElement | null>(null);
 const recentEvents = new Map<string, CreativeLiveEvent[]>();
 let connection: ReturnType<typeof creativeLiveClient.observe> | null = null;
@@ -88,6 +92,7 @@ async function selectScene(id: string, live = false): Promise<void> {
 }
 
 function onEvent(event: CreativeLiveEvent): void {
+  if (event.event.includes("material") && String(event.data.scene_transaction_id || "") === selectedId.value) materialRevision.value += 1;
   const turn = rehearsalTurnFromEvent(event);
   const id = String(event.data.scene_transaction_id || "");
   if (!turn || !id) return;
@@ -123,7 +128,7 @@ function timeLabel(value: string): string {
 <template>
   <section class="scene-rehearsal" aria-label="推演观察">
     <header class="scene-rehearsal-head">
-      <div class="scene-rehearsal-brand"><span class="scene-rehearsal-mark"><MessageCircleMore :size="19" /></span><div><small>SCENE REHEARSAL</small><h1>推演观察</h1><p>人物说过的话，在这里按轮次留下。</p></div></div>
+      <div class="scene-rehearsal-brand"><span class="scene-rehearsal-mark"><MessageCircleMore :size="19" /></span><div><small>CREATIVE MATERIALS</small><h1>取材观察</h1><p>阅读主创委托、五类原稿与取舍。</p></div></div>
       <div class="scene-rehearsal-connection"><i :class="{ active: connected }"></i><span>{{ connected ? '实时接收' : '历史记录' }}</span><button type="button" title="刷新推演记录" @click="refresh"><RefreshCw :size="15" /></button></div>
     </header>
     <p v-if="error" class="scene-rehearsal-error" role="alert">{{ error }}</p>
@@ -141,7 +146,9 @@ function timeLabel(value: string): string {
       <main class="scene-rehearsal-stage">
         <template v-if="selectedScene">
           <div class="scene-rehearsal-stage-head"><div><small>{{ selectedScene.scene_id }} / 排练记录</small><h2>{{ selectedScene.objective }}</h2></div><span :class="{ active: selectedScene.status === 'creating' }">{{ selectedScene.status === 'creating' ? '正在发生' : '历史回看' }}</span></div>
-          <div ref="chatScroll" class="scene-rehearsal-chat" role="log" aria-live="polite" aria-relevant="additions">
+          <div class="scene-material-tabs" role="tablist" aria-label="观察内容"><button type="button" role="tab" :aria-selected="viewMode === 'materials'" @click="viewMode = 'materials'">全部取材素材</button><button type="button" role="tab" :aria-selected="viewMode === 'rehearsal'" @click="viewMode = 'rehearsal'">角色对戏</button></div>
+          <div v-if="viewMode === 'materials'" class="scene-material-scroll"><ScenePromptInspector :project-root="app.currentProjectPath || ''" :transaction-id="selectedId" :refresh-key="materialRevision" /><SceneMaterialInspector :project-root="app.currentProjectPath || ''" :transaction-id="selectedId" :refresh-key="materialRevision" /></div>
+          <div v-else ref="chatScroll" class="scene-rehearsal-chat" role="log" aria-live="polite" aria-relevant="additions">
             <div v-if="detail?.environment.length" class="scene-rehearsal-atmosphere"><span>空间底色</span><p v-for="(passage, index) in detail.environment" :key="`${passage.beat_id}-${index}`">{{ passage.description }}</p></div>
             <div v-for="turn in turns" :key="turn.turn" class="scene-rehearsal-turn" :class="rehearsalSpeakerSide(turns, turn.speaker)">
               <div class="scene-rehearsal-turn-meta"><span>{{ displayName(turn.speaker) }}</span><small>第 {{ turn.turn }} 轮 · {{ turn.beat_id }}</small></div>
@@ -150,7 +157,7 @@ function timeLabel(value: string): string {
             </div>
             <div v-if="!turns.length" class="scene-rehearsal-waiting"><MessageCircleMore :size="24" /><strong>{{ selectedScene.status === 'creating' ? '等待角色进入这一场' : '这场尚无可回看的角色轮次' }}</strong><span>角色完成一轮后，发言和可见动作会一起出现。</span></div>
           </div>
-          <button v-if="followLive && turns.length" class="scene-rehearsal-scroll" type="button" @click="scrollToEnd"><ArrowDown :size="14" />最新一轮</button>
+          <button v-if="viewMode === 'rehearsal' && followLive && turns.length" class="scene-rehearsal-scroll" type="button" @click="scrollToEnd"><ArrowDown :size="14" />最新一轮</button>
         </template>
         <div v-else class="scene-rehearsal-blank"><Waves :size="28" /><h2>推演还没开始</h2><p>这里会保留角色之间的真实轮次，也能回看已经完成的场景。</p></div>
       </main>

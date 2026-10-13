@@ -16,6 +16,8 @@ chapter_id: {chapter_id}
 chapter_obligation_id: {chapter_id}
 volume_id: {volume_id}
 title: {title}
+narrative_strategy: {narrative_strategy}
+chapter_literary_task: {chapter_literary_task}
 status: planned
 word_count_target: {target}
 word_count_min: {lower}
@@ -29,7 +31,7 @@ location: ""
 participants: {participants}
 referenced_characters: {participants}
 context_policy:
-  include_major_characters: true
+  include_major_characters: {include_major_characters}
   include_minor_characters: participants_and_referenced_only
 
 input_state:
@@ -65,27 +67,15 @@ narrative_rhythm:
   scene_function: [{function}]
   scene_turn: {consequence}
   reader_effect: {obligation}
-  paragraph_shape: "过场随节奏收放，关键选择、情绪积累与场景质感都可停留；句群依人物视角和压力变化。"
-  density_mix:
-    summary: low
-    action: medium
-    dialogue: medium
-    reflection: medium
-    description: medium
-  dialogue_ratio: medium
-  action_ratio: medium
-  reflection_ratio: medium
-  description_ratio: medium
-  narrative_distance: medium
-  tension_curve:
-    entry: {tension_entry}
-    peak: {tension_peak}
-    exit: {tension_exit}
-  texture_variety: "避免连续场景采用相同材料组织；按场景功能调整对话、动作、心理、环境与信息揭示。"
+  paragraph_shape: {paragraph_shape}
+  density_mix: {{}}
+  narrative_distance: "由本段文学任务与叙述声音选择"
+{tension_curve}
+  texture_variety: "按章节文学任务选择世界、风俗、思想、情感、群体、现场与时间的组织。"
   chapter_ending_policy: {chapter_ending_hook}
   slow_down_points: []
   speed_up_points: []
-  avoid_flatness: "场景整体须有行动、信息或关系变化；局部允许有视角依据的感知、趣味和审美停留，不把每段写成任务回执。"
+  avoid_flatness: "发展本段值得读者经历的趣味、认识、情感与语言。"
 
 scene_bridge:
   incoming_pressure: {incoming_pressure}
@@ -95,7 +85,7 @@ scene_bridge:
   outgoing_hooks: {outgoing}
   outgoing_hook: {consequence}
   promise_payoff_items: {promise_payoff}
-  continuity_handshake: "结尾必须把本场后果转化为下一场可接续的压力、问题、代价或未完成动作。"
+  continuity_handshake: "依据本段叙述方式记录后续可接续的事实、时间、认识、经验与余味。"
 
 output_state:
   new_facts: {information}
@@ -125,19 +115,23 @@ def render_scene_yaml(
     incoming = (
         str(previous_scene.get("consequence") or previous_scene.get("conflict") or "").strip()
         if previous_scene
-        else "全书开场：人物原有生活秩序即将被当前事件打破。"
+        else "全书开场：按作品方向建立读者进入这部作品的经验。"
     )
     values = {
         "scene_id": yaml_text(scene["scene_id"]),
         "chapter_id": yaml_text(scene["chapter_id"]),
         "volume_id": yaml_text(scene["volume_id"]),
         "title": yaml_text(scene["name"]),
+        "narrative_strategy": yaml_text(scene.get("narrative_strategy", "")),
+        "paragraph_shape": yaml_text(scene.get("narrative_strategy") or "按本段文学任务选择段落、时间尺度与叙述声音"),
+        "chapter_literary_task": yaml_text(chapter.get("literary_task", "")),
         "target": target,
         "lower": max(1, round(target * 0.9)),
         "upper": max(1, round(target * 1.1)),
         "timeline_order": int(number(str(scene["scene_id"]))),
         "story_time": yaml_text(scene.get("story_time", "")),
         "participants": json.dumps(scene["participants"], ensure_ascii=False),
+        "include_major_characters": "true" if scene["participants"] else "false",
         "scene_goal": yaml_text(scene["obligation"] or scene["name"]),
         "conflict": yaml_text(scene["conflict"]),
         "function": yaml_text(scene["function"]),
@@ -157,9 +151,10 @@ def render_scene_yaml(
         "anti_summary_requirement": yaml_text(chapter.get("anti_summary_requirement", "")),
         "consequence": yaml_text(consequence),
         "rhythm": yaml_text(rhythm),
-        "pace": yaml_text(pace_for(rhythm)),
-        "density": yaml_text(density_for(rhythm)),
+        "pace": yaml_text("按本段叙述策略选择" if scene.get("narrative_strategy") else pace_for(rhythm)),
+        "density": yaml_text("按本段文学任务选择" if scene.get("narrative_strategy") else density_for(rhythm)),
         "obligation": yaml_text(scene["obligation"]),
+        "tension_curve": _render_rhythm_strategy(scene, tension),
         "tension_entry": tension["entry"],
         "tension_peak": tension["peak"],
         "tension_exit": tension["exit"],
@@ -185,11 +180,11 @@ def repair_generated_rhythm_contracts(
         role = rhythm_role(
             str(scene.get("rhythm_role") or ""), str(scene.get("function") or "")
         )
-        text, changed = _repair_tension(text, tension_curve_for(role))
+        text, changed = (text, False) if scene.get("narrative_strategy") else _repair_tension(text, tension_curve_for(role))
         incoming = (
             str(previous.get("consequence") or previous.get("conflict") or "").strip()
             if previous
-            else "全书开场：人物原有生活秩序即将被当前事件打破。"
+            else "全书开场：按文学任务建立读者进入作品的经验。"
         )
         text, bridge_changed = _repair_incoming(text, incoming)
         if changed or bridge_changed:
@@ -257,3 +252,9 @@ def _split_items(value: str) -> list[str]:
 
 
 __all__ = ["render_scene_yaml", "repair_generated_rhythm_contracts"]
+
+
+def _render_rhythm_strategy(scene, tension):
+    if scene.get("narrative_strategy"):
+        return "  tension_curve: " + json.dumps({"mode": "literary", "strategy": scene["narrative_strategy"]}, ensure_ascii=False)
+    return "  tension_curve:\n" + "\n".join(f"    {key}: {value}" for key, value in tension.items())

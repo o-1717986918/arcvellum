@@ -6,8 +6,8 @@ vi.mock("./services/characterChatClient", () => ({ characterChatClient: mocks })
 describe("character dialogue panel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.setup.mockResolvedValue({ sections: ["PERSONA_LOAD"], cards: [{
-      digest: "card-1", scene_id: "s1", card: { target: "阿青", sections: { PERSONA_LOAD: "独特声线" }, source_refs: ["known.md"] },
+    mocks.setup.mockResolvedValue({ sections: ["PERSONA_LOAD"], card_schema:'arcvellum/actor-character-card/v2', cards: [{
+      digest: "card-1", scene_id: "s1", card: { schema:'arcvellum/actor-character-card/v2', target: "阿青", sections: { PERSONA_LOAD: "独特声线" }, source_refs: ["known.md"] },
     }], sessions: [] });
     mocks.archive.mockResolvedValue({ entries: [], next_cursor: null });
   });
@@ -25,6 +25,7 @@ describe("character dialogue panel", () => {
     await create.trigger("click");
     await flushPromises();
     expect(mocks.create.mock.calls[0][3]).toBe("雨停后的窗边");
+    expect(mocks.create.mock.calls[0][1].schema).toBe('arcvellum/actor-character-card/v2');
     await wrapper.find("form textarea").setValue("信呢？");
     await wrapper.find("form").trigger("submit");
     await flushPromises();
@@ -39,6 +40,22 @@ describe("character dialogue panel", () => {
     expect(wrapper.find('[role="alert"]').text()).toBe("请先选择作品");
     await wrapper.find(".character-chat-overlay").trigger("keydown", { key: "Escape" });
     expect(wrapper.emitted("close")).toHaveLength(1);
+    wrapper.unmount();
+  });
+
+  it('keeps an explicitly selected legacy card schema and all its fields',async()=>{
+    mocks.setup.mockResolvedValue({sections:['PERSONA_LOAD'],card_schema:'arcvellum/actor-character-card/v2',
+      cards:[{digest:'legacy',card:{schema:'arcvellum/actor-character-card/v1',target:'阿青',
+        sections:{PERSONA_LOAD:'旧人格',PERSONALITY_CORE:'旧卡附加部分'},source_refs:['known.md']}}],sessions:[]});
+    mocks.create.mockResolvedValue({session:{session_id:'legacy-chat',known_archive:[],turns:[]}});
+    const wrapper=mount(CharacterChatPanel,{props:{projectRoot:'C:/works/rain'},global:{stubs:{Teleport:true}}});
+    await flushPromises();await wrapper.findAll('select')[0].setValue('legacy');
+    await wrapper.findAll('button').find(button=>button.text()==='查看与编辑角色卡')!.trigger('click');
+    expect(wrapper.text()).toContain('人格核心');
+    await wrapper.findAll('button').find(button=>button.text()==='加载并开始新对话')!.trigger('click');
+    await flushPromises();
+    expect(mocks.create.mock.calls[0][1].schema).toBe('arcvellum/actor-character-card/v1');
+    expect(mocks.create.mock.calls[0][1].sections.PERSONALITY_CORE).toBe('旧卡附加部分');
     wrapper.unmount();
   });
 

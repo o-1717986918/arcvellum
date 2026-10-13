@@ -1,9 +1,11 @@
 """Restore unique literal spans after transport changes quotation presentation only."""
 from hashlib import sha256
+import json
 import re
 
 
 def restore_commission_source(answer, payload):
+    restore_attachment_line_ranges(answer,payload)
     recoveries = []
     projected, offsets = _quote_projection(answer)
     for index, request in enumerate(payload.get("material_requests") or []):
@@ -14,6 +16,9 @@ def restore_commission_source(answer, payload):
             if not isinstance(text, str) or not text or text in answer:
                 continue
             span = _literal_span(answer, text, projected, offsets)
+            terminal_recovery = span is None and label in {"author_prompt", "working_context", "style_direction"}
+            if terminal_recovery:
+                span = _terminal_punctuation_span(answer, text)
             if span is None:
                 continue
             raw_start, raw_end = span
@@ -21,11 +26,48 @@ def restore_commission_source(answer, payload):
             container[field] = original
             projection = ("blockquote-markers-only" if _quote_projection(text, normalize_quotes=False)[0]
                 in _quote_projection(original, normalize_quotes=False)[0] else "blockquote-and-quotation-presentation")
+            if terminal_recovery:
+                projection = "terminal-punctuation-only"
             recoveries.append({"request_index": index, "field": label, "projection": projection,
                 "extracted_sha256": sha256(text.encode()).hexdigest(), "start": raw_start, "end": raw_end})
     if recoveries:
         payload["commission_format_recovery"] = recoveries
     return payload
+
+
+def restore_attachment_line_ranges(answer,payload):
+    """Fill missing endpoints only from one explicitly written source range."""
+    for index,request in enumerate(payload.get('material_requests') or []):
+        for attachment,item in enumerate(request.get('archive_attachments') or []):
+            if item.get('start_line') is not None and item.get('end_line') is not None:
+                continue
+            path=item.get('path')
+            if not isinstance(path,str):continue
+            pattern=r'`'+re.escape(path)+r'`\s*第\s*(\d+)(?:\s*[-–—~至]\s*(\d+))?\s*行'
+            matches=list(re.finditer(pattern,answer))
+            ranges={(int(m[1]),int(m[2] or m[1])) for m in matches}
+            if len(ranges)!=1:continue
+            start,end=next(iter(ranges))
+            if any(item.get(key) is not None and item[key]!=value for key,value in (('start_line',start),('end_line',end))):
+                continue
+            original={key:item.get(key) for key in ('start_line','end_line')}
+            item.update(start_line=start,end_line=end)
+            payload.setdefault('attachment_line_recovery',[]).append({'request_index':index,'attachment_index':attachment,
+                'path':path,'original':original,'source':matches[0][0],'start':matches[0].start(),'end':matches[0].end()})
+
+
+def _terminal_punctuation_span(answer, text):
+    punctuation = "。！？：；，.!?:;,"
+    if len(text) < 8 or text[-1] not in punctuation:
+        return None
+    stem = text[:-1]
+    if answer.count(stem) != 1:
+        return None
+    start = answer.index(stem)
+    end = start + len(stem)
+    if end >= len(answer) or answer[end] not in punctuation:
+        return None
+    return start, end + 1
 
 
 def _fields(request):
@@ -65,7 +107,7 @@ def _quote_projection(text, *, normalize_quotes=True):
     return "".join(parts), offsets
 
 
-def restore_tone_source(answer,payload):
+def restore_tone_source(answer,payload,prose=None):
     projected,offsets=_quote_projection(answer)
     for index,edit in enumerate(payload.get('edits') or []):
         if not isinstance(edit,dict):
@@ -85,4 +127,86 @@ def restore_tone_source(answer,payload):
                 edit[field]=answer[span[0]:span[1]]
                 payload.setdefault('tone_presentation_recovery',[]).append({'edit':index,'field':field,
                     'start':span[0],'end':span[1]})
+        _body_tone_edit(edit, prose, payload, index)
     return payload
+
+
+def _body_tone_edit(edit, prose, payload, index):
+    before = edit.get('before')
+    if not prose or not isinstance(before, str) or before in prose:
+        return
+    plain, _ = _quote_projection(before, normalize_quotes=False)
+    if plain == before or prose.count(plain) != 1:
+        return
+    for field in ('before', 'after'):
+        original = edit.get(field)
+        if isinstance(original, str):
+            edit[field] = _quote_projection(original, normalize_quotes=False)[0]
+    payload.setdefault('tone_presentation_recovery', []).append({
+        'edit': index, 'projection': 'editor-blockquote-to-body', 'original_before': before})
+
+
+def tone_text_matches_source(answer, text):
+    if not isinstance(text, str) or not text.strip():
+        return False
+    return text in _quote_projection(answer, normalize_quotes=False)[0]
+
+
+def restore_review_evidence(prose,payload):
+    projected,offsets=_quote_projection(prose)
+    for group in ('strengths','major_issues','optional_explorations','issue_progress'):
+        for index,row in enumerate(payload.get(group) or []):
+            evidence=row.get('evidence') if isinstance(row,dict) else None
+            if not isinstance(evidence,str) or not evidence.strip() or evidence in prose:
+                continue
+            span=_literal_span(prose,evidence.strip(),projected,offsets) or _whitespace_evidence_span(prose,evidence)
+            if span:
+                row['evidence']=prose[span[0]:span[1]]
+                payload.setdefault('review_format_recovery',[]).append({'group':group,'row':index,
+                    'original':evidence,'body_start':span[0],'body_end':span[1],
+                    'body_sha256':sha256(prose.encode('utf-8')).hexdigest()})
+            else:
+                _recover_quoted_prose(prose,payload,row,group,index,evidence)
+    return payload
+
+
+def _recover_quoted_prose(prose,payload,row,group,index,evidence):
+    quoted=re.findall(r'“([^“”\n]+)”|"([^"\n]+)"',evidence)
+    quotes={left or right for left,right in quoted if (left or right).strip() and prose.count(left or right)==1}
+    if not quotes:
+        return
+    longest=max(map(len,quotes))
+    choices=[quote for quote in quotes if len(quote)==longest]
+    if len(choices)!=1:
+        return
+    quote=choices[0];row['evidence']=quote
+    payload.setdefault('review_format_recovery',[]).append({'group':group,'row':index,
+        'original':evidence,'body_start':prose.index(quote),'body_end':prose.index(quote)+len(quote),
+        'body_sha256':sha256(prose.encode()).hexdigest(),'projection':'explicit-quoted-body-fragment'})
+
+
+def _whitespace_evidence_span(prose,evidence):
+    parts=re.split(r'\s+',evidence.strip())
+    if len(parts)<2:
+        return None
+    matches=list(re.finditer(r'\s+'.join(map(re.escape,parts)),prose))
+    return (matches[0].start(),matches[0].end()) if len(matches)==1 else None
+
+
+def quoted_review_evidence(answer,evidence):
+    if not isinstance(evidence,str) or not evidence.strip():
+        return False
+    if re.search(r'"evidence"\s*:\s*'+re.escape(json.dumps(evidence,ensure_ascii=False)),answer):
+        return True
+    if re.search(r'"path"\s*:\s*"/[^"\n]+/evidence"[^{}]*"value"\s*:\s*'
+                 +re.escape(json.dumps(evidence,ensure_ascii=False)),answer):
+        return True
+    projected,offsets=_quote_projection(answer)
+    span=_literal_span(answer,evidence.strip(),projected,offsets)
+    if not span:
+        return False
+    if span[0]>0 and span[1]<len(answer) and answer[span[0]-1] in '\"\'“‘' and answer[span[1]] in '\"\'”’':
+        return True
+    line_start=answer.rfind('\n',0,span[0])+1
+    prefix=answer[line_start:span[0]]
+    return answer[span[0]:span[1]].lstrip().startswith('>') or bool(re.search(r'(?:^\s*>|(?:原文|证据|引句|引用)\s*[:：])',prefix))

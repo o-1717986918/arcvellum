@@ -9,6 +9,7 @@ from literary_engineering_studio_engine.public.literary import active_style_prom
 
 class CreatorStylometryMixin:
     def create_scene(self, transaction_id, brief):
+        self._prepare_transaction_style_bundle(transaction_id, brief)
         self._creator_style_snapshot(transaction_id)
         result = super().create_scene(transaction_id, brief)
         self._measure_creator_style(transaction_id, result)

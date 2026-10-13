@@ -13,7 +13,7 @@ from .snapshot import active_style_mount_snapshot_payload, active_style_prompt_p
 
 
 REFERENCE_INDEX_SCHEMA = "arcvellum/style-reference-index/v1"
-SELECTOR_VERSION = "scene-reference-selector/1"
+SELECTOR_VERSION = "scene-reference-selector/2"
 _DEFAULT_META = engine_root() / "templates/style/default-clear-plain/reference-metadata.json"
 
 
@@ -39,6 +39,7 @@ def build_reference_index(profile_text: str, corpus_text: str, metadata: dict[st
             "span": {"start": start, "end": end},
             "match_terms": list(definition.get("match_terms") or []),
             "technique_axes": list(definition.get("technique_axes") or []),
+            **{key: definition.get(key) for key in ("narrative_modes", "voice", "register", "time_scale", "source_kind", "source_title", "source_url")},
         })
         cursor = end
     return {
@@ -50,7 +51,28 @@ def build_reference_index(profile_text: str, corpus_text: str, metadata: dict[st
 
 def build_default_reference_index(profile_text: str, corpus_text: str) -> dict[str, Any]:
     metadata = json.loads(_DEFAULT_META.read_text(encoding="utf-8"))
-    return build_reference_index(profile_text, corpus_text, metadata)
+    index = build_reference_index(profile_text, corpus_text, metadata)
+    source = _DEFAULT_META.parent / "literary-references.json"
+    for row in json.loads(source.read_text(encoding="utf-8"))["units"]:
+        start = profile_text.find(row["text"])
+        if start < 0:
+            raise ValueError("supplementary literary reference missing from profile")
+        index["units"].append({**{key: value for key, value in row.items() if key != "text"},
+                               "span": {"start": start, "end": start + len(row["text"])}})
+    return index
+
+
+def active_style_reference_catalog(project_root: Path) -> dict[str, Any]:
+    """Read all full, digest-verified references for creator-directed selection."""
+    prompt = active_style_prompt_path(project_root)
+    snapshot = active_style_mount_snapshot_payload(project_root)
+    if prompt is None or not (prompt.parent / "reference-index.json").is_file():
+        return {"schema": "arcvellum/style-reference-catalog/v1", "style_mount_snapshot": snapshot, "references": []}
+    profile = (prompt.parent / "style-profile.md").read_text(encoding="utf-8")
+    index = json.loads((prompt.parent / "reference-index.json").read_text(encoding="utf-8"))
+    validate_reference_index(profile, index)
+    return {"schema": "arcvellum/style-reference-catalog/v1", "style_mount_snapshot": snapshot,
+            "references": [_validated_unit(row, profile) for row in index["units"]]}
 
 
 def validate_reference_index(profile: str, index: dict[str, Any]) -> None:
@@ -147,6 +169,8 @@ def select_active_style_references(
         "selector_version": SELECTOR_VERSION,
         "style_mount_snapshot": snapshot,
         "references": references,
+        "equal_primary_ids": [item[2]["unit_id"] for item in ranked if item[0] == primary[0]],
+        "selection_note": "按作品审美与当前文学任务匹配；参考由主创自由取舍，同分表示同等相关。",
     }
     selection["digest"] = hashlib.sha256(json.dumps(selection, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
     return selection
@@ -154,10 +178,12 @@ def select_active_style_references(
 
 def render_style_reference_selection(selection: dict[str, Any]) -> str:
     if selection.get("status") != "selected":
-        return "本场没有可靠的参考选段匹配；沿用文风提示的中性原则，不假装引用了具体样例。"
-    lines = ["以下选段只提供表达技法。保留本作品事实，不复制原句、专名或连续措辞。"]
+        return "依据作者意图与当前文学任务发展本段的语言。"
+    lines = ["完整阅读以下参照，结合本段文学任务选择叙述声音、感知位置和时间尺度，发展当前作品自己的表达。"]
     for row in selection["references"]:
         label = "主参考" if row["role"] == "primary" else "辅参考"
+        if row["unit_id"] in selection.get("equal_primary_ids", []) and len(selection.get("equal_primary_ids", [])) > 1:
+            label = "同等相关参考（自主取舍）"
         lines.extend([
             f"### {label} {row['unit_id']}",
             f"技法轴：{'、'.join(row['technique_axes'])}。命中场景线索：{'、'.join(row['match_terms']) or '通用场景基底'}。",
@@ -170,11 +196,17 @@ def _ranked_units(
     index: dict[str, Any], profile: str, scene_text: str, recent_unit_ids: tuple[str, ...],
 ) -> list[tuple[int, str, dict[str, Any], list[str]]]:
     recent = set(recent_unit_ids[-4:])
+    try:
+        context = json.loads(scene_text)
+    except (ValueError, TypeError):
+        context = {}
+    aesthetic = json.dumps(context.get("aesthetic_context", {}), ensure_ascii=False) if isinstance(context, dict) else ""
     ranked = []
     for row in index.get("units", []):
         unit = _validated_unit(row, profile)
         hits = [term for term in unit["match_terms"] if term in scene_text]
-        score = len(hits) * 4 - (2 if unit["unit_id"] in recent else 0)
+        aesthetic_hits = [term for term in unit["match_terms"] if term in aesthetic]
+        score = len(hits) * 4 + len(aesthetic_hits) * 6 - (2 if unit["unit_id"] in recent else 0)
         ranked.append((score, unit["unit_id"], unit, hits))
     return ranked
 
@@ -200,4 +232,4 @@ def _validated_unit(row: dict[str, Any], profile: str) -> dict[str, Any]:
     return {**row, "text": text}
 
 
-__all__ = ["REFERENCE_INDEX_SCHEMA", "build_default_reference_index", "build_reference_index", "validate_reference_index", "recent_formal_reference_ids", "select_active_style_references", "render_style_reference_selection"]
+__all__ = ["active_style_reference_catalog", "REFERENCE_INDEX_SCHEMA", "build_default_reference_index", "build_reference_index", "validate_reference_index", "recent_formal_reference_ids", "select_active_style_references", "render_style_reference_selection"]

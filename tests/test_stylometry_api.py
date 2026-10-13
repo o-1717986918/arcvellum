@@ -30,6 +30,14 @@ class StylometryApiTests(unittest.TestCase):
                 stream = client.get("/project/workspace/stream", params={**params, "max_events": 1})
                 self.assertIn("event: workspace.snapshot", stream.text)
                 self.assertFalse(client.get("/stylometry/workbench", params=params).json()["mount"]["enabled"])
+                initial = client.post('/stylometry/presets/initialize', json=params).json()
+                old_version = initial['presets'][0]['stylometry_version_id']
+                recalculated = client.post('/stylometry/presets/world-narration/recalculate',
+                    json={**params, 'expected_revision': initial['revision']})
+                self.assertEqual(recalculated.status_code, 200, recalculated.text)
+                self.assertNotEqual(recalculated.json()['presets'][0]['stylometry_version_id'], old_version)
+                self.assertEqual(client.post('/stylometry/presets/world-narration/recalculate',
+                    json={**params, 'expected_revision': initial['revision']}).status_code, 400)
                 profile = client.post("/stylometry/analyze", json={**params, "title": "河与山", "sources": [
                     {"source_id": "train-one", "work_id": "work-one", "text": "风从河面吹来。她把门推开，看看炉中的火。" * 30},
                     {"source_id": "holdout-one", "work_id": "work-two", "split": "holdout",

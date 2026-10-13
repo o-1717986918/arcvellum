@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
+from ..application.actor_card_store import ActorCardStore
 from ..project_agent.scope import work_id_for_root
 
 class FileCharacterChatRepository:
@@ -41,5 +42,16 @@ class FileCharacterChatRepository:
 
     def cards(self, project_root: Path) -> list[dict[str, Any]]:
         directory = self.root / "character-card-library" / work_id_for_root(project_root.resolve())
-        return [json.loads(path.read_text(encoding="utf-8")) for path in sorted(directory.glob("*.json"))]
+        rows = {}
+        for path in directory.glob("*.json"):
+            row = json.loads(path.read_text(encoding="utf-8"))
+            active = ActorCardStore.read(project_root, row["card"]["target"])
+            rows[row['digest']] = {**row, "work_active": bool(active and active["digest"] == row["digest"])}
+        # Imported works carry their active cards even when the private catalog is empty.
+        for path in (project_root/'characters/role-cards').glob('*.json'):
+            row = json.loads(path.read_text(encoding='utf-8'))
+            active = ActorCardStore.read(project_root,row['card']['target'])
+            if active is not None:
+                rows[active['digest']] = {**active,'work_active':True}
+        return sorted(rows.values(), key=lambda row: (not row["work_active"], row["card"]["target"], row["digest"]))
 

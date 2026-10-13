@@ -89,7 +89,7 @@ class ActorPersonaTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "uppercase English"):
                 save_actor_persona(root, "character/xu_yao", {**sections, "PERSONALITY_CORE": ["傲娇"]})
 
-    def test_existing_scene_transaction_keeps_its_actor_persona_snapshot(self) -> None:
+    def test_historical_persona_edits_do_not_enter_new_expression_projections(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             characters = root / "characters"
@@ -111,8 +111,9 @@ class ActorPersonaTests(unittest.TestCase):
             same_transaction = runtime._expression_projection(_brief(), "scene-run-1")
             next_transaction = runtime._expression_projection(_brief(), "scene-run-2")
             self.assertEqual(same_transaction, original)
-            self.assertIn("TRAIT_WITTY", next_transaction["actor_personas"]["character/protagonist"])
-            self.assertNotEqual(next_transaction, original)
+            self.assertNotIn("actor_personas", next_transaction)
+            self.assertEqual(next_transaction, original)
+            self.assertEqual(list_actor_personas(root)["characters"][0]["sections"]["PERSONALITY_PUBLIC"], ["TRAIT_WITTY"])
 
 
 if __name__ == "__main__":

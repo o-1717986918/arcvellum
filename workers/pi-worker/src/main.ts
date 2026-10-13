@@ -3,7 +3,7 @@
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { readFile } from "node:fs/promises";
-import { builtinModels } from "@earendil-works/pi-ai/providers/all";
+import { configuredModels } from "./configured-models.ts";
 import type { ReasoningBudget, RunnerOptions, RuntimeEventSink, WorkerOptions } from "./contracts.ts";
 import { ReadOnlyJsonCredentialStore } from "./credential-store.ts";
 import { validateReasoningBudget } from "./reasoning-budget.ts";
@@ -56,7 +56,7 @@ async function writeCatalog(args: string[]): Promise<void> {
 	);
 	const credentials = new ReadOnlyJsonCredentialStore(authPath);
 	const connected = new Set((await credentials.list()).map((item) => item.providerId));
-	const models = builtinModels({ credentials });
+	const models = await configuredModels(credentials, authPath);
 	const providers = models.getProviders().map((provider) => ({
 		id: provider.id,
 		name: provider.name,

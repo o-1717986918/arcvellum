@@ -2,10 +2,11 @@ import { createInterface } from "node:readline";
 import type { Readable, Writable } from "node:stream";
 import { Agent, type AgentEvent, type AgentTool, type StreamFn, type ThinkingLevel } from "@earendil-works/pi-agent-core";
 import { Type, type Model } from "@earendil-works/pi-ai";
-import { builtinModels } from "@earendil-works/pi-ai/providers/all";
+import { configuredModels } from "./configured-models.ts";
 import type { ProjectAgentOptions } from "./contracts.ts";
 import { ReadOnlyJsonCredentialStore } from "./credential-store.ts";
 import { providerStreamControls } from "./provider-reliability.ts";
+import { observeSdkFetch } from "./request-observation.ts";
 import {
 	encodeEnvelope,
 	envelope,
@@ -14,7 +15,7 @@ import {
 	type BridgeEnvelope,
 	type BridgeWriter,
 } from "./project-agent-protocol.ts";
-import { safeThinkingLevel } from "./reasoning-budget.ts";
+import { safeThinkingLevel, withDeepSeekV4ThinkingSupport } from "./reasoning-budget.ts";
 
 const PROJECT_OVERVIEW_TOOL = "project_overview";
 const WORKSPACE_CATALOG_TOOL = "workspace_catalog";
@@ -106,6 +107,10 @@ export async function runProjectAgentTurn(
 ): Promise<ProjectAgentTurnResult> {
 	let turns = 0;
 	let toolCalls = 0;
+	let modelTurns = 0;
+	let modelRequestId = "";
+	const observation = (event: string, data: Record<string, unknown> = {}) =>
+		emit(envelope("agent.event", start.turnId, { event, ...data }));
 	const tools = createProjectAgentTools(start, bridge, () => {
 		toolCalls += 1;
 	});
@@ -116,7 +121,16 @@ export async function runProjectAgentTurn(
 			thinkingLevel: runtime.thinkingLevel ?? "off",
 			tools,
 		},
-		streamFn: runtime.streamFn,
+		streamFn: (model, context, options = {}) => runtime.streamFn(model, context, {
+			...options, fetch: observeSdkFetch(observation, () => ({ session_id: start.sessionId,
+				model_request_id: modelRequestId, call_purpose: "project-control" }), options.fetch),
+		}),
+		onPayload: (payload) => {
+			modelRequestId = `${start.turnId}-request-${++modelTurns}`;
+			observation("runner.provider.request.started", { model_request_id: modelRequestId,
+				session_id: start.sessionId, count_unit: "model-turn", call_purpose: "project-control" });
+			return payload;
+		},
 		sessionId: start.sessionId,
 		toolExecution: "sequential",
 		shouldStopAfterTurn: ({ toolResults }) => {
@@ -298,8 +312,8 @@ function projectToolDefinition(name: string): {
 		}),
 	};
 	if (name === PROJECT_ACTOR_PERSONAS_TOOL) return {
-		label: "Read Actor Persona Tags",
-		description: "List established characters and their complete project-level actor initialization tags. Pass character_id to focus on one character.",
+		label: "Read Historical Actor Tags",
+		description: "Read historical persona-tag configuration. Current role actors initialize from their complete character cards; character voice and habits are maintained in the character archive. Pass character_id to focus on one stored profile.",
 		parameters: Type.Object({
 			work_id: workId(),
 			character_id: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
@@ -384,8 +398,8 @@ function projectToolDefinition(name: string): {
 		}),
 	};
 	if (name === PROJECT_ACTOR_PERSONA_UPDATE_TOOL) return {
-		label: "Update Actor Persona Tags",
-		description: "Replace the actor initialization tag sections for one established character. Read the current profile first; each array is freely editable. LITERATURE_STYLE holds broad author-like or literary-movement tags. Tags use uppercase English letters and underscores. Changes affect future scene transactions.",
+		label: "Update Historical Actor Tags",
+		description: "Update a historical persona-tag profile when the user explicitly edits that configuration. Current role personality initialization uses the complete character card. Each stored tag uses uppercase English letters and underscores.",
 		parameters: Type.Object({
 			work_id: workId(),
 			character_id: Type.String({ minLength: 1, maxLength: 200 }),
@@ -404,6 +418,10 @@ function projectToolDefinition(name: string): {
 		parameters: Type.Object({
 			work_id: workId(),
 			message: Type.String({ minLength: 1, maxLength: 6000 }),
+            source_kind: Type.Optional(Type.Union([Type.Literal("author_intent"), Type.Literal("agent_judgment"), Type.Literal("continuity")])),
+            author_quote: Type.Optional(Type.String({ maxLength: 6000, description: "Exact current human wording when recording an explicit author intent change." })),
+            evidence: Type.Optional(Type.Array(Type.String({ maxLength: 2000 }), { maxItems: 32 })),
+            supersedes: Type.Optional(Type.Array(Type.String({ maxLength: 64 }), { maxItems: 32 })),
 		}),
 	};
 	if (name === CREATION_CONTROL_TOOL) return {
@@ -509,10 +527,10 @@ function projectToolDefinition(name: string): {
 		description: "Replan all scenes before the first commit, or replace only the unwritten suffix afterward. Revise chapter scene counts, reading versus story-time order, narrative design, events, and relative scene length while preserving committed prose and the book character target. This does not resume creation.",
 		parameters: Type.Object({
 			work_id: workId(),
-			chapter_scene_counts: Type.Record(
+			chapter_scene_counts: Type.Optional(Type.Record(
 				Type.String({ pattern: "^chapter_[0-9]{4}$" }),
 				Type.Integer({ minimum: 1, maximum: 20 }),
-			),
+			)),
 			direction: Type.String({ minLength: 1, maxLength: 5000 }),
 		}),
 	};
@@ -540,9 +558,10 @@ function parseStart(value: BridgeEnvelope): ProjectAgentStart {
 async function loadModelRuntime(options: ProjectAgentOptions): Promise<ProjectAgentModelRuntime> {
 	const [provider, modelId] = parseModelId(options.model);
 	const credentials = new ReadOnlyJsonCredentialStore(options.authPath);
-	const models = builtinModels({ credentials });
-	const model = models.getModel(provider, modelId);
-	if (!model) throw new Error(`Pi AI model is not available: ${options.model}`);
+	const models = await configuredModels(credentials, options.authPath);
+	const catalogModel = models.getModel(provider, modelId);
+	if (!catalogModel) throw new Error(`Pi AI model is not available: ${options.model}`);
+	const model = withDeepSeekV4ThinkingSupport(catalogModel);
 	const auth = await models.getAuth(model);
 	if (!auth) throw new Error(`Pi AI provider is not authenticated: ${provider}`);
 	return {

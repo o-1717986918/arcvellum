@@ -19,19 +19,19 @@ from literary_engineering_studio_engine.public.prompting import render_prompt_te
 
 from .pi_scene_payload import _answer_payload
 
+CARD_INITIALIZATION_SOURCE = "character-card/v1"
+
 
 def new_scene_session(
-    brief: dict[str, Any], expression: dict[str, Any], plan: dict[str, Any], environment: dict[str, Any] | None,
-    *, prompt_layers: dict[str, str] | None = None,
+    brief: dict[str, Any], environment: dict[str, Any] | None,
+    *, project_root: Path | None, prompt_layers: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     participants = list(brief.get("participants") or ())
-    saved_personas = expression.get("actor_personas") if isinstance(expression.get("actor_personas"), dict) else {}
-    identity_guidance = (prompt_layers or {}).get("scene.actor.identity", "")
     return {
         "scene_id": brief["scene_id"],
-        "initializations": {speaker: render_actor_initialization_prompt({
-            "name": speaker, "roleplay_direction": saved_personas.get(speaker) or plan["actor_prompts"][speaker],
-        }) + ("\n\n" + identity_guidance if identity_guidance else "") for speaker in participants},
+        "initializations": {speaker: render_actor_initialization_prompt(
+            _character_card(project_root, speaker)) for speaker in participants},
+        "initialization_sources": {speaker: CARD_INITIALIZATION_SOURCE for speaker in participants},
         "initialization_answers": {speaker: "" for speaker in participants},
         "histories": {speaker: [] for speaker in participants},
         "public_log": [], "actor_entries": [], "directions": [], "environment": environment,
@@ -70,14 +70,14 @@ def continue_scene_actor(
     direction = {"finish": False, "next_speaker": speaker, "beat_id": request["beat_id"],
                  "scene_change": request.get("scene_change", ""), "cue": request["cue"],
                  "director_note": request.get("purpose") or "主创按需续演"}
+    initialization, initialized, answer_field = _actor_initialization(state, speaker, project_root)
     prompt, record, entries = _respond(
         brief, plan, direction, state["public_log"], state["environment"], turn,
-        state["initializations"][speaker], state["initialization_answers"][speaker],
+        initialization, initialized,
         state["histories"][speaker], cache_root, digest, invoke_actor_turn, cached_payload,
-        character_context=_character_context(project_root, speaker) if not state["histories"][speaker] else "",
         turn_guidance=state.get("prompt_layers", {}).get("scene.actor.turn", ""),
     )
-    state["initialization_answers"][speaker] = record["initialization_answer"]
+    state[answer_field][speaker] = record["initialization_answer"]
     state["histories"][speaker].append([prompt, record["answer"]])
     entry_ids = []
     for number, entry in enumerate(entries, 1):
@@ -191,25 +191,43 @@ def _environment_cue(environment: dict[str, Any] | None, beat_id: str) -> str:
                      if isinstance(item, dict) and item.get("beat_id") == beat_id)[:900]
 
 
-def _character_context(project_root: Path | None, speaker: str) -> str:
-    """Give an actor its own life and relationships after the pure persona initialization."""
+def _actor_initialization(state, speaker, project_root):
+    if state.get("initialization_sources", {}).get(speaker) == CARD_INITIALIZATION_SOURCE:
+        return state["initializations"][speaker], state["initialization_answers"][speaker], "initialization_answers"
+    cards = state.setdefault("character_card_initializations", {})
+    if speaker not in cards:
+        cards[speaker] = render_actor_initialization_prompt(_character_card(project_root, speaker))
+    answers = state.setdefault("character_card_initialization_answers", {})
+    return cards[speaker], answers.get(speaker, ""), "character_card_initialization_answers"
 
+
+def _character_card(project_root: Path | None, speaker: str) -> str:
+    """Resolve the saved card without extracting, rewriting, or truncating its contents."""
     if project_root is None:
-        return ""
+        raise ValueError(f"actor {speaker} requires a project character card")
     characters = (project_root / "characters").resolve()
-    path = (characters / f"{speaker}.yaml").resolve()
-    if not path.is_relative_to(characters) or not path.is_file():
-        return ""
-    try:
-        character = YAML(typ="safe").load(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError, YAMLError):
-        return ""
-    if not isinstance(character, dict):
-        return ""
-    memory = {key: character[key] for key in (
-        "role", "identity", "background_story", "bdi", "psychology", "relationships",
-    ) if key in character}
-    return json.dumps(memory, ensure_ascii=False, separators=(",", ":"))[:6_000]
+    identifier = speaker.rsplit("/", 1)[-1].removeprefix("character:")
+    matches = []
+    for path in sorted([*characters.glob("*.yaml"), *characters.glob("*.yml")]):
+        if not path.resolve().is_relative_to(characters):
+            continue
+        with path.open(encoding="utf-8", newline="") as source:
+            text = source.read()
+        try:
+            card = YAML(typ="safe").load(text)
+        except (ValueError, YAMLError):
+            if path.stem == identifier:
+                raise ValueError(f"actor {speaker} has an invalid character card") from None
+            continue
+        if not isinstance(card, dict):
+            continue
+        aliases = card.get("aliases") if isinstance(card.get("aliases"), list) else []
+        names = {path.stem, str(card.get("name") or ""), str(card.get("character_id") or ""), *map(str, aliases)}
+        if speaker in names or identifier in names:
+            matches.append(text)
+    if len(matches) != 1:
+        raise ValueError(f"actor {speaker} requires exactly one matching character card; found {len(matches)}")
+    return matches[0]
 
 
 __all__ = ["new_scene_session", "load_scene_session", "save_scene_session", "continue_scene_actor"]

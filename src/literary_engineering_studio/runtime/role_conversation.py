@@ -7,11 +7,15 @@ from pathlib import Path
 import json
 import threading
 import time
+from uuid import uuid4
+from datetime import datetime, timezone
 from typing import Any, Callable, Sequence
 
 from literary_engineering_studio_engine.public.prompting import prompt_layer_spec
 from ..runtimes import build_runtime
 from .runtime_selection import runtime_for_role
+from .call_purpose import purpose_from_envelope, purpose_thinking
+from .usage_accounting import public_price_estimate
 
 
 _INITIALIZED_ROLES = frozenset({
@@ -135,13 +139,29 @@ class RoleConversationGateway:
         settings, model = _role_settings(self.config, role)
         run_root, prompt_path = _prepare_run(self.data_root, role, prompt)
         pieces: list[str] = []
+        purpose = purpose_from_envelope(prompt, role)
+        thinking = purpose_thinking(purpose, role, settings)
+        binding = {'invocation_id': str(uuid4()), 'call_purpose': purpose.value,
+                   'role': role, 'model': model, 'created_at': datetime.now(timezone.utc).isoformat()}
+        request_started = {}
 
         def observe(event: str, data: dict[str, Any]) -> None:
+            if event in {'usage.updated', 'runner.provider.request.started',
+                         'runner.http.attempt.started', 'runner.http.attempt.completed', 'runner.http.attempt.failed'}:
+                data = {**binding, **data}
+                if event == 'runner.http.attempt.started':
+                    request_started[data.get('model_request_id')] = data.get('http_started_at')
+                if event == 'usage.updated':
+                    at = request_started.get(data.get('model_request_id')) or datetime.now(timezone.utc).isoformat()
+                    data['price_estimate'] = public_price_estimate(data, at)
+                    data['price_time_source'] = 'observed-http-start' if request_started.get(data.get('model_request_id')) else 'usage-observed'
             if event == "agent.message.delta":
                 pieces.append(str(data.get("text") or ""))
             if event_sink is not None:
                 event_sink(event, data)
 
+        if event_sink:
+            event_sink('role.invocation.started', {**binding, 'requested_thinking': thinking})
         result = build_runtime("pi-worker", self.config, role=role).execute(
             workspace,
             prompt_path,
@@ -151,7 +171,7 @@ class RoleConversationGateway:
             cancel_event=cancel_event,
             worker_mode="conversation",
             conversation_role=_conversation_role(role, scene_creator),
-            reasoning_policy=str(settings.get("thinking") or "medium"),
+            reasoning_policy=thinking,
             max_turns=turns,
             max_tool_calls=(64 if json.loads(prompt)["schema"] == "arcvellum/scene-creator/v2"
                             else 8) if scene_creator else 1,
@@ -201,7 +221,8 @@ def _role_settings(config: dict[str, Any], role: str) -> tuple[dict[str, Any], s
     settings = config.get("agent_runners", {}).get("pi-worker", {})
     settings = settings if isinstance(settings, dict) else {}
     models = settings.get("models") if isinstance(settings.get("models"), dict) else {}
-    model = str(models.get(role) or settings.get("model") or "").strip()
+    inherited = models.get("reviewer") if role == "transport" else None
+    model = str(models.get(role) or inherited or settings.get("model") or "").strip()
     if "/" not in model:
         raise RuntimeError(f"select a Pi Worker provider/model before using the {role} role")
     return settings, model

@@ -9,12 +9,13 @@ from typing import Any, Callable
 from literary_engineering_studio_engine.public.prompting import prompt_layer_spec, render_prompt_template, render_prompt_text
 
 from .delegated_goal import goal_snapshot
+from ..application.creative_configuration import effective_creative_config
 
 
 def creator_persona_guidance(
     config: dict[str, Any], resolver: Callable[[str, Path | None], str] | None, root: Path,
 ) -> str:
-    application = config.get("application")
+    application = effective_creative_config(config, root).get("application")
     settings = application.get("scene_creator_v2") if isinstance(application, dict) else None
     if not isinstance(settings, dict) or settings.get("enabled") is not True or not (root / "project.yaml").is_file():
         return ""
@@ -38,7 +39,7 @@ def project_prompt_id(layer_id: str, natural: bool) -> str:
 def project_prompt_options(config: dict[str, Any], resolver, root: Path) -> dict[str, Any]:
     scope = root if (root / "project.yaml").is_file() else None
     reader = (lambda layer_id: resolver(layer_id, scope)) if resolver else None
-    return {"natural": natural_prompts_enabled(config), "prompt_reader": reader}
+    return {"natural": natural_prompts_enabled(effective_creative_config(config, root)), "prompt_reader": reader}
 
 
 def _render_project(layer_id: str, values: tuple[object, ...], natural: bool, prompt_reader=None) -> str:

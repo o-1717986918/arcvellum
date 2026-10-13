@@ -1,7 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { actorHistoryMessages, actorTurnEnvelope, conversationMessages, conversationOutcome, conversationSystemPrompt, roleTurnEnvelope, sceneCreatorEnvelope } from "../src/conversation.ts";
+import { actorHistoryMessages, actorTurnEnvelope, conversationMessages, conversationOutcome, conversationStopError, conversationSystemPrompt, roleTurnEnvelope, sceneCreatorEnvelope } from "../src/conversation.ts";
 
 describe("bounded scene performance profiles", () => {
+	it("does not accept an earlier tool explanation when the final answer exhausts its output budget", () => {
+		const messages = [
+			{ role: "assistant", content: [{ type: "text", text: "读完材料后动笔。" }], stopReason: "toolUse" },
+			{ role: "toolResult", content: [{ type: "text", text: "只读档案" }] },
+			{ role: "assistant", content: [{ type: "thinking", thinking: "未完成" }], stopReason: "length" },
+		];
+		expect(conversationOutcome("读完材料后动笔。", conversationStopError(messages)).status).toBe("blocked");
+		expect(conversationStopError(messages)).toContain("output limit");
+	});
+	it("keeps completed final text successful and unfinished tool turns blocked", () => {
+		expect(conversationStopError([{ role: "assistant", stopReason: "stop" }])).toBeUndefined();
+		expect(conversationStopError([{ role: "assistant", stopReason: "toolUse" }])).toContain("tool turn");
+		expect(conversationStopError([{ role: "assistant", stopReason: "error", errorMessage: "actual provider error" }]))
+			.toBe("actual provider error");
+	});
 	it("keeps partial provider output blocked with its actual failure", () => {
 		expect(conversationOutcome("刚写到这里", "terminated")).toEqual({
 			status: "blocked", message: "terminated", validationPassed: false,
@@ -63,8 +78,9 @@ describe("bounded scene performance profiles", () => {
 		expect(() => sceneCreatorEnvelope("本场任务")).toThrow("conversation envelope");
 	});
 
-	it("retains the legacy conversation identity for other roles", () => {
-		expect(conversationSystemPrompt("default")).toContain("ArcVellum role worker");
+	it("uses the supplied creative role without defensive wrapper directions", () => {
+		expect(conversationSystemPrompt("default")).toContain("requested role, voice and form");
+        expect(conversationSystemPrompt("default")).not.toContain("no tools");
 		const envelope = JSON.stringify({ schema: "arcvellum/default-conversation/v1",
 			system_prompt: conversationSystemPrompt("default"), prompt: "本轮任务" });
 		expect(conversationMessages("default", envelope)).toEqual(["本轮任务"]);

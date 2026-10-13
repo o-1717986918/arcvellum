@@ -16,6 +16,8 @@ test("rehearsal window shows history and appends one completed live actor turn",
   await mockRehearsals(page);
   await page.goto("#/agent?workspace=rehearsal", { waitUntil: "domcontentloaded" });
   await expect(page.locator(".pa-rehearsal-window")).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator(".startup-scene")).toHaveCount(0);
+  await page.getByRole("tab", { name: "角色对戏" }).click();
   await expect(page.locator(".scene-rehearsal-chat")).toContainText("你真要把信给他？");
   await expect(page.getByRole("button", { name: /scene_0001/ })).toBeVisible();
   await page.getByRole("button", { name: /scene_0001/ }).click();
@@ -41,17 +43,23 @@ test("rehearsal stays usable in a narrow floating window", async ({ page }, test
   await mockRehearsals(page);
   await page.goto("#/agent?workspace=rehearsal", { waitUntil: "domcontentloaded" });
   await expect(page.locator(".pa-rehearsal-window")).toBeVisible({ timeout: 30_000 });
+  await page.getByRole("tab", { name: "角色对戏" }).click();
   await page.setViewportSize({ width: 390, height: 844 });
   const enter = page.getByRole("button", { name: "进入创作台" });
   if (await enter.isVisible()) await enter.click();
   await expect(enter).toBeHidden();
+  await expect(page.locator(".startup-scene")).toHaveCount(0);
   await expect(page.locator(".scene-rehearsal-chat")).toBeVisible();
   await expect(page.locator(".scene-rehearsal-chat")).toContainText("你真要把信给他？");
   const stage = page.locator(".scene-rehearsal");
   const width = await stage.evaluate((node) => ({ scroll: node.scrollWidth, client: node.clientWidth }));
   expect(width.scroll).toBeLessThanOrEqual(width.client + 1);
-  const listBox = await page.locator(".scene-rehearsal-list").boundingBox();
-  const stageBox = await page.locator(".scene-rehearsal-stage").boundingBox();
+  const [listBox, stageBox] = await page.evaluate(() =>
+    [".scene-rehearsal-list", ".scene-rehearsal-stage"].map((selector) => {
+      const rect = document.querySelector(selector)?.getBoundingClientRect();
+      return rect ? { y: rect.y, height: rect.height } : null;
+    }),
+  );
   expect(listBox && stageBox).toBeTruthy();
   expect(listBox!.y + listBox!.height).toBeLessThanOrEqual(stageBox!.y + 2);
   await page.screenshot({ path: testInfo.outputPath("rehearsal-mobile.png"), fullPage: true });

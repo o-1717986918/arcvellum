@@ -121,9 +121,8 @@ class ProjectAgentToolDispatcher:
         self.dependencies = dependencies
         self.actions = actions
         self.enabled = frozenset(enabled)
-        # Kept in the constructor for source compatibility with D5-A callers.
-        # Project Agent sessions now authorize allowlisted actions directly.
-        del user_message
+        # Preserve trusted human wording for author-intent provenance.
+        self._user_message = user_message
         self._mutation_results: dict[str, Any] = {}
 
     def __call__(self, call: ProjectAgentToolCall):
@@ -183,7 +182,14 @@ class ProjectAgentToolDispatcher:
         )
         if key not in self._mutation_results:
             root = self.project_root if call.name == "project_create" else self._target_root(call)
-            self._mutation_results[key] = handler(root, call.arguments)
+            arguments = dict(call.arguments)
+            if call.name == "project_record_direction":
+                quote = str(arguments.get("author_quote") or "").strip()
+                if arguments.get("source_kind") == "author_intent":
+                    if not quote or quote not in self._user_message:
+                        raise ValueError("author direction needs a quote from the current human message")
+                    arguments["verified_author_quote"] = quote
+            self._mutation_results[key] = handler(root, arguments)
         return self._mutation_results[key]
 
     def _target_root(self, call: ProjectAgentToolCall) -> Path:

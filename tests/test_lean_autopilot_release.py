@@ -80,7 +80,7 @@ class LeanAutopilotReleaseTests(unittest.TestCase):
             service._lean_scene_coordinator = lambda _run_id, _project: coordinator
             service._worker = MagicMock(side_effect=AssertionError("strict worker called"))
             with patch(
-                "literary_engineering_studio.automation.lean_route_host.LeanLongformPlanningService",
+                "literary_engineering_studio.automation.lean_route_host.build_lean_planning_service",
                 return_value=planning,
             ), patch(
                 "literary_engineering_studio.automation.lean_route_host.enrich_lean_planning_assets",

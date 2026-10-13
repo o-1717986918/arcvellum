@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 
 from literary_engineering_studio_engine import orchestration as internal_orchestration
+from literary_engineering_studio_engine.literary.planning.materialization_scaffold import is_blank_scene_scaffold
 from literary_engineering_studio_engine.foundation import atomic_io, display_cleaner
 from literary_engineering_studio_engine.projects import init as internal_projects
 from literary_engineering_studio_engine.prompting.agents import schema as internal_schema
@@ -107,6 +108,7 @@ EXPECTED_SYMBOLS = {
         "render_prompt_text",
         "scene_prompt_fallback",
         "resolve_prompt_layer",
+        "prompt_layer_scope",
         "validate_payload",
     ),
     "projections": (
@@ -169,6 +171,7 @@ class EnginePublicApiTests(unittest.TestCase):
         self.assertIs(prompting.validate_payload, internal_schema.validate_payload)
         self.assertIs(projections.display_counts, display_cleaner.display_counts)
         self.assertIs(orchestration.PlanNodeKind, internal_orchestration.PlanNodeKind)
+        self.assertIs(literary.is_blank_scene_scaffold, is_blank_scene_scaffold)
 
 
 if __name__ == "__main__":

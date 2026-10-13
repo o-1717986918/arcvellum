@@ -3,6 +3,21 @@ import type { ReasoningBudget, ReasoningBudgetReceipt, ThinkingLevel, WorkerStat
 
 const LEVELS: ThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
 
+/** DeepSeek's current V4 API supports low even when the bundled catalog omits it.
+ * https://api-docs.deepseek.com/zh-cn/guides/thinking_mode/ (verified 2026-10-11)
+ * Clone the model so both our selector and Pi's SDK clamp see the same capability.
+ */
+export function withDeepSeekV4ThinkingSupport<T extends Model<any>>(model: T): T {
+	const compat = model.compat;
+	if (model.provider !== "deepseek" || !model.reasoning
+		|| !["deepseek-flash", "deepseek-v4-flash", "deepseek-v4-pro"].includes(model.id)
+		|| !compat || !("thinkingFormat" in compat) || compat.thinkingFormat !== "deepseek") return model;
+	return {
+		...model,
+		thinkingLevelMap: { ...model.thinkingLevelMap, minimal: "low", low: "low" },
+	};
+}
+
 export function validateReasoningBudget(budget: ReasoningBudget): void {
 	if (!budget.enabled) return;
 	if (levelIndex(budget.initialLevel) > levelIndex(budget.maximumLevel)) {

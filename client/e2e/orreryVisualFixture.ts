@@ -48,7 +48,7 @@ export async function prepareVisualProjects(request: APIRequestContext): Promise
         throw new Error(`failed to materialize ${sceneCount}-scene visual fixture: ${result.stderr || result.stdout}`);
       }
     }
-    const response = await request.post("http://127.0.0.1:8791/projects/open", {
+    const response = await request.post(`http://127.0.0.1:${process.env.ARCVELLUM_VISUAL_API_PORT || 8791}/projects/open`, {
       data: { project_root: projectRoot },
     });
     if (!response.ok()) {

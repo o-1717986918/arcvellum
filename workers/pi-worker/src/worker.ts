@@ -1,8 +1,9 @@
 import { Agent } from "@earendil-works/pi-agent-core";
-import { builtinModels } from "@earendil-works/pi-ai/providers/all";
+import { configuredModels } from "./configured-models.ts";
 import type { RuntimeEventSink, WorkerOptions, WorkerState } from "./contracts.ts";
 import { ReadOnlyJsonCredentialStore } from "./credential-store.ts";
 import { WorkerEventAdapter } from "./event-adapter.ts";
+import { observeSdkFetch } from "./request-observation.ts";
 import { ArtifactPreviewExtractor } from "./artifact-preview.ts";
 import {
 	providerBudgetSupport,
@@ -10,6 +11,7 @@ import {
 	reasoningStopReason,
 	reasoningThinkingBudgets,
 	safeThinkingLevel,
+	withDeepSeekV4ThinkingSupport,
 } from "./reasoning-budget.ts";
 import { loadTaskContext } from "./task-context.ts";
 import { createWorkerTools, progressDigest, validateSubmittedOutputs } from "./tools.ts";
@@ -71,9 +73,10 @@ export async function runWorker(options: WorkerOptions, prompt: string, emit: Ru
 	);
 	const [provider, modelId] = parseModelId(options.model);
 	const credentials = new ReadOnlyJsonCredentialStore(options.authPath);
-	const models = builtinModels({ credentials });
-	const model = models.getModel(provider, modelId);
-	if (!model) throw new Error(`Pi AI model is not available: ${options.model}`);
+	const models = await configuredModels(credentials, options.authPath);
+	const catalogModel = models.getModel(provider, modelId);
+	if (!catalogModel) throw new Error(`Pi AI model is not available: ${options.model}`);
+	const model = withDeepSeekV4ThinkingSupport(catalogModel);
 	const auth = await models.getAuth(model);
 	if (!auth) throw new Error(`Pi AI provider is not authenticated: ${provider}`);
 
@@ -146,7 +149,9 @@ export async function runWorker(options: WorkerOptions, prompt: string, emit: Ru
 		streamFn: (streamModel, streamContext, streamOptions = {}) => models.streamSimple(
 			streamModel,
 			streamContext,
-			{ ...streamOptions, ...streamControls },
+			{ ...streamOptions, ...streamControls, fetch: observeSdkFetch(emit,
+				() => ({ session_id: sessionId, model_request_id: eventAdapter.currentModelRequestId,
+					provider, model: modelId }), streamOptions.fetch) },
 		),
 		sessionId: identities.promptCacheKey,
 		toolExecution: "sequential",

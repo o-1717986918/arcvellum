@@ -142,7 +142,8 @@ def _runtime_settings(
     settings = dict(value) if isinstance(value, dict) else {}
     models = settings.get("models")
     if role and isinstance(models, dict):
-        role_model = str(models.get(role) or "").strip()
+        inherited = models.get("reviewer") if role == "transport" else None
+        role_model = str(models.get(role) or inherited or "").strip()
         if role_model:
             settings["model"] = role_model
     return settings

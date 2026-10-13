@@ -16,6 +16,7 @@ from .review_artifacts import apply_review_identities, project_review_artifacts
 from .transcript_projection import reduce_sessions
 from .scene_transactions import active_scene_transaction
 from .style_provenance import latest_style_provenance
+from ...runtime.usage_accounting import summarize_usage_events
 
 
 SNAPSHOT_SCHEMA = "arcvellum/creative-live-snapshot/v1"
@@ -80,6 +81,7 @@ def build_creative_live_snapshot(
         "activity": _activity(visible),
         "reviews": review_events(visible),
         "usage": _usage(visible),
+        "usage_accounting": summarize_usage_events(visible),
         "active_scene_transaction": active_scene_transaction(transaction_projection),
         "scene_transactions": transaction_projection,
         "style_provenance": style_provenance,
@@ -217,18 +219,8 @@ def _activity(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _usage(events: list[dict[str, Any]]) -> dict[str, Any]:
-    total_tokens = 0
-    cost = 0.0
-    requests = 0
-    for item in events:
-        if item.get("channel") != "usage":
-            continue
-        data = item.get("data") if isinstance(item.get("data"), dict) else {}
-        usage = data.get("usage") if isinstance(data.get("usage"), dict) else {}
-        total_tokens += _safe_non_negative_int(usage.get("total_tokens"))
-        cost += _safe_non_negative_float(data.get("cost_usd"))
-        requests += 1
-    return {"total_tokens": total_tokens, "cost_usd": round(cost, 8), "updates": requests}
+    result = summarize_usage_events(events)
+    return {key: result[key] for key in ('total_tokens', 'cost_usd', 'updates')}
 
 
 def _safe_non_negative_int(value: Any) -> int:

@@ -2,7 +2,7 @@
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
-from ...application.style.stylometry_contracts import CorpusTextSource
+from ...application.style.stylometry_contracts import CorpusTextSource, StylePresetV1, StylePresetCollectionV1
 from ...application.style.stylometry_service import StylometryService
 from ..common import call_handler, project_root as resolve_root
 
@@ -67,11 +67,61 @@ class StylometryMeasureRequest(BaseModel):
     candidate_json: str = Field(default="", max_length=16_000_000)
 
 
+class StylePresetRequest(BaseModel):
+    preset_id: str
+    title: str
+    literary_intent: str = ""
+    narrative_modes: list[str] = Field(default_factory=list, max_length=32)
+    reference_ids: list[str] = Field(default_factory=list, max_length=32)
+    stylometry_version_id: str
+    active: bool = True
+    combine: str = "append"
+    usage: str = "guide"
+
+
+class StylePresetsRequest(BaseModel):
+    project_root: str
+    expected_revision: int = Field(ge=0)
+    enabled: bool = True
+    default_preset_id: str
+    presets: list[StylePresetRequest] = Field(max_length=32)
+
+
+class InitialPresetsRequest(BaseModel):
+    project_root: str
+
+
+class PresetRecalculationRequest(BaseModel):
+    project_root: str
+    expected_revision: int = Field(ge=0)
+
+
 def build_stylometry_router(service: StylometryService):
     router = APIRouter(prefix="/stylometry", tags=["stylometry"])
 
+    @router.post("/presets/initialize")
+    def initialize_presets(payload: InitialPresetsRequest):
+        from ...application.style.initial_presets import initialize_style_presets
+        return call_handler(lambda: {"ok": True, **initialize_style_presets(service, resolve_root(payload.project_root))})
+
     def invoke(method, payload, **extra):
         return call_handler(lambda: {"ok": True, **method(resolve_root(payload.project_root), **extra)})
+
+    @router.get("/presets")
+    def presets(project_root: str):
+        return call_handler(lambda: {"ok": True, **service.preset_catalog(resolve_root(project_root))})
+
+    @router.put("/presets")
+    def save_presets(payload: StylePresetsRequest):
+        rows = tuple(StylePresetV1(**{**item.model_dump(), "narrative_modes": tuple(item.narrative_modes),
+                                    "reference_ids": tuple(item.reference_ids)}) for item in payload.presets)
+        collection = StylePresetCollectionV1(0, payload.enabled, payload.default_preset_id, rows)
+        return invoke(service.save_presets, payload, collection=collection, expected_revision=payload.expected_revision)
+
+    @router.post("/presets/{preset_id}/recalculate")
+    def recalculate_preset(preset_id: str, payload: PresetRecalculationRequest):
+        return call_handler(lambda: {"ok": True, **service.recalculate_preset(
+            resolve_root(payload.project_root), preset_id, payload.expected_revision)})
 
     @router.get("/workbench")
     def workbench(project_root: str):

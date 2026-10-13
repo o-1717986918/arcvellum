@@ -4,6 +4,7 @@ from pathlib import Path
 import re
 from tempfile import TemporaryDirectory
 import unittest
+from tests.material_need_fixtures import with_need
 from literary_engineering_studio.application.creator_persona import CreatorPersonaStore
 from literary_engineering_studio.runtime.role_conversation import RoleConversationResult, _conversation_prompt
 from literary_engineering_studio.runtimes.pi_scene_transaction import PiSceneTransactionRuntime
@@ -22,6 +23,7 @@ PROSE = "阿青把空信封压在碗底。最后一滴水落下来时，她才�
 REQUEST = {"kind": "environment", "target": "", "purpose": "延续等待", "scene_moment": "打开信封前",
     "cue": "雨将停", "author_prompt": "请沿湿木与水滴写出这个房间的等待。",
     "style_direction": "让句子随水滴的间隔呼吸，保留旧物的质地。", "archive_attachments": []}
+REQUEST = with_need(REQUEST)
 
 class NaturalGateway:
     def __init__(self):
@@ -35,6 +37,7 @@ class NaturalGateway:
             self.creator_calls += 1
             if self.creator_calls == 1:
                 answer = "本场先用 environment 取材，借水声延续等待。" + REQUEST["author_prompt"] + "\n文风：" + REQUEST["style_direction"]
+                answer += "\n需求依据：" + json.dumps(REQUEST["need_evidence"], ensure_ascii=False)
             else:
                 self.context = json.loads(envelope["prompt"].split("本次创作资料：\n", 1)[1])
                 identifier = re.search(r"v2:[a-f0-9]+:1", self.context["material_index"])[0]
@@ -66,6 +69,77 @@ class NaturalGateway:
         return RoleConversationResult("pi-worker", "test", "test/model", MATERIAL)
 
 class NaturalSceneTests(unittest.TestCase):
+    def test_final_selection_is_corrected_without_rewriting_body(self):
+        class Gateway(NaturalGateway):
+            def run(self, root, prompt, **kwargs):
+                envelope = json.loads(prompt)
+                if envelope["schema"] == "arcvellum/scene-creator/v2" and "已提供的候选 ID" in envelope["prompt"]:
+                    self.creator_calls += 1
+                    self.repair_prompt = envelope["prompt"]
+                    identifier = re.search(r"v2:[a-f0-9]+:1", self.context["material_index"])[0]
+                    answer = "取舍补充：改写 " + identifier + "，让水滴成为回应的时点。"
+                    return RoleConversationResult("pi-worker", "repair", "test/model", answer)
+                if "task_contract" in envelope["prompt"]:
+                    task = json.loads(envelope["prompt"])
+                    source = task["source_text"]
+                    if task["operation"] == "creator" and ("v2:invented:1" in source or source.startswith("取舍补充")):
+                        self.extract_calls += 1
+                        identifier = "v2:invented:1" if "v2:invented:1" in source else re.search(r"v2:[a-f0-9]+:1", source)[0]
+                        payload = {"material_decisions": [{"candidate_id": identifier, "decision": "adapt", "reason": "成为回应的时点"}]}
+                        if source.startswith(PROSE):
+                            payload.update(prose=PROSE, decision_summary="让水滴成为回应的时点",
+                                scene_delta={"next_handoff": ["信的去向仍待揭晓"]})
+                        return RoleConversationResult("pi-worker", "extract", "test/model", json.dumps(payload, ensure_ascii=False))
+                result = super().run(root, prompt, **kwargs)
+                if envelope["schema"] == "arcvellum/scene-creator/v2" and self.creator_calls == 2:
+                    return RoleConversationResult("pi-worker", "draft", "test/model",
+                        PROSE + "\n创作札记：改写 v2:invented:1，让水滴成为回应的时点。")
+                return result
+
+        with TemporaryDirectory() as tmp:
+            root, data = Path(tmp) / "work", Path(tmp) / "data"
+            root.mkdir()
+            (root / "project.yaml").write_text("title: 雨信\n", encoding="utf-8")
+            CreatorPersonaStore(data).save(root, "沿人物与物件组织故事，保留等待中的声音，让迟疑从具体的日常动作里逐渐显形。", reason="初始作者意图")
+            brief = SceneBrief("s1", "寻找信", "让等待可感", ("阿青",), (), (), (),
+                RhythmDirective(), LengthTarget(), StyleMountRef(), SceneRisk(SceneRiskLevel.LOW), ())
+            gateway = Gateway()
+            runtime = PiSceneTransactionRuntime({"application": {"scene_creator_v2": {"enabled": True}}},
+                project_root=root, data_root=data, gateway=gateway)
+            result = runtime.create_scene("tx-selection", brief)
+            self.assertEqual(result.prose, PROSE)
+            self.assertEqual(result.scene_delta.next_handoff, ("信的去向仍待揭晓",))
+            self.assertEqual((gateway.creator_calls, gateway.material_calls, gateway.extract_calls), (3, 1, 3))
+            self.assertIn("请以自然语言补交取舍记录", gateway.repair_prompt)
+            runtime.create_scene("tx-selection", brief)
+            self.assertEqual(gateway.creator_calls, 3)
+
+    def test_extractor_corrects_an_id_it_invented_from_the_original_note(self):
+        source = PROSE + "\n札记：改写 v2:0123456789abcdefabcd:1，保留水声。"
+        calls = []
+        def extract(_system, prompt):
+            calls.append(prompt)
+            identifier = "invented" if len(calls) == 1 else "v2:0123456789abcdefabcd:1"
+            return json.dumps({"prose": PROSE, "material_decisions": [
+                {"candidate_id": identifier, "decision": "adapt", "reason": "保留水声"}]}, ensure_ascii=False)
+        with TemporaryDirectory() as tmp:
+            result = NaturalOutputProcessor(Path(tmp), "整理原文", extract).process(source, kind="creator", context={})
+        self.assertEqual(result["prose"], PROSE)
+        self.assertEqual(len(calls), 2)
+        self.assertIn("extraction changed selected material candidate ID", calls[1])
+
+    def test_empty_optional_invitation_context_and_json_encoded_spans_are_preserved(self):
+        source = json.dumps({'invitation': '请写雨落在\n窗沿的声音。'}, ensure_ascii=False)
+        request = {**REQUEST, 'author_prompt': '请写雨落在\n窗沿的声音。', 'working_context': '', 'style_direction': ''}
+        def extract(_system, _prompt):
+            return json.dumps({'material_requests': [request]}, ensure_ascii=False)
+        with TemporaryDirectory() as tmp:
+            result = NaturalOutputProcessor(Path(tmp), '整理原文', extract).process(source, kind='creator', context={})
+        self.assertEqual(result['material_requests'][0]['working_context'], '')
+        span = result['source_provenance']['requests'][0]['spans']['author_prompt']
+        self.assertEqual(span['encoding'], 'json-string')
+        self.assertEqual(source[span['start']:span['end']], json.dumps(request['author_prompt'], ensure_ascii=False)[1:-1])
+
     def test_creator_material_final_roundtrip_and_cache(self):
         with TemporaryDirectory() as tmp:
             root, data = Path(tmp) / "work", Path(tmp) / "data"
@@ -126,12 +200,15 @@ class NaturalSceneTests(unittest.TestCase):
                     self.creator_calls += 1
                     if self.creator_calls == 1:
                         answer = "本场先请环境创作者观察水线与碗沿。\n" + environment_invitation
+                        answer += "\n" + json.dumps(with_need({})["need_evidence"], ensure_ascii=False)
                     elif self.creator_calls == 2:
                         context = json.loads(envelope["prompt"].split("本次创作资料：\n", 1)[1])
                         self.selected_id = re.search(r"v2:[a-f0-9]+:1", context["material_index"])[0]
                         answer = ("现在请场面创作者安排水线、碗与人物的手。\n" + scene_invitation
                                   + "\n主创札记：" + working_context
                                   + "\n前序候选：" + self.selected_id)
+                        answer += "\n" + json.dumps(with_need({"material_attachments": [{}]},
+                            reviewed=[self.selected_id], excerpts={self.selected_id: environment_text})["need_evidence"], ensure_ascii=False)
                     else:
                         answer = prose + "\n\n创作札记：改写了前序候选 " + self.selected_id + "，保留水线与手之间的迟疑。"
                     return RoleConversationResult("pi-worker", "test", "test/model", answer)
@@ -143,14 +220,15 @@ class NaturalSceneTests(unittest.TestCase):
                         "material_requests": [{"kind": "environment", "target": "",
                             "purpose": "让等待有可听见的节奏", "scene_moment": "水滴将落未落时",
                             "cue": "水沿窗框流向碗沿", "author_prompt": environment_invitation,
-                            "archive_attachments": []}]}
+                            "archive_attachments": [], "need_evidence": with_need({})["need_evidence"]}]}
                 elif task["operation"] == "creator" and scene_invitation in source:
                     payload = {"material_requests": [{"kind": "scene-description", "target": "碗边",
                         "purpose": "让手与水线的距离显出犹豫", "scene_moment": "水线停在碗沿时",
                         "cue": "人物的手悬在碗口上方", "author_prompt": scene_invitation,
                         "working_context": working_context,
                         "material_attachments": [{"candidate_id": self.selected_id}],
-                        "archive_attachments": []}]}
+                        "archive_attachments": [], "need_evidence": with_need({"material_attachments": [{}]},
+                            reviewed=[self.selected_id], excerpts={self.selected_id: environment_text})["need_evidence"]}]}
                 else:
                     payload = {"prose": prose, "decision_summary": "让一息迟疑接起水声与动作",
                         "material_decisions": [{"candidate_id": self.selected_id, "decision": "adapt",

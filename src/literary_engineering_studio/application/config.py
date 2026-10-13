@@ -20,7 +20,7 @@ from .pi_thinking import (
 CONFIG_SCHEMA = "literary-engineering-studio/config/v0.9"
 DEFAULT_PI_MODEL = "deepseek/deepseek-v4-flash"
 _PI_MODEL_ROLES = (
-    "worker", "reviewer", "planner", "advisor", "steward", "style", "archaeology",
+    "worker", "reviewer", "planner", "advisor", "steward", "style", "archaeology", "transport",
     "character-actor", "environment-writer", "character-describer", "event-narrator", "scene-describer",
 )
 
@@ -177,6 +177,7 @@ def default_config() -> dict[str, Any]:
             "lease_seconds": 90,
             "scene_performance_agents": {"enabled": True, "max_actor_calls": 12},
             "less_ai_tone_experiment": {"enabled": False},
+            "creation_integrity": {"enabled": True},
         },
         "worker": _default_worker_config(),
         "orchestration": _default_orchestration_config(),
@@ -208,7 +209,7 @@ def default_config() -> dict[str, Any]:
                 "executable": "",
                 "entrypoint": "",
                 "model": DEFAULT_PI_MODEL,
-                "models": {role: DEFAULT_PI_MODEL for role in _PI_MODEL_ROLES},
+                "models": {role: ("" if role == "transport" else DEFAULT_PI_MODEL) for role in _PI_MODEL_ROLES},
                 "auth_path": "",
                 "thinking": "medium", "project_agent_thinking": "xhigh",
                 "thinking_preferences_version": 1,

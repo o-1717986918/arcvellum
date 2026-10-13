@@ -9,6 +9,7 @@ import CreativeRevisionView from "./CreativeRevisionView.vue";
 import LiveManuscript from "./LiveManuscript.vue";
 import ReviewRail from "./ReviewRail.vue";
 import SceneTransactionPulse from "./SceneTransactionPulse.vue";
+import UsageEvidence from "./UsageEvidence.vue";
 import { artifactKindLabel, artifactStatusLabel, artifactTitle } from "../artifactPresentation";
 import { activityTitle } from "../creativePresentation";
 
@@ -115,7 +116,7 @@ function showMain(mode: "process" | "manuscript" | "revision"): void {
 
     <footer class="creative-live-footer">
       <span><i></i>{{ latestActivity ? activityTitle(latestActivity) : '等待创作信号' }}</span>
-      <span>{{ Number(live.snapshot?.usage.total_tokens || 0).toLocaleString('zh-CN') }} Token · ${{ Number(live.snapshot?.usage.cost_usd || 0).toFixed(4) }}</span>
+      <UsageEvidence :accounting="live.snapshot?.usage_accounting" :tokens="live.snapshot?.usage.total_tokens || 0" :catalog="live.snapshot?.usage.cost_usd || 0" />
     </footer>
   </section>
 </template>

@@ -37,6 +37,7 @@ def fulfill_scene_material_requests(
     creative_intent: str = "",
     prompt_layers: dict[str, str] | None = None,
     request_batch_id: str = "",
+    direct_environment_identity: bool = False,
 ) -> str:
     """Return refreshed first-level candidates after the main creator asks for them."""
 
@@ -46,14 +47,16 @@ def fulfill_scene_material_requests(
     digest = _digest(brief, expression, sources, style_reference, config)
     layers = prompt_layers or {}
     plan = _plan_for_requests(brief, expression, sources, payload, cache_root, digest,
-                              invoke, creative_intent, layers)
+                              invoke, creative_intent, layers, direct_environment_identity)
     if layers.get("scene.environment.identity") and "environment_initialization" in plan:
-        plan = {**plan, "environment_initialization": plan["environment_initialization"] + "\n\n" + layers["scene.environment.identity"]}
+        identity = layers["scene.environment.identity"]
+        initialization = _environment_identity(plan["environment_initialization"], identity, direct_environment_identity)
+        plan = {**plan, "environment_initialization": initialization}
     state = load_scene_session(cache_root, digest, brief["scene_id"])
     requests = parse_scene_material_requests(
         payload, brief, plan, actor_entries=state.get("actor_entries") if state else None,
     )
-    state = _session_for_requests(state, brief, expression, plan, layers)
+    state = _session_for_requests(state, brief, layers)
     for index, request in enumerate(requests):
         request_id = _request_id(request_batch_id, index)
         if request_id and request_id in state.get("fulfilled_requests", []):
@@ -106,6 +109,12 @@ def _continue_or_limit_actor_request(
         return
     if invoke_actor_turn is None:
         raise RuntimeError("actor continuation is unavailable")
+    speaker = request["speaker"]
+    if speaker not in state.get("initializations", {}):
+        initialized = new_scene_session({**brief, "participants": [speaker]}, None,
+                                        project_root=project_root, prompt_layers=state.get("prompt_layers"))
+        for key in ("initializations", "initialization_sources", "initialization_answers", "histories"):
+            state.setdefault(key, {}).update(initialized[key])
     continue_scene_actor(brief, plan, request, state, cache_root, digest, invoke_actor_turn, _cached_payload,
                          emit, project_root, request_id)
     _notify(emit, "scene.performance.request.actor", {"speaker": request["speaker"], "beat_id": request["beat_id"]})
@@ -130,7 +139,7 @@ def _continue_environment_request(
     if invoke_role_turn is not None:
         def produce() -> dict[str, Any]:
             answer, _ = invoke_role_turn("environment-writer", initialization, history, task)
-            return {"answer": answer, "payload": _answer_payload(answer)}
+            return {"answer": answer, "payload": _answer_payload(answer), "request": request}
 
         def validate(record: dict[str, Any]) -> dict[str, Any]:
             if not isinstance(record.get("answer"), str) or not isinstance(record.get("payload"), dict):
@@ -161,37 +170,31 @@ def _plan_for_requests(
     brief: dict[str, Any], expression: dict[str, Any], sources: str, payload: dict[str, Any],
     cache_root: Path, digest: str, invoke: Callable[[str, str], str],
     creative_intent: str, layers: dict[str, str],
+    direct_identity: bool = False,
 ) -> dict[str, Any]:
     path = cache_root / f"performance-plan-{digest}.json"
     requests = payload.get("material_requests")
     description_kinds = {"character-description", "event-narration", "scene-description"}
+    if direct_identity and not path.is_file():
+        return {"scene_id": brief["scene_id"], "beats": [{"beat_id": "b1", "event": brief.get("objective") or "本段取材"}],
+                "actor_tasks": {}, "unknown_slots": [],
+                "environment_initialization": layers.get("scene.environment.identity")
+                    or prompt_layer_spec("scene.environment.identity").default_text}
     if not path.is_file() and isinstance(requests, list) and requests and all(
         isinstance(item, dict) and item.get("kind") in description_kinds for item in requests
     ):
         return {"scene_id": brief["scene_id"], "beats": [{"beat_id": "b1", "event": brief.get("objective") or "本场观察"}],
-                "actor_prompts": {}, "unknown_slots": []}
+                "actor_tasks": {}, "unknown_slots": []}
     return _cached_payload(path, lambda: _generate_performance_plan(
         brief, expression, sources, invoke, creative_intent, layers.get("scene.performance.plan", "")),
                            lambda item: parse_performance_plan(item, brief))
 
 
 def _session_for_requests(
-    state: dict[str, Any] | None, brief: dict[str, Any], expression: dict[str, Any],
-    plan: dict[str, Any], layers: dict[str, str],
+    state: dict[str, Any] | None, brief: dict[str, Any], layers: dict[str, str],
 ) -> dict[str, Any]:
-    actors = plan.get("actor_prompts") or {}
-    if state is None:
-        if actors:
-            return new_scene_session(brief, expression, plan, None, prompt_layers=layers)
-        return {"scene_id": brief["scene_id"], "initializations": {}, "initialization_answers": {},
-                "histories": {}, "public_log": [], "actor_entries": [], "directions": [],
-                "environment": None, "prompt_layers": {"scene.actor.turn": layers.get("scene.actor.turn", "")}}
-    if actors:
-        initialized = new_scene_session(brief, expression, plan, None, prompt_layers=layers)
-        for key in ("initializations", "initialization_answers", "histories"):
-            for speaker, value in initialized[key].items():
-                state.setdefault(key, {}).setdefault(speaker, value)
-    return state
+    return state if state is not None else new_scene_session(
+        {**brief, "participants": []}, None, project_root=None, prompt_layers=layers)
 
 
 def _request_id(batch_id: str, index: int) -> str:
@@ -269,11 +272,14 @@ def _cached_payload(
             payload = json.loads(path.read_text(encoding="utf-8"))
             if isinstance(payload, dict):
                 return validate(payload)
-        except (OSError, json.JSONDecodeError, ValueError):
+        except (OSError, json.JSONDecodeError):
             pass
-    payload = produce()
+    received = path.with_name(path.stem + ".received.json")
+    payload = json.loads(received.read_text(encoding="utf-8")) if received.is_file() else produce()
     if not isinstance(payload, dict):
         raise ValueError("performance reply must be a JSON object")
+    if not received.is_file():
+        received.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
     normalized = validate(payload)
     temporary = path.with_suffix(".tmp")
     temporary.write_text(json.dumps(normalized, ensure_ascii=False), encoding="utf-8")
@@ -287,3 +293,7 @@ def _notify(emit: Callable[[str, dict[str, Any]], None] | None, event: str, data
 
 
 __all__ = ["fulfill_scene_material_requests", "scene_creative_cache_digest", "scene_expression_snapshot"]
+
+
+def _environment_identity(legacy: str, identity: str, direct: bool) -> str:
+    return identity if direct else legacy + "\n\n" + identity

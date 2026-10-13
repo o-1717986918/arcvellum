@@ -130,6 +130,16 @@ class ProjectAgentReadModelTests(unittest.TestCase):
         self.assertEqual(value["autopilot"]["status"], "running")
         self.assertEqual(value["recent_events"][0]["event"], "review.started")
 
+    def test_persona_tag_views_report_the_current_card_initialization_source(self):
+        dependencies = dependencies_from_read_models(_ReadModels(), actor_personas=lambda _root: {
+            "schema": "persona-tags", "default_language_style": ["POLISHED"],
+            "characters": [{"character_id": "lin-che", "sections": {"PERSONALITY_CORE": ["TRAIT_QUIET"]}}],
+        })
+        for arguments in ({}, {"character_id": "lin-che"}):
+            value = dependencies.actor_personas(_root(), arguments)
+            self.assertEqual(value["initialization_source"], "character_card")
+            self.assertEqual(value["usage"], "historical_persona_tags")
+
     def test_control_projection_selects_one_bounded_domain(self):
         dependencies = dependencies_from_read_models(
             _ReadModels(),

@@ -152,6 +152,7 @@ class LeanFutureReplanTests(unittest.TestCase):
                 hashlib.sha256((root / "project.yaml").read_bytes()).hexdigest(),
             )
             self.assertEqual(len(plan["scenes"]), 5)
+            self.assertEqual(sum(scene["target_chars"] for scene in plan["scenes"]), 12000)
             self.assertEqual(
                 [
                     (root / "scenes" / f"scene_{index:04d}.yaml").read_bytes()
@@ -162,7 +163,7 @@ class LeanFutureReplanTests(unittest.TestCase):
             self.assertIn("盟友公开站到林昭的对面", json.dumps(plan["event_budget"], ensure_ascii=False))
             self.assertTrue((root / result["history_path"] / "receipt.json").is_file())
             self.assertEqual(gateway.calls, 1)
-            self.assertTrue(all("均不得重演" in prompt for prompt in gateway.prompts))
+            self.assertTrue(all("已提交经历与阅读前缀" in prompt for prompt in gateway.prompts))
 
     def test_replans_entire_uncommitted_book_and_narrative_design(self):
         class PrecommitGateway(_Gateway):
@@ -199,6 +200,28 @@ class LeanFutureReplanTests(unittest.TestCase):
             self.assertEqual([scene["story_time"] for scene in plan["scenes"]], ["第3日", "第2日", "第1日"])
             self.assertEqual(budget["totals"]["scene_count"], 3)
             self.assertIn("story_time: \"第3日\"", (root / "scenes" / "scene_0001.yaml").read_text(encoding="utf-8"))
+
+    def test_creator_selects_counts_and_chapter_weights_preserving_prefix(self):
+        class WeightedGateway(_Gateway):
+            def run(self, workspace, prompt, **kwargs):
+                response = super().run(workspace, prompt, **kwargs)
+                answer = json.loads(response.answer)
+                for row, weight in zip(answer['chapters'], [1, 3, 1]):
+                    row['length_weight'] = weight
+                return type('Response', (), {'answer': json.dumps(answer, ensure_ascii=False)})()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            plan_path, budget_path = self._project(root)
+            prefix = json.loads(plan_path.read_text(encoding='utf-8'))['scenes'][:2]
+            result = replan_lean_future(root, WeightedGateway(), direction='让主创自由重排数量与详略。')
+            plan = json.loads(plan_path.read_text(encoding='utf-8'))
+            budget = json.loads(budget_path.read_text(encoding='utf-8'))
+            self.assertEqual(plan['scenes'][:2], prefix)
+            self.assertEqual(result['future_scene_count'], 3)
+            self.assertEqual(sum(row['target_words'] for row in budget['chapter_budgets']), 12000)
+            self.assertGreater(budget['chapter_budgets'][1]['target_words'], budget['chapter_budgets'][2]['target_words'])
+            for row in budget['chapter_budgets']:
+                self.assertEqual(sum(scene['target_chars'] for scene in plan['scenes'] if scene['chapter_id'] == row['chapter_id']), row['target_words'])
 
 
 if __name__ == "__main__":

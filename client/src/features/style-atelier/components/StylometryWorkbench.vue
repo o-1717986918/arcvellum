@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { toRef } from "vue";
 import { useStylometry } from "../stores/useStylometry";
+import StylePresetPanel from "./StylePresetPanel.vue";
 import StylometrySources from "./StylometrySources.vue";
 import StylometryParameterDeck from "./StylometryParameterDeck.vue";
 import "../stylometry.css";
@@ -12,6 +13,7 @@ const { workbench, profile, metrics, controls, sources, title, intent, dependenc
   previewBusy, previewError, previewCurrent, manualFragment, autoMount, publishing } = desk;
 const labels: Record<string, string> = { sentence_length_han: "平均句长", paragraph_length_han: "平均段长",
   dialogue_share: "对白比例代理", punctuation_per_1000_han: "每千汉字标点数" };
+async function selectPreset(id: string, version: string) { desk.presetId.value = id; await desk.selectVersion(version); desk.tab.value = "parameters"; }
 function importFiles(event: Event) {
   const input = event.target as HTMLInputElement;
   const files = Array.from(input.files || []); input.value = "";
@@ -31,8 +33,9 @@ function exportVersion() {
 <template>
   <section class="stylo-desk" aria-label="计量文风工作台">
     <header class="stylo-heading"><div><span class="eyebrow">Stylometric Prompt Lab · 实验</span><h2>计量文风工作台</h2><p>统计语料，调整语言目标，再把你认可的文风片段交给场景主创。</p></div>
-      <div class="stylo-actions"><span class="stylo-mount-state">{{ workbench?.mount.enabled ? '已挂载 · ' + (workbench.mount.usage === 'guide' ? '参与创作' : '仅观测') : '当前未挂载' }}</span><button :disabled="busy || !projectRoot" @click="desk.load">刷新</button></div>
+      <div class="stylo-actions"><span class="stylo-mount-state">{{ workbench?.mount.enabled ? '已挂载 · ' + (workbench.mount.usage === 'guide' ? '参与创作' : '仅观测') : '单画像未挂载' }}</span><button :disabled="busy || !projectRoot" @click="desk.load">刷新</button></div>
     </header>
+    <StylePresetPanel :can-recalculate="workbench?.capabilities.preset_reference_recalculation" :project-root="projectRoot" :versions="workbench?.versions || []" :refresh-key="(selectedVersion?.version_id || '') + ':' + (workbench?.mount.revision || 0)" @select="selectPreset" @refresh="desk.load" />
     <p v-if="!projectRoot" class="stylo-hint">先选择一部作品，即可导入语料或进行单篇统计。</p>
     <p v-if="error" class="stylo-error" role="alert">{{ error }}</p><p v-if="notice" class="stylo-notice" role="status">{{ notice }}</p>
     <nav class="stylo-tabs" aria-label="计量文风步骤"><button v-for="item in [{ id: 'corpus', label: '语料与统计' }, { id: 'parameters', label: '参数与提示词' }, { id: 'mount', label: '主创挂载与测量' }]" :key="item.id" :aria-pressed="tab === item.id" @click="tab = item.id">{{ item.label }}</button></nav>

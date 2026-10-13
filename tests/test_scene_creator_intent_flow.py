@@ -120,7 +120,8 @@ class CreatorIntentFlowTests(unittest.TestCase):
             def run(self, workspace, prompt, *, role, timeout, event_sink=None, cancel_event=None):
                 if role == "worker" and len([item for item in self.calls if item[0] == "worker"]) == 1:
                     self.calls.append((role, prompt))
-                    answer = {"creative_intent": _INTENT, "prose": "她把信推了过去。", "scene_delta": {},
+                    answer = {"creative_intent": _INTENT, "prose": "她把信推了过去。", "decision_summary": "原始决定",
+                              "scene_delta": {"next_handoff": ["她还在等回信"]},
                               "material_decisions": [{"candidate_id": "", "decision": "discard",
                                                       "reason": "目录为空"}]}
                     return RoleConversationResult("pi-worker", "fake", "test/model", json.dumps(answer, ensure_ascii=False))
@@ -132,10 +133,13 @@ class CreatorIntentFlowTests(unittest.TestCase):
             gateway = Gateway()
             runtime = PiSceneTransactionRuntime({"application": {"scene_performance_agents": {"enabled": True}}},
                                                 project_root=root, data_root=root / ".studio", gateway=gateway)
-            runtime.create_scene("tx-selection-repair", _brief())
+            result = runtime.create_scene("tx-selection-repair", _brief())
+            self.assertEqual(result.prose, "她把信推了过去。")
+            self.assertEqual(result.scene_delta.next_handoff, ("她还在等回信",))
             workers = [prompt for role, prompt in gateway.calls if role == "worker"]
             self.assertEqual(len(workers), 3)
-            self.assertIn("上一回答没有给出可核验的素材取舍", workers[-1])
+            self.assertIn("已提供的候选 ID", workers[-1])
+            self.assertIn("unknown candidate_id: ''", workers[-1])
             memory = json.loads((root / ".studio/scene-transactions/tx-selection-repair/scene_creator_memory.json")
                                 .read_text(encoding="utf-8"))
             self.assertEqual(memory["material_decisions"][0]["candidate_id"], "d1:1")
