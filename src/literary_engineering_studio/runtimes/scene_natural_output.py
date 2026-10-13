@@ -104,6 +104,11 @@ class NaturalOutputProcessor:
             payload['source_provenance'] = _commission_provenance(answer, payload, context)
         return payload
 
+    def revalidate_record(self, source, payload, kind, context):
+        from copy import deepcopy
+        result = self._prepare(source, deepcopy(payload), kind, context)
+        return {**result, "__transport": {"mode":"reused", "model_calls":0}}
+
     def process(self, answer: str, *, kind: str, context: Mapping[str, Any], reuse_only=False) -> dict[str, Any]:
         try:
             return NaturalTransportPipeline(self.root, self.system_prompt, self.invoke, self._prepare, CONTRACTS).process(
@@ -136,7 +141,7 @@ class NaturalOutputProcessor:
         contract=field_repair_task(source,payload,fields,context)['response_contract']
         return NaturalTransportPipeline(self.root,self.system_prompt,self.invoke,prepare,
             {'field-repair':contract}).process(reply,'field-repair',
-                {**context,'allowed_paths':list(fields),'parent_source_sha256':sha256(source.encode()).hexdigest(),
+                {**context,'repair_operation':kind,'allowed_paths':list(fields),'parent_source_sha256':sha256(source.encode()).hexdigest(),
                  'frozen_fields_sha256':sha256(json.dumps({key:value for key,value in payload.items()
                      if not key.startswith('__')},ensure_ascii=False,sort_keys=True).encode()).hexdigest()})
 

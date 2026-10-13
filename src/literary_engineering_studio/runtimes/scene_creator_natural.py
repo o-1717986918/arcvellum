@@ -29,7 +29,8 @@ from .scene_creator_delivery_source import recover_saved_creator_delivery
 from .material_usage_evidence import annotate_material_usage, save_material_usage_audit
 from .material_need import needs_required, record_source_needs,validate_source_needs,repair_candidate_sources
 from .semantic_cache import prior_review_context
-from .natural_creator_prompt import STABLE_PREFIX_LAYOUT, stable_creator_prompt
+from .natural_creator_prompt import STABLE_PREFIX_LAYOUT, LEGACY_STABLE_PREFIX_LAYOUT, stable_creator_prompt
+from .scene_cache_layout import cached_layout, cached_runtime, cached_context, scene_session, source_scope, review_layout
 from .scene_review_continuity import formal_review_payload, record_review, review_continuity
 from ..infrastructure.project_scene_transactions import known_scene_refs
 from .scene_integrity import (save_consistency_record, read_consistency_record, current_review_context,
@@ -45,16 +46,24 @@ class NaturalCreatorMixin:
             validate_payload=(lambda payload: _validate_creator_context(payload,brief,coordinator)) if brief else None)
 
     def _run_natural_text(self, system: str, prompt: str, transaction_id: str, role: str, *, purpose=None) -> str:
-        if purpose=='evidence-repair':
+        cached = cached_layout(self._v2_prompt_snapshot(transaction_id))
+        if purpose=='evidence-repair' and not cached:
             system+='\n当前任务仅修复指定证据字段。严格按 response_contract 交付 JSON patches；value 选择 context.prose_source 中现有段落的 prose_sha256/prose_block 引用，不凭记忆重抄引文，不写评价或新判断。其余判断与正文冻结。'
         envelope = json.dumps({"schema": "arcvellum/default-conversation/v1",
                               "system_prompt": system, "prompt": prompt,
-                              "call_purpose": purpose or ("record-repair" if role == "transport" else "review" if role == "reviewer" else "creator")}, ensure_ascii=False)
+                              "call_purpose": purpose or ("record-repair" if role == "transport" else "review" if role == "reviewer" else "creator"),
+                              **({"conversation_session":scene_session(self,transaction_id,role,source_scope(self,transaction_id,prompt))} if cached else {})}, ensure_ascii=False)
         return self._run(envelope, role=role, transaction_id=transaction_id)
 
     def _source_field_repair(self, transaction_id, processor, answer, kind, context, error, invoke,material_sources=None):
+        if cached_runtime(self, transaction_id):
+            context = {**context, "request_layout":STABLE_PREFIX_LAYOUT}
         seen=set()
-        progress=SourceRepairProgress()
+        progress=SourceRepairProgress(processor.root, kind, answer)
+        binding=sha256(json.dumps([answer,kind,context,error.payload,error.fields,processor.system_prompt],ensure_ascii=False,sort_keys=True).encode()).hexdigest()
+        completed=progress.completed(binding)
+        if completed:
+            return processor.revalidate_record(completed["source"],completed["payload"],kind,context)
         while True:
             if not error.fields or not isinstance(error.payload, dict):
                 raise error
@@ -77,8 +86,10 @@ class NaturalCreatorMixin:
             seen.add(key)
             reply = self._preserved_natural_answer(transaction_id,kind+"-field-repair",task,lambda:invoke(task))
             try:
-                return processor.process_field_repair(answer,reply,kind=kind,context=context,
+                result=processor.process_field_repair(answer,reply,kind=kind,context=context,
                     payload=error.payload,fields=error.fields)
+                progress.complete(binding,answer+'\n\n【原作者指定字段补交】\n'+reply,result)
+                return result
             except NaturalSourceClarificationError as next_error:
                 answer=progress.advance(answer,next_error,reply,signature)
                 error=next_error
@@ -96,6 +107,9 @@ class NaturalCreatorMixin:
                 memory, memory_path, brief, coordinator, transaction_id, request_version=4,
             )
             context = _creator_context(memory, coordinator, briefing, revision_context)
+            if getattr(coordinator, "creator_prompt_layout", "") == STABLE_PREFIX_LAYOUT:
+                context["briefing"] = cached_context(briefing)
+                context["current_style_direction"] = creator_style(briefing)
             context['available_delta_targets'] = sorted(known_scene_refs(brief))
             context['actor_card_schema'] = actor_card_schema_for_template(layers['scene.v2.material.actor'])
             include_actor = _needs_card_design(context, journal.feedback())
@@ -103,8 +117,9 @@ class NaturalCreatorMixin:
                 context["actor_system_template"] = layers["scene.v2.material.actor"]
             if journal.feedback():
                 context["delivery_feedback"] = journal.feedback()
-            if getattr(coordinator, "creator_prompt_layout", "") == STABLE_PREFIX_LAYOUT:
-                prompt = stable_creator_prompt(layers, mode, context, include_actor=include_actor)
+            if getattr(coordinator, "creator_prompt_layout", "") in {STABLE_PREFIX_LAYOUT, LEGACY_STABLE_PREFIX_LAYOUT}:
+                prompt = stable_creator_prompt(layers, mode, context, include_actor=include_actor,
+                                              layout=coordinator.creator_prompt_layout)
             else:
                 prompt = _creator_guidance(layers, mode, include_actor=include_actor) + "\n\n本次创作资料：\n" + json.dumps(context, ensure_ascii=False)
             answer = replay["previous_answer"] if replay else self._preserved_natural_answer(transaction_id, "creator", prompt, lambda:
@@ -256,7 +271,7 @@ class NaturalCreatorMixin:
         journal = NaturalTurnStore(self._cache_path(transaction_id, "v2/literary-originals"), "review")
         if journal.feedback():
             context["delivery_feedback"] = journal.feedback()
-        system = render_style(layers["scene.v2.review"], creator_style(briefing))
+        system, context = review_layout(layers, briefing, context, self._v2_prompt_snapshot(transaction_id))
         prompt = layers["scene.v2.review.protocol"] + "\n\n本次审读资料：\n" + json.dumps(context, ensure_ascii=False)
         context_binding=review_context_digest(system,layers['scene.v2.review.protocol'],context)
         replay=saved_review_answer(journal,system,layers['scene.v2.review.protocol'],context)
@@ -452,4 +467,3 @@ def _complete_review_evidence_failure(error):
         and payload.get('summary') and error.fields and all(re.fullmatch(
             r'/(?:strengths|major_issues|optional_explorations|issue_progress)/\d+/evidence',path)
             for path in error.fields))
-

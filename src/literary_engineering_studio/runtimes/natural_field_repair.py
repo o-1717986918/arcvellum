@@ -67,7 +67,7 @@ def field_repair_task(source, payload, fields, context):
     if scoped.get('prose') and context.get('creation_integrity_contract'):
         scoped['fact_alerts'] = current_fact_alerts(scoped['prose'])
         scoped['prose_source'] = prose_evidence_source(scoped['prose'])
-    return {'repair_protocol_version':'source-field-v3',
+    task = {'repair_protocol_version':'source-field-v3',
             'source_sha256':hashlib.sha256(source.encode()).hexdigest(),
             'frozen_fields':relevant,'frozen_review_decision':payload.get('decision'),
             'allowed_paths':list(fields),'context':scoped,
@@ -76,6 +76,14 @@ def field_repair_task(source, payload, fields, context):
             'request':('原审读者请针对失败项核对证据，在授权路径内更正或撤回该判断，必要时更新结论与总结。'
                        '以 patches 交回，其余判断与正文保留。' if "/decision" in fields else
                        '仅以 patches 交回指定字段。已有正文、判断及其余字段已冻结；不重写全文，不重做审读。')}
+    return _ordered_repair_task(task, context)
+
+
+def _ordered_repair_task(task, context):
+    if context.get("request_layout") == "stable-prefix-v2":
+        order = ("repair_protocol_version", "request", "context", "frozen_fields", "response_contract", "allowed_paths", "frozen_review_decision", "source_sha256")
+        task = {key:task[key] for key in order}
+    return task
 
 
 def _repair_prose_context(scoped,payload,fields,context,roots):

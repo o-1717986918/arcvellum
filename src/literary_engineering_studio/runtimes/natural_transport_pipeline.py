@@ -14,6 +14,7 @@ from .natural_transport_repair import NaturalExtractionError, NaturalSourceClari
 from .natural_transport_store import extraction_lock, save_json, save_text
 from .natural_transport_task import extraction_task
 from .natural_actor_transport import seed_actor_response, finish_actor_fields
+from .source_repair_budget import SourceRepairBudget
 
 PROCESSOR_VERSION = 'cost-recovery-v4.37'
 
@@ -167,6 +168,7 @@ class NaturalTransportPipeline:
             task = extraction_task(kind, self.contracts[kind], semantic, index, answer, fields, cards,
                                    paths=paths, issue=issue)
         for attempt in range(2):
+            self._reserve_retry(kind, context, index, task, paths, partial, attempt)
             self.calls += 1
             response = self.invoke(self.system, json.dumps(task, ensure_ascii=False))
             sequence = len(list(directory.glob(key + '.extraction*.md'))) + 1
@@ -198,6 +200,16 @@ class NaturalTransportPipeline:
                     save_json(checkpoint, {'payload': partial, 'issue': issue, 'paths': paths})
         _save_field_checkpoints(directory,key,answer,partial,paths or [])
         raise NaturalExtractionError(issue,fields=paths or (),source_sha256=index['sha256'],payload=partial)
+
+    def _reserve_retry(self, kind, context, index, task, paths, partial, attempt):
+        if not (attempt or paths or kind == "field-repair"):
+            return
+        operation = context.get("repair_operation", kind)
+        source = context.get("parent_source_sha256", index["sha256"])
+        try:
+            SourceRepairBudget(self.root, operation, source).claim("transport", json.dumps(task, ensure_ascii=False, sort_keys=True))
+        except ValueError as error:
+            raise NaturalExtractionError(str(error), fields=paths or (), source_sha256=index["sha256"], payload=partial) from error
 
     def _actor_fields(self,payload,answer,kind,context):
         return finish_actor_fields(payload,answer,kind,context) if '[NATURAL_TASK_FIELDS_V2]' in self.system else payload

@@ -108,11 +108,21 @@ class PiWorkerRuntime(AgentRuntime):
         conversation_role = str(self._execution_overrides.get("conversation_role") or "").strip()
         if conversation_role:
             command.extend(["--conversation-role", conversation_role])
+        command.extend(self._conversation_options(mode))
         for target in self._repair_targets():
             command.extend(["--repair-target", target])
         for reference in self._repair_references():
             command.extend(["--repair-reference", reference])
         return tuple(command)
+
+    def _conversation_options(self, mode):
+        options = []
+        store = self._execution_overrides.get("conversation_store_root")
+        if store:
+            options.extend(["--conversation-store-root", str(store)])
+        if mode == "conversation" and self.settings.get("conversation_max_tokens"):
+            options.extend(["--conversation-max-tokens", str(self._positive_setting("conversation_max_tokens", 512))])
+        return options
 
     def capabilities(self, availability: RuntimeAvailability | None = None) -> AgentRunnerCapabilities:
         availability = availability or self.availability()
@@ -206,6 +216,7 @@ class PiWorkerRuntime(AgentRuntime):
         initial_repair_targets: Sequence[str] | None = None,
         worker_mode: str | None = None,
         conversation_role: str | None = None,
+        conversation_store_root: str | None = None,
     ) -> RuntimeResult:
         overrides = {
             "max_repair_attempts": max_repairs,
@@ -219,6 +230,7 @@ class PiWorkerRuntime(AgentRuntime):
             "allowed_states": tuple(allowed_states) if allowed_states is not None else None,
             "worker_mode": worker_mode,
             "conversation_role": conversation_role,
+            "conversation_store_root": conversation_store_root,
         }
         self._execution_overrides = {key: value for key, value in overrides.items() if value is not None}
         try:

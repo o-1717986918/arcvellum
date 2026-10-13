@@ -36,7 +36,8 @@ from .scene_natural_output import NATURAL_RESPONSE_MODE, creator_style, render_s
 from .scene_review_continuity import review_continuity
 from .semantic_cache import semantic_cache_digest, prior_review_context
 from .scene_material_cache import material_source_digests, material_source_bindings, cached_scene_result
-from .natural_creator_prompt import STABLE_PREFIX_LAYOUT
+from .natural_creator_prompt import STABLE_PREFIX_LAYOUT, LEGACY_STABLE_PREFIX_LAYOUT
+from .scene_cache_layout import cached_layout, book_style, scene_session, source_scope, CONTEXT_RULE, validate_frozen_sources
 from .runtime_model_identity import runtime_model_identity
 from literary_engineering_studio_engine.public.literary import CONSISTENCY_CONTRACT
 from .scene_integrity import checked_creation_cache, read_consistency_record
@@ -72,7 +73,10 @@ class SceneCreatorV2Mixin(NaturalCreatorMixin):
                         "texts": {layer.layer_id: layer.text for layer in layers}}
         snapshot["response_mode"] = NATURAL_RESPONSE_MODE
         snapshot["runtime_contract"] = "creative-literary/2.2-cost-v4"
-        snapshot["creator_prompt_layout"] = STABLE_PREFIX_LAYOUT
+        layout = (self._config.get("agent_runners", {}).get("pi-worker", {}) or {}).get("conversation_cache_layout", STABLE_PREFIX_LAYOUT)
+        if layout not in {STABLE_PREFIX_LAYOUT, LEGACY_STABLE_PREFIX_LAYOUT}:
+            raise ValueError("unsupported new creator prompt layout")
+        snapshot["creator_prompt_layout"] = layout
         snapshot["runtime_model_binding"] = runtime_model_identity(self._config)
         if self._config.get('application', {}).get('creation_integrity', {}).get('enabled') is True:
             snapshot['creation_integrity_contract'] = CONSISTENCY_CONTRACT
@@ -95,6 +99,8 @@ class SceneCreatorV2Mixin(NaturalCreatorMixin):
                 raise RuntimeError("scene creator v2 requires a work-level persona from the top agent")
             self._creator_style_briefing(transaction_id, briefing)
             _atomic_json(briefing_path, briefing)
+        if cached_layout(snapshot):
+            validate_frozen_sources(briefing, self._project_root, brief)
         _atomic_json(self._cache_path(transaction_id, "scene_creator_v2_mode.json"),
                      {"schema": "arcvellum/scene-creator-mode/v2", "prompt_digest": snapshot["digest"]})
         return snapshot, briefing, workspace
@@ -335,13 +341,16 @@ class SceneCreatorV2Mixin(NaturalCreatorMixin):
         *, purpose: str = "creator", tool_policy: str = "full", metadata_repair: bool = False,
     ) -> str:
         literary_identity = layers["scene.v2.creator.identity"]
+        cached = cached_layout(self._v2_prompt_snapshot(transaction_id))
         if "scene.v2.transport.extractor" in layers:
-            literary_identity = render_style(literary_identity, creator_style(briefing))
+            literary_identity = render_style(literary_identity, book_style(briefing) if cached else creator_style(briefing))
         identity = "\n\n".join((
             layers["scene.v2.creator.protocol"],
             literary_identity, briefing["creator_persona"]["text"],
         ))
-        if metadata_repair:
+        if cached:
+            identity += "\n" + CONTEXT_RULE
+        if metadata_repair and not cached:
             identity += '\n\n当前仅补交指定元数据。请按本次 response_contract 直接交付 JSON patches 对象；对象与列表保持结构，knowledge 仅用 known/reference。正文、其余判断和未授权字段继续冻结。'
         envelope = json.dumps({
             "schema": "arcvellum/scene-creator/v2", "system_prompt": identity,
@@ -349,6 +358,8 @@ class SceneCreatorV2Mixin(NaturalCreatorMixin):
             "material_root": str(coordinator.root / "materials"),
             "archive_root": str(workspace.archive_root),
             "scratch_root": str(workspace.scratch_root), "prompt": prompt,
+            **({"conversation_session":scene_session(self,transaction_id,"creator-"+tool_policy,
+                source_scope(self,transaction_id,prompt) if tool_policy != "full" else "")} if cached else {}),
         }, ensure_ascii=False)
         self._provider_calls += 1
         record_scene_prompt(self, transaction_id, "worker", envelope)

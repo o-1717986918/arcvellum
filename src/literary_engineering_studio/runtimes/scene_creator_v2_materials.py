@@ -26,7 +26,7 @@ from .scene_natural_output import NATURAL_RESPONSE_MODE, render_style
 from .event_material_provenance import event_fields as _event_fields
 from .material_need import check_saved_need
 from .material_input_reuse import input_identity, reuse_equal_input, literary_request
-from .natural_creator_prompt import STABLE_PREFIX_LAYOUT
+from .natural_creator_prompt import STABLE_PREFIX_LAYOUT, LEGACY_STABLE_PREFIX_LAYOUT
 
 
 _KIND_ROLE = {
@@ -148,7 +148,7 @@ class SceneCreatorV2MaterialCoordinator:
         self.scene_id = scene_id
         self.actor_personas = actor_personas or {}
         self.material_scope = {}
-        if creator_prompt_layout not in {"", STABLE_PREFIX_LAYOUT}:
+        if creator_prompt_layout not in {"", STABLE_PREFIX_LAYOUT, LEGACY_STABLE_PREFIX_LAYOUT}:
             raise ValueError("unsupported frozen creator prompt layout")
         self.creator_prompt_layout = creator_prompt_layout
 

@@ -22,11 +22,13 @@ def invoke_actor_turn(
     event_sink: Callable[[str, dict[str, Any]], None] | None, transaction_id: str,
     initialization: str, initialization_answer: str,
     history: tuple[tuple[str, str], ...], prompt: str,
+    *, session_ref=None,
 ) -> tuple[str, str]:
     response = gateway.run_actor_turn(
         project_root, initialization=initialization,
         initialization_answer=initialization_answer, history=history, prompt=prompt,
         timeout=timeout, event_sink=_observer(event_sink, transaction_id),
+        **({"session_ref":session_ref} if session_ref and getattr(gateway,"supports_conversation_sessions",False) else {}),
     )
     return response.answer, response.initialization_answer
 
@@ -35,10 +37,12 @@ def invoke_initialized_role_turn(
     gateway: RoleConversationGateway, project_root: Path, timeout: int,
     event_sink: Callable[[str, dict[str, Any]], None] | None, transaction_id: str,
     role: str, initialization: str, history: tuple[tuple[str, str], ...], prompt: str,
+    *, session_ref=None,
 ) -> tuple[str, str]:
     response = gateway.run_role_turn(
         project_root, role=role, initialization=initialization, history=history,
         prompt=prompt, timeout=timeout, event_sink=_observer(event_sink, transaction_id),
+        **({"session_ref":session_ref} if session_ref and getattr(gateway,"supports_conversation_sessions",False) else {}),
     )
     return response.answer, response.initialization_answer
 

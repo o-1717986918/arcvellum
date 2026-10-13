@@ -83,10 +83,11 @@ class CreatorStylometryTests(unittest.TestCase):
             "沿人物的迟疑与生活中的物件组织故事，让等待具有具体的声音。", reason="作者初始意图")
         result = self.adapter.create_scene("v2", brief())
         systems = self.adapter._gateway.systems
-        self.assertIn(self.mount.fragment_text, systems[0])
+        self.assertNotIn(self.mount.fragment_text, systems[0])
+        self.assertIn(self.mount.fragment_text, self.adapter._gateway.context["current_style_direction"])
         material = [text for text in systems if text.startswith("你是一位以地方")]
         self.assertTrue(result.prose)
-        self.assertNotIn(self.mount.fragment_text, json.dumps(self.adapter._gateway.context, ensure_ascii=False))
+        self.assertNotIn(self.mount.fragment_text, json.dumps(self.adapter._gateway.context["briefing"]["style"], ensure_ascii=False))
         self.assertTrue(material)
         self.assertTrue(all(self.mount.fragment_text not in text for text in material))
 

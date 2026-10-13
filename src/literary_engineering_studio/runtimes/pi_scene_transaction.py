@@ -333,8 +333,10 @@ class PiSceneTransactionRuntime(CreatorStylometryMixin, LessAiToneExperimentMixi
     ) -> tuple[str, str]:
         self._provider_calls += 1 if history else 2
         record_scene_prompt(self, transaction_id, "character-actor", prompt, initialization=initialization, history=history)
+        from .scene_cache_layout import scene_session
+        ref = scene_session(self, transaction_id, "character-actor", hashlib.sha256(initialization.encode()).hexdigest())
         return invoke_actor_turn(self._gateway, self._project_root, self._timeout, self._event_sink,
-                                 transaction_id, initialization, initialization_answer, history, prompt)
+                                 transaction_id, initialization, initialization_answer, history, prompt, session_ref=ref)
 
     def _run_initialized_role_turn(
         self, role: str, initialization: str, history: tuple[tuple[str, str], ...],
@@ -342,9 +344,11 @@ class PiSceneTransactionRuntime(CreatorStylometryMixin, LessAiToneExperimentMixi
     ) -> tuple[str, str]:
         self._provider_calls += 1
         record_scene_prompt(self, transaction_id, role, prompt, initialization=initialization, history=history)
+        from .scene_cache_layout import scene_session
+        ref = scene_session(self, transaction_id, role, hashlib.sha256(initialization.encode()).hexdigest())
         return invoke_initialized_role_turn(
             self._gateway, self._project_root, self._timeout, self._event_sink,
-            transaction_id, role, initialization, history, prompt,
+            transaction_id, role, initialization, history, prompt, session_ref=ref,
         )
 
     def _cache_path(self, transaction_id: str, name: str) -> Path:
