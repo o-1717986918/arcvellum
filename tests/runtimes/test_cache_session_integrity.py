@@ -29,6 +29,32 @@ class CacheSessionIntegrityTests(unittest.TestCase):
             with self.assertRaises(NaturalSourceClarificationError):
                 SourceRepairProgress(Path(tmp),"creator","source").register(error)
 
+    def test_exhausted_author_budget_is_explicit_and_keeps_exact_repair_scope(self):
+        with TemporaryDirectory() as tmp:
+            progress=SourceRepairProgress(Path(tmp),'creator','source')
+            for value in range(4):
+                progress.register(NaturalSourceClarificationError('bad link',
+                    fields=('/consistency_record/facts/0/delta_summary',),
+                    payload={'consistency_record':{'facts':[{'delta_summary':str(value)}]}}))
+            failure=NaturalSourceClarificationError('bad link',
+                fields=('/consistency_record/facts/0/delta_summary',),
+                payload={'consistency_record':{'facts':[{'delta_summary':'new'}]}})
+            with self.assertRaisesRegex(NaturalSourceClarificationError,'original source repair budget exhausted') as caught:
+                progress.register(failure)
+            self.assertEqual(caught.exception.fields,failure.fields)
+            self.assertEqual(len(json.loads(progress.budget.path.read_text())['calls']),4)
+
+    def test_granular_author_patch_preserves_valid_facts_and_rejects_broad_rewrite(self):
+        from literary_engineering_studio.runtimes.natural_field_repair import apply_field_patch
+        frozen={'prose':'当前正文','consistency_record':{'facts':[
+            {'delta_summary':'差一个标点'},{'subject':'已正确事实','value':'保留'}]}}
+        path='/consistency_record/facts/0/delta_summary'
+        reply={'patches':[{'path':path,'op':'replace','value':'差一个标点。'}]}
+        result=apply_field_patch(frozen,reply,[path])
+        self.assertEqual(result['consistency_record']['facts'][1],frozen['consistency_record']['facts'][1])
+        with self.assertRaises(ValueError):
+            apply_field_patch(frozen,{'patches':[{'path':'/consistency_record','value':{}}]},[path])
+
     def test_field_repair_keeps_all_values_but_moves_mutating_digest_to_the_suffix(self):
         context={"prose":"原文", "request_layout":"stable-prefix-v2"}
         first=field_repair_task("source1",{"prose":"原文","scene_delta":{}},["/scene_delta"],context)

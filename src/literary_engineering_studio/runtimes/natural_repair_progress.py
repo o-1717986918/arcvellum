@@ -3,6 +3,7 @@ import json
 from .natural_field_repair import repair_field_values
 from .source_repair_budget import SourceRepairBudget, text_digest
 from .natural_transport_store import save_json
+from .natural_transport_repair import NaturalSourceClarificationError
 
 MAX_SOURCE_FIELD_REPAIRS = 4
 
@@ -29,12 +30,12 @@ class SourceRepairProgress:
         if signature in self.signatures and self.feedback is None:
             raise error
         if len(self.signatures) >= MAX_SOURCE_FIELD_REPAIRS:
-            raise error
+            raise _exhausted(error, 'original source repair budget exhausted; checkpoint preserved')
         if self.budget:
             try:
                 self.budget.claim("source-author", signature)
-            except ValueError:
-                raise error
+            except ValueError as stop:
+                raise _exhausted(error, str(stop)) from stop
         self.signatures.add(signature)
         self._save()
         return signature
@@ -71,3 +72,7 @@ class SourceRepairProgress:
     def complete(self, binding, source, payload):
         if self.budget:
             save_json(self.budget.root / (binding + ".completed.json"), {"source":source,"payload":payload})
+
+
+def _exhausted(error, message):
+    return NaturalSourceClarificationError(message+'；'+str(error), fields=error.fields, payload=error.payload)

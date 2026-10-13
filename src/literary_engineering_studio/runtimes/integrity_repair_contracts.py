@@ -18,8 +18,10 @@ _FINDINGS = {
 def integrity_field_contract(path):
     parts = path.strip('/').split('/')
     root = parts[0]
-    if root in _FINDINGS and len(parts) < 3:
-        return _FINDINGS[root] if len(parts) == 2 else [_FINDINGS[root]]
+    if len(parts)>1:
+        return _nested_integrity_contract(parts)
+    if root in _FINDINGS:
+        return [_FINDINGS[root]]
     if path == '/consistency_checks':
         return [{'category': category, 'status': 'clear/issue/uncertain',
                  'evidence': [_QUOTE], 'note': '逐项核对事实及fact_alerts；无相关内容evidence为空数组'}
@@ -56,3 +58,25 @@ def integrity_field_contract(path):
                 'reader_question_updates': [], 'new_asset_candidates': [],
                 'next_handoff': ['下一场交接原作者文字；没有则空数组']}
     return None
+
+
+def _nested_integrity_contract(parts):
+    root=parts[0]
+    if root in _FINDINGS and len(parts)==2:
+        return _FINDINGS[root]
+    if root=='scene_delta' and len(parts)==2:
+        return integrity_field_contract('/scene_delta').get(parts[1])
+    if root=='consistency_record':
+        return _fact_field_contract(parts)
+    return None
+
+
+def _fact_field_contract(parts):
+    record=integrity_field_contract('/consistency_record')
+    if parts[1]!='facts':
+        return record.get(parts[1])
+    if len(parts)==2:
+        return record['facts']
+    if len(parts)==3:
+        return record['facts'][0]
+    return record['facts'][0].get(parts[3]) if len(parts)==4 else None
