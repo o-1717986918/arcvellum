@@ -87,6 +87,30 @@ class SceneConsistencyContractTests(unittest.TestCase):
             'delta_group':'canon_candidates','delta_target':'canon/facts.json','delta_summary':'新规矩'}]
         validate_creator_consistency(row)
 
+    def test_exact_link_diagnostic_identifies_punctuation_without_relaxing_contract(self):
+        row=creator();row['scene_delta']['continuity_changes']=[{
+            'target_ref':'workflow/continuity/current.json','summary':'桌子修稳。'}]
+        fact={'subject':'桌子','predicate':'状态','value':'修稳','evidence':row['prose'],
+              'source_state':'new','durable':True,'delta_group':'continuity_changes',
+              'delta_target':'workflow/continuity/current.json','delta_summary':'桌子修稳'}
+        row['consistency_record']['facts']=[fact]
+        with self.assertRaises(SceneConsistencyError) as caught:
+            validate_creator_consistency(row)
+        message=str(caught.exception)
+        self.assertIn('"delta_summary": "桌子修稳"',message)
+        self.assertIn('"summary": "桌子修稳。"',message)
+        self.assertEqual(caught.exception.fields,('/consistency_record','/scene_delta'))
+        fact['delta_summary']='桌子修稳。'
+        validate_creator_consistency(row)
+
+    def test_unlinked_canon_diagnostic_names_proposal_and_count(self):
+        row=creator();row['consistency_record']['canon_change']=True
+        row['scene_delta']['canon_candidates']=[{'target_ref':'canon/facts.json','summary':'桌腿短一寸'}]
+        with self.assertRaises(SceneConsistencyError) as caught:
+            validate_creator_consistency(row)
+        self.assertIn('"summary": "桌腿短一寸"',str(caught.exception))
+        self.assertIn('持续事实数=0',str(caught.exception))
+
     def test_canon_proposal_cannot_merge_multiple_durable_details(self):
         row=creator();row['consistency_record']['canon_change']=True
         summary='车站明天停；桌腿短一寸；碗架存两只碗'

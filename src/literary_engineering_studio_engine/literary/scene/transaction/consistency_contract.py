@@ -71,7 +71,8 @@ def _canon_fact_coverage(facts, delta):
                   and fact.get('delta_target') == proposal.get('target_ref')
                   and fact.get('delta_summary') == summary]
         if not _text(summary) or '；' in summary or ';' in summary or len(linked) != 1:
-            raise SceneConsistencyError('每条Canon候选只对应一项持续事实；拆开合并叙述，并在facts中逐项登记当前正文证据。',
+            raise SceneConsistencyError('每条Canon候选只对应一项持续事实；拆开合并叙述，并在facts中逐项登记当前正文证据。'
+                                        + _proposal_diagnostic(proposal, len(linked)),
                                         ['/consistency_record', '/scene_delta'])
 
 
@@ -88,8 +89,25 @@ def _fact(fact, prose, delta):
         matching = [row for row in delta.get(group) or [] if row.get('target_ref') == fact.get('delta_target')
                     and row.get('summary') == fact.get('delta_summary')]
         if group not in DELTA_GROUPS or not matching:
-            raise SceneConsistencyError('新建或改变的持续事实须指向本稿SceneDelta中的准确提案。',
+            raise SceneConsistencyError('新建或改变的持续事实须指向本稿SceneDelta中的准确提案。'
+                                        + _fact_diagnostic(fact, delta),
                                         ['/consistency_record', '/scene_delta'])
+
+
+def _fact_diagnostic(fact, delta):
+    group = fact.get('delta_group')
+    candidates = [{'target_ref': row.get('target_ref'), 'summary': row.get('summary')}
+                  for row in (delta.get(group) or [])[:4]]
+    values = {key: fact.get(key) for key in ('subject', 'delta_group', 'delta_target', 'delta_summary')}
+    return ('失败事实=' + json.dumps(values, ensure_ascii=False)
+            + '；本组前四项提案=' + json.dumps(candidates, ensure_ascii=False)
+            + '。delta_target及delta_summary须逐字符复制对应target_ref及summary，包含全部标点。')
+
+
+def _proposal_diagnostic(proposal, count):
+    values = {key: proposal.get(key) for key in ('target_ref', 'summary')}
+    return ('失败Canon提案=' + json.dumps(values, ensure_ascii=False)
+            + f'；准确关联的持续事实数={count}，须恰为1。')
 
 
 def _cumulative_dispositions(record, prior_delta, delta):
