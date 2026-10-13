@@ -10,6 +10,25 @@ import {
 } from "../src/project-agent-protocol.ts";
 
 describe("Project Agent bridge protocol", () => {
+	it("keeps provider failures and truncated responses blocked with safe terminal evidence", async () => {
+		for (const stopReason of ["error", "length", "aborted"] as const) {
+			const faux = createFauxCore({ provider: `arcvellum-faux-failure-${stopReason}`,
+				models: [{ id: "project-agent-failure", reasoning: false }] });
+			faux.setResponses([fauxAssistantMessage("partial text", { stopReason,
+				errorMessage: "402 Payment Required; Bearer sensitive-value; api_key=private-value" })]);
+			const write = (_value: BridgeEnvelope) => {};
+			const bridge = new ProjectToolBridge("turn-failed", write, 1000);
+			const result = await runProjectAgentTurn({ sessionId: "session-failed", turnId: "turn-failed",
+				prompt: "继续", systemPrompt: "沿正式路线继续", allowedTools: [] },
+				{ model: faux.getModel(), streamFn: faux.streamSimple }, bridge, write);
+			expect(result.status).toBe("blocked");
+			expect(result.answer).toBe("");
+			expect(result.message).toContain("402 Payment Required");
+			expect(result.message).not.toContain("sensitive-value");
+			expect(result.message).not.toContain("private-value");
+			expect(faux.state.callCount).toBe(1);
+		}
+	});
 	it("parses the versioned JSONL envelope and rejects malformed frames", () => {
 		const value = envelope("turn.start", "turn-1", { prompt: "hello" }, "message-1");
 		expect(parseEnvelopeLine(JSON.stringify(value))).toEqual(value);

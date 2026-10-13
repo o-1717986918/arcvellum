@@ -96,6 +96,7 @@ export interface ProjectAgentTurnResult {
 	answer: string;
 	turns: number;
 	toolCalls: number;
+	message?: string;
 }
 
 /** Run one time-bounded Pi turn. Project behavior remains behind bridge tools. */
@@ -152,6 +153,11 @@ export async function runProjectAgentTurn(
 			return { status: "cancelled", answer: "", turns, toolCalls };
 		}
 		const answer = lastAssistantText(agent.state.messages as unknown[]);
+		const terminal = [...agent.state.messages].reverse().find((message) => message.role === "assistant");
+		if (!terminal || terminal.stopReason !== "stop") {
+			return { status: "blocked", answer: "", turns, toolCalls,
+				message: safeError(terminal?.errorMessage || `Project Agent ended without a complete response (${terminal?.stopReason || "missing"})`) };
+		}
 		return {
 			status: answer ? "completed" : "blocked",
 			answer,
@@ -662,7 +668,7 @@ function lastAssistantText(messages: unknown[]): string {
 			.map((item) => String(item.text || ""))
 			.join("")
 			.trim();
-		if (text) return text;
+		return text;
 	}
 	return "";
 }
@@ -680,7 +686,11 @@ function parseModelId(value: string): [string, string] {
 }
 
 function safeError(error: unknown): string {
-	return (error instanceof Error ? error.message : String(error)).slice(0, 2000);
+	return (error instanceof Error ? error.message : String(error))
+		.replace(/sk-[A-Za-z0-9_-]{12,}/g, "<redacted-secret>")
+		.replace(/Bearer\s+[^\s'",;]+/gi, "Bearer <redacted-secret>")
+		.replace(/\b(api[_-]?key|token|authorization)\s*[:=]\s*['"]?[^\s,'"]+/gi, "$1=<redacted-secret>")
+		.slice(0, 2000);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
