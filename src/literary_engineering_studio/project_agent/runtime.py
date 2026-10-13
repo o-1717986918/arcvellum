@@ -257,7 +257,8 @@ def _record_completion(
         request.turn_id,
         None,
         state.tool_calls,
-        "Project Agent turn completed",
+        str(envelope.payload.get('message') or ('Project Agent turn completed' if status=='completed'
+            else 'Project Agent ended without completed output'))[:2000],
     )
     state.terminal_received_at = time.monotonic()
 

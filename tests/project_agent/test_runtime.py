@@ -24,6 +24,17 @@ SCHEMA = "arcvellum/project-agent-bridge/v1"
 
 
 class ProjectAgentRuntimeTests(unittest.TestCase):
+    def test_blocked_bridge_keeps_failure_message_and_never_labels_it_completed(self):
+        from literary_engineering_studio.project_agent.runtime import _record_completion, _TurnState
+        from literary_engineering_studio.project_agent.contracts import BridgeEnvelope
+        state=_TurnState()
+        value=BridgeEnvelope.from_json_line(json.dumps({'schema':SCHEMA,'type':'turn.complete',
+            'message_id':'failed','turn_id':'turn-1',
+            'payload':{'status':'blocked','answer':'','message':'402 Payment Required'}}))
+        _record_completion(value,_request(),state)
+        self.assertEqual(state.terminal.status,'blocked')
+        self.assertEqual(state.terminal.message,'402 Payment Required')
+
     def test_read_dispatcher_maps_to_existing_service_dependencies(self):
         seen = []
         dependencies = ProjectAgentDependencies(
