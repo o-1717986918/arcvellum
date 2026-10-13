@@ -58,7 +58,7 @@ class ActorRoleplayV2Tests(unittest.TestCase):
         self.assertIn('浪漫长句',call.initialization)
 
     def test_legacy_snapshot_keeps_all_sixteen_sections_and_the_original_invitation(self):
-        old=Path(__file__).resolve().parents[2]/'tools/prompt-design-desk/history/2026-10-10-actor-repair/scene.v2.material.actor.md'
+        old=Path(__file__).resolve().parents[1]/'fixtures/prompts/actor-card-sixteen-sections.md'
         current=layers();current.pop('scene.v2.actor.turn');current['scene.v2.material.actor']=old.read_text(encoding='utf-8').strip()
         card=parse_actor_character_card(legacy_payload(),'阿青');request=replace(self.request(),character_card=card)
         call=render_material_invocation(request,[],current,scene_id='old')
