@@ -102,17 +102,26 @@ def _annotations(candidate, original, answer):
         kind, text = entry.get('kind'), entry.get('text')
         if kind not in labels or not isinstance(text, str) or not text.strip():
             raise ValueError('actor annotation needs a known kind and literal text')
-        candidate.setdefault(labels[kind], []).append(text)
         span = _annotation_span(original['annotations'][index], entry, candidate['text'], text_start, answer)
         if span is not None:
             spans.append(span)
     if spans:
-        if [item['start'] for item in spans] != sorted(item['start'] for item in spans):
-            raise ValueError('actor annotations need original source order')
-        candidate['annotation_spans'] = spans
+        candidate['annotation_spans'] = _ordered_annotations(candidate, spans)
     for kind, label in labels.items():
+        candidate[label]=[row['text'] for row in candidate.get('annotations') or [] if row['kind']==kind]
         if candidate.get(label):
             candidate[kind] = candidate[label][0]
+
+
+def _ordered_annotations(candidate, spans):
+    if [item['start'] for item in spans] == sorted(item['start'] for item in spans):
+        return spans
+    if len(spans) != len(candidate['annotations']):
+        raise ValueError('actor annotations need original source order with every position verified')
+    order=sorted(range(len(spans)),key=lambda index:spans[index]['start'])
+    candidate['annotations']=[candidate['annotations'][index] for index in order]
+    candidate['annotation_order_recovery']={'source_order':order}
+    return [spans[index] for index in order]
 
 
 def _annotation_span(original, entry, candidate, text_start, answer):
