@@ -26,6 +26,7 @@ from .natural_local_delivery import explicit_creator_phase
 from .natural_delivery_phase import project_creator_phase
 from .creator_body_boundary import detach_creator_notes
 from .natural_editor_focus import recover_creator_editor_focus
+from .natural_reference_delivery import restore_material_receipts
 from .scene_integrity import validate_integrity_delivery
 from literary_engineering_studio_engine.public.literary import (
     ACTOR_CARD_SECTIONS, ACTOR_CARD_SCHEMA, LEGACY_ACTOR_CARD_SCHEMA,
@@ -161,6 +162,8 @@ def _prepare_transport_payload(answer, payload, kind, context):
     if kind == 'tone':
         payload = restore_tone_source(answer,payload,context.get('prose'))
     validate_extracted_text(answer, payload, kind, context)
+    if kind == 'material':
+        restore_material_receipts(answer, payload)
     if kind == "creator" and "briefing" in context:
         _validate_creator_material_requests(answer, payload, context)
     return payload

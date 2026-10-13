@@ -7,6 +7,23 @@ from literary_engineering_studio.runtimes.archive_partition_transport import req
 from literary_engineering_studio.runtimes.natural_transport_repair import NaturalSourceClarificationError, repair_paths
 
 class LiveTransportRegressions(unittest.TestCase):
+    def test_partial_material_receipts_require_current_source_hash_and_literal_text(self):
+        from literary_engineering_studio.runtimes.scene_natural_output import NaturalOutputProcessor
+        from pathlib import Path
+        source='第一段。\n\n第二段。\n\n第三段。\n\n第四段。'
+        processor=NaturalOutputProcessor(Path('.'),'整理',lambda *_:self.fail('unexpected model call'))
+        payload={'source_sha256':sha256(source.encode()).hexdigest(),
+            'candidates':[{'text':text,'focus':'原文片段'} for text in source.split('\n\n')]}
+        restored=processor.revalidate_record(source,payload,'material',{'role':'environment-writer'})
+        self.assertTrue(all(x['source_delivery']=='original-v2' for x in restored['candidates']))
+        self.assertEqual(restored['source_reference_receipt_recovery']['candidate_indices'],[0,1,2,3])
+        payload['source_sha256']='0'*64
+        unbound=processor.revalidate_record(source,payload,'material',{'role':'environment-writer'})
+        self.assertTrue(all('source_delivery' not in x for x in unbound['candidates']))
+        payload['candidates'][0]['text']='改写后的段落。'
+        with self.assertRaisesRegex(ValueError,'candidate text'):
+            processor.revalidate_record(source,payload,'material',{'role':'environment-writer'})
+
     def test_pure_nested_candidate_container_preserves_literals_order_and_provenance(self):
         from literary_engineering_studio.runtimes.scene_natural_output import NaturalOutputProcessor
         from pathlib import Path

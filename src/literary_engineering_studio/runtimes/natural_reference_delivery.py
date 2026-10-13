@@ -1,5 +1,6 @@
 """Decode literal references and preserve actor annotations in original order."""
 from copy import deepcopy
+from hashlib import sha256
 import json
 from .natural_reference_ranges import recover_reference_ranges
 from literary_engineering_studio_engine.public.literary import (
@@ -11,6 +12,20 @@ class PartialReferenceError(ValueError):
     def __init__(self, payload, paths, issues):
         super().__init__('; '.join(issues))
         self.payload, self.paths = payload, paths
+
+
+def restore_material_receipts(answer, payload):
+    digest=sha256(answer.encode('utf-8')).hexdigest()
+    if payload.get('source_sha256')!=digest:
+        return
+    recovered=[]
+    for index,candidate in enumerate(payload.get('candidates') or []):
+        text=candidate.get('text') if isinstance(candidate,dict) else None
+        if isinstance(text,str) and text.strip() and text in answer and candidate.get('source_delivery') is None:
+            candidate['source_delivery']='original-v2'
+            recovered.append(index)
+    if recovered:
+        payload['source_reference_receipt_recovery']={'source_sha256':digest,'candidate_indices':recovered}
 
 
 def decode_reference_delivery(raw, answer):
