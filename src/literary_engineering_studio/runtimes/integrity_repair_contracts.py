@@ -50,7 +50,8 @@ def integrity_field_contract(path):
         proposal = {'target_ref': 'context.available_delta_targets中的本场实际目标',
                     'summary': '本稿实际改变', 'evidence': '当前正文准确原句',
                     'operation': 'append/update/replace', 'attributes': {}}
-        return {'character_changes': [proposal], 'canon_candidates': [proposal],
+        canon_proposal={**proposal,'summary':'仅一个对象的一项持续事实，不含分号；canon_candidates每条必须在facts中恰有一条durable=true、source_state=new或changed、delta_group=canon_candidates且delta_target/delta_summary逐字相同的事实'}
+        return {'character_changes': [proposal], 'canon_candidates': [canon_proposal],
                 'continuity_changes': [proposal], 'promise_updates': [],
                 'reader_question_updates': [], 'new_asset_candidates': [],
                 'next_handoff': ['下一场交接原作者文字；没有则空数组']}
