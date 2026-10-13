@@ -512,7 +512,8 @@ function projectToolDefinition(name: string): {
 			]),
 			objective: Type.Optional(Type.String({ maxLength: 8000 })),
 			stop_after_formal_units: Type.Optional(Type.Integer({ minimum: 0, maximum: 100000 })),
-			expected_stop_reason: Type.Optional(Type.String({ maxLength: 100 })),
+			expected_stop_reason: Type.Optional(Type.String({ maxLength: 100,
+				description: "Exact run.stop_reason from the latest diagnosis, never last_error. checkpoint_changed means resume was not executed; re-read current state." })),
 		}),
 	};
 	if (name === PROJECT_CHAPTER_EXTEND_TOOL) return {
