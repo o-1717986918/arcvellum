@@ -7,6 +7,23 @@ from literary_engineering_studio.runtimes.archive_partition_transport import req
 from literary_engineering_studio.runtimes.natural_transport_repair import NaturalSourceClarificationError, repair_paths
 
 class LiveTransportRegressions(unittest.TestCase):
+    def test_pure_nested_candidate_container_preserves_literals_order_and_provenance(self):
+        from literary_engineering_studio.runtimes.scene_natural_output import NaturalOutputProcessor
+        from pathlib import Path
+        answer='碗搁在柜台。\n\n他没有回头。'
+        first={'text':'碗搁在柜台。','basis':'proposed','source_note':'作者新拟'}
+        second={'text':'他没有回头。','basis':'attributed','source_note':'人物转述'}
+        raw={'candidates':[first,{'candidates':[second]}]}
+        decoded=decode_reference_delivery(raw,answer)
+        self.assertEqual([row['text'] for row in decoded['candidates']],[first['text'],second['text']])
+        self.assertEqual(decoded['candidates'][1]['basis'],'attributed')
+        self.assertEqual(decoded['candidate_container_recovery']['container_positions'],[[1]])
+        processor=NaturalOutputProcessor(Path('.'),'整理',lambda *_:self.fail('unexpected model call'))
+        processor.revalidate_record(answer,decoded,'material',{'role':'event-narrator'})
+        ambiguous=decode_reference_delivery({'candidates':[{'candidates':[second],'basis':'confirmed'}]},answer)
+        with self.assertRaisesRegex(ValueError,'candidate text'):
+            processor.revalidate_record(answer,ambiguous,'material',{'role':'event-narrator'})
+
     def test_inherited_author_question_is_preserved_without_an_unrelated_editor_request(self):
         from literary_engineering_studio.runtimes.natural_editor_focus import recover_creator_editor_focus
         question='章末余味尚待作者确定，暂留开口。'

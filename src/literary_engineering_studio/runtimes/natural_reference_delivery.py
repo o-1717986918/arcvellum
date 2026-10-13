@@ -15,6 +15,7 @@ class PartialReferenceError(ValueError):
 
 def decode_reference_delivery(raw, answer):
     raw = delivery_fields(raw)
+    raw = _candidate_containers(raw)
     raw = _encoded_references(raw, answer)
     if 'source_sha256' not in raw:
         raw={**raw,'source_sha256':natural_source_index(answer)['sha256']}
@@ -42,6 +43,25 @@ def _encoded_references(value, answer):
         if isinstance(parsed, dict) and set(parsed) == {'$source'} and isinstance(parsed['$source'], dict):
             return parsed
     return value
+
+
+def _candidate_containers(raw):
+    candidates = raw.get('candidates')
+    if not isinstance(candidates, list):
+        return raw
+    flattened, containers = [], []
+    def append(rows, path):
+        for index, row in enumerate(rows):
+            position = path + [index]
+            if isinstance(row, dict) and set(row) == {'candidates'} and isinstance(row['candidates'], list):
+                containers.append(position)
+                append(row['candidates'], position)
+            else:
+                flattened.append(row)
+    append(candidates, [])
+    if not containers:
+        return raw
+    return {**raw, 'candidates': flattened, 'candidate_container_recovery': {'container_positions': containers}}
 
 
 def _reference_envelope(value):

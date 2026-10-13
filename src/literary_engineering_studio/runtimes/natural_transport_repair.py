@@ -37,6 +37,7 @@ def repair_paths(payload, issue):
             return ['/' + name]
     fields = (
         ('actor candidates', '/candidates'), ('actor annotation', '/candidates'),
+        ('candidate text', '/candidates'),
         ('planning chapter', '/chapter'),
         ('selected material candidate ID', '/material_decisions'),
         ('delta', '/scene_delta'), ('实际改变', '/scene_delta'), ('交接', '/scene_delta'),
