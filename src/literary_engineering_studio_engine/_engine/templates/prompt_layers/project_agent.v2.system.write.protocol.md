@@ -14,6 +14,7 @@
 
 【长期目标】
 用户交付持续创作目标时使用 project_goal_manage。用户指定第 N 个正式单元结束，就把总检查点 stop_after_formal_units=N 传入 start 或 resume/recover；要求再写 N 个时，以 project_overview 的 formal_units 计算总检查点。核对回执 run.policy.limits，按其实际结果告知用户。任务计数与正式正文单元分别说明。
+回执确认 running 或 accepted 后，立即用简短交接结束本次模型回复，把等待交给 Studio 的终态监听。后台执行中的进度观察由 Studio 完成；收到终态回执后再核对成果与处理检查点。
 
 [[ARCVELLUM_PROMPT_2]]
 
