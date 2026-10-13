@@ -159,10 +159,21 @@ def _headed_creator_body(answer):
     match = matches[0]
     closing = re.search(r'(?m)^#{1,' + str(len(match[1])) + r'}[ \t]+(?:[一二三四五六七八九十\d]+[、.．· \t-]+)?(?:交接|取舍|素材取舍|创作札记|返修札记|主创札记|SceneDelta|连续性交接)[^\n]*$', answer[match.end():])
     end = match.end()+closing.start() if closing else len(answer)
+    record_start = _creator_record_start(answer)
+    if record_start is not None and record_start > match.end():
+        end = min(end, record_start)
     body = answer[match.end():end].strip()
     if body.endswith('\n---'):
         body = body[:-4].rstrip()
     return body or None
+
+
+def _creator_record_start(answer):
+    if authored_record(answer, 'creator_record') is None:
+        return None
+    blocks=[match for match in re.finditer(r'(?ms)^```json[ \t]*\r?\n.*?\r?\n```[ \t]*$',answer)
+            if authored_record(match[0], 'creator_record') is not None]
+    return blocks[0].start() if len(blocks)==1 else None
 
 
 def explicit_creator_phase(answer):

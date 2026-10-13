@@ -67,6 +67,13 @@ def last_worker_result(output_path: Path | None) -> dict[str, Any]:
         data = payload.get("data")
         if isinstance(data, dict):
             result = public_event_data(data)
+            # Formal reply text is an execution value. The UI preview cap must
+            # never cut author metadata, prose or initialization mid-delivery.
+            for field in ("answer", "initializationAnswer"):
+                if isinstance(data.get(field), str):
+                    if len(data[field]) > 160_000:
+                        raise ValueError("worker reply exceeds the complete-delivery budget")
+                    result[field] = data[field]
     return result
 
 
