@@ -11,6 +11,7 @@ import sys
 VERSION_PATTERN = re.compile(r'^\s*version\s*=\s*"([^"]+)"', re.MULTILINE)
 PYTHON_PATTERN = re.compile(r'__version__\s*=\s*"([^"]+)"')
 WORKER_PATTERN = re.compile(r'const\s+VERSION\s*=\s*"([^"]+)"')
+LOCK_CARGO_PATTERN = re.compile(r'\[\[package\]\]\s*name\s*=\s*"arcvellum-desktop"\s*version\s*=\s*"([^"]+)"')
 
 
 def version_matrix(root: Path) -> dict[str, str]:
@@ -30,6 +31,9 @@ def version_matrix(root: Path) -> dict[str, str]:
     if not worker_match:
         raise RuntimeError("could not read Pi Worker runtime version")
     tauri = json.loads((root / "desktop/src-tauri/tauri.conf.json").read_text(encoding="utf-8"))
+    lock = json.loads((root / "package-lock.json").read_text(encoding="utf-8"))
+    worker_lock = json.loads((root / "workers/pi-worker/package-lock.json").read_text(encoding="utf-8"))
+    cargo_lock = LOCK_CARGO_PATTERN.search((root / "desktop/src-tauri/Cargo.lock").read_text(encoding="utf-8"))
     return {
         "python": python_match.group(1),
         "pyproject": pyproject_match.group(1),
@@ -38,6 +42,11 @@ def version_matrix(root: Path) -> dict[str, str]:
         "pi-worker-runtime": worker_match.group(1),
         "cargo": cargo_match.group(1),
         "tauri": str(tauri.get("version") or ""),
+        "node-lock": str(lock.get("version") or ""),
+        "node-lock-package": str(lock.get("packages", {}).get("", {}).get("version") or ""),
+        "pi-worker-lock": str(worker_lock.get("version") or ""),
+        "pi-worker-lock-package": str(worker_lock.get("packages", {}).get("", {}).get("version") or ""),
+        "cargo-lock": cargo_lock.group(1) if cargo_lock else "",
     }
 
 
