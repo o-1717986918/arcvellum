@@ -41,7 +41,7 @@ def integrity_field_contract(path):
                 'evidence': '当前正文准确短原句，字符串',
                 'source_state': 'new/changed/unchanged/attributed/pending', 'durable': '布尔值',
                 'delta_group': '新改持续事实对应实际Delta组', 'delta_target': '对应target_ref',
-                'delta_summary': '对应summary'}], 'no_persistent_facts_reason': '无事实时的理由',
+                'delta_summary': '逐字符复制对应scene_delta提案的summary，包含全部标点，不另写概括'}], 'no_persistent_facts_reason': '无事实时的理由',
             'prior_delta_dispositions': [{'proposal_id': 'prior_delta_inventory编号',
                 'action': 'retain/replace/withdraw', 'reason': '逐项原作者判断',
                 'replacement': {'group': 'replace时的组', 'target_ref': 'replace时目标',
