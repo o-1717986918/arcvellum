@@ -52,5 +52,16 @@ class CacheSessionIntegrityTests(unittest.TestCase):
             packet={"scene_brief":Brief().to_dict(),"canon_sources":[{"path":"canon.json","file_sha256":sha256(b"pending").hexdigest()}]}
             validate_frozen_sources(packet,root,Brief())
             (root/"canon.json").write_text("applied",encoding="utf-8")
-            with self.assertRaisesRegex(RuntimeError,"Canon"):
+            with self.assertRaisesRegex(RuntimeError,"scene source revision changed:.*Canon") as caught:
                 validate_frozen_sources(packet,root,Brief())
+            from unittest.mock import MagicMock
+            from literary_engineering_studio.automation.lean_scene_loop import LeanSceneRunCoordinator
+            from literary_engineering_studio_engine.public.literary import SceneExecutionMode, SceneTransactionStatus
+            coordinator=object.__new__(LeanSceneRunCoordinator);coordinator.project=root;coordinator.service=MagicMock()
+            coordinator.service.prepare.return_value=MagicMock(scene_id='one',transaction_id='new',
+                                                               status=SceneTransactionStatus.PREPARED,last_error='')
+            stale=MagicMock(review=None,last_error=str(caught.exception),scene_id='one',mode=SceneExecutionMode.STANDARD)
+            step=coordinator._resume_blocked(stale)
+            self.assertEqual(step.action,'reprepared')
+            self.assertEqual(step.transaction_id,'new')
+            coordinator.service.resume.assert_not_called()

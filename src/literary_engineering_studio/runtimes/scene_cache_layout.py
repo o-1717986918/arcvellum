@@ -75,7 +75,7 @@ CONTEXT_RULE = "本次文风以用户消息 current_style_direction 的完整当
 
 def validate_frozen_sources(briefing, root, brief):
     if briefing.get("scene_brief") != brief.to_dict():
-        raise RuntimeError("frozen scene brief changed; create a new transaction")
+        raise RuntimeError("scene source revision changed: frozen scene brief changed; create a new transaction")
     for row in [*briefing.get("source_entries", []), *briefing.get("canon_sources", [])]:
         relative = row.get("path")
         if not relative:
@@ -85,7 +85,7 @@ def validate_frozen_sources(briefing, root, brief):
             raise RuntimeError("frozen source escaped its work boundary")
         actual = sha256(path.read_bytes()).hexdigest() if path.is_file() else None
         if actual != row.get("file_sha256"):
-            raise RuntimeError("frozen Canon, continuity or user direction changed; create a new transaction")
+            raise RuntimeError("scene source revision changed: frozen Canon, continuity or user direction changed; create a new transaction")
 
 
 def review_layout(layers, briefing, context, snapshot):
