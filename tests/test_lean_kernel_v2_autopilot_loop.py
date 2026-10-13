@@ -343,6 +343,16 @@ class LeanAutopilotLoopTests(unittest.TestCase):
         )
         coordinator.service.resume.assert_not_called()
 
+    def test_legacy_frozen_source_error_starts_a_new_transaction_without_retrying_stale_input(self):
+        coordinator=object.__new__(LeanSceneRunCoordinator)
+        coordinator.project=Path('project').resolve();coordinator.service=MagicMock()
+        fresh=MagicMock(scene_id='scene_0001',transaction_id='new',status=SceneTransactionStatus.PREPARED,last_error='')
+        coordinator.service.prepare.return_value=fresh
+        stale=MagicMock(review=None,last_error='frozen Canon, continuity or user direction changed; create a new transaction',
+                        scene_id='scene_0001',mode=SceneExecutionMode.STANDARD)
+        self.assertEqual(coordinator._resume_blocked(stale).transaction_id,'new')
+        coordinator.service.resume.assert_not_called()
+
     def test_revision_count_does_not_stop_effective_model_revisions(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

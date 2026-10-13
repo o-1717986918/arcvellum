@@ -201,7 +201,8 @@ class LeanSceneRunCoordinator:
     def _resume_blocked(self, transaction) -> LeanSceneStep:
         if transaction.review is not None and transaction.review.decision is ReviewDecision.ESCALATE:
             return self._blocked(transaction, transaction.last_error or "review escalated")
-        if "scene source revision changed:" in transaction.last_error:
+        if ("scene source revision changed:" in transaction.last_error or transaction.last_error.startswith((
+                "frozen Canon, continuity or user direction changed;", "frozen scene brief changed;"))):
             refreshed = self.service.prepare(
                 self.project,
                 transaction.scene_id,
