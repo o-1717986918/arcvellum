@@ -58,6 +58,7 @@ def _role_failure_summary(kind):
 
 class RoleConversationGateway:
     """Run bounded literary roles; only the scene creator gets material-file reads."""
+    supports_conversation_sessions = True
 
     def __init__(self, config: dict[str, Any], *, data_root: Path):
         self.config = config
@@ -95,6 +96,7 @@ class RoleConversationGateway:
         self, workspace: Path, *, initialization: str, initialization_answer: str,
         history: Sequence[tuple[str, str]], prompt: str, timeout: int,
         event_sink: Callable[[str, dict[str, Any]], None] | None = None,
+        session_ref: dict[str, Any] | None = None,
     ) -> RoleConversationResult:
         """Continue one actor's scene transcript without regenerating prior replies."""
 
@@ -105,6 +107,7 @@ class RoleConversationGateway:
             "initialization_answer": initialization_answer,
             "history": [{"prompt": question, "answer": answer} for question, answer in history],
             "prompt": prompt,
+            **({"conversation_session":session_ref} if session_ref else {}),
         }, ensure_ascii=False)
         return self._execute(workspace, payload, role="character-actor", timeout=timeout,
                              event_sink=event_sink, cancel_event=None, turns=1)
@@ -113,6 +116,7 @@ class RoleConversationGateway:
         self, workspace: Path, *, role: str, initialization: str,
         history: Sequence[tuple[str, str]], prompt: str, timeout: int,
         event_sink: Callable[[str, dict[str, Any]], None] | None = None,
+        session_ref: dict[str, Any] | None = None,
     ) -> RoleConversationResult:
         if role not in {"environment-writer", "character-describer", "event-narrator", "scene-describer"}:
             raise ValueError("unsupported initialized literary role")
@@ -123,6 +127,7 @@ class RoleConversationGateway:
             "initialization_answer": "",
             "history": [{"prompt": question, "answer": answer} for question, answer in history],
             "prompt": prompt,
+            **({"conversation_session":session_ref} if session_ref else {}),
         }, ensure_ascii=False)
         return self._execute(workspace, payload, role=role, timeout=timeout,
                              event_sink=event_sink, cancel_event=None, turns=1)
@@ -138,6 +143,7 @@ class RoleConversationGateway:
             raise RuntimeError(f"tool-free role conversation is unsupported by runtime: {runtime_id}")
         settings, model = _role_settings(self.config, role)
         run_root, prompt_path = _prepare_run(self.data_root, role, prompt)
+        session_args = {"conversation_store_root":str((self.data_root / "private-conversation-replay").resolve())} if json.loads(prompt).get("conversation_session") else {}
         pieces: list[str] = []
         purpose = purpose_from_envelope(prompt, role)
         thinking = purpose_thinking(purpose, role, settings)
@@ -147,6 +153,7 @@ class RoleConversationGateway:
 
         def observe(event: str, data: dict[str, Any]) -> None:
             if event in {'usage.updated', 'runner.provider.request.started',
+                         'runner.cache.usage.observed', 'runner.cache.request.shape', 'runner.conversation.replay',
                          'runner.http.attempt.started', 'runner.http.attempt.completed', 'runner.http.attempt.failed'}:
                 data = {**binding, **data}
                 if event == 'runner.http.attempt.started':
@@ -176,6 +183,7 @@ class RoleConversationGateway:
             max_tool_calls=(64 if json.loads(prompt)["schema"] == "arcvellum/scene-creator/v2"
                             else 8) if scene_creator else 1,
             max_repairs=0,
+            **session_args,
         )
         worker_result = _worker_result(result.metadata)
         final_answer = str(worker_result.get("answer") or "").strip()

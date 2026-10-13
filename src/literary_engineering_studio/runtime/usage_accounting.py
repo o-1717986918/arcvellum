@@ -2,6 +2,7 @@
 from datetime import datetime, timezone, timedelta
 from decimal import Decimal
 import math
+from .cache_accounting import summarize_server_cache
 
 PRICE_SOURCE = 'https://api-docs.deepseek.com/zh-cn/quick_start/pricing/'
 PRICE_OBSERVED_AT = '2026-10-11'
@@ -57,6 +58,7 @@ def usage_identity(data,fallback=''):
 
 
 def summarize_usage_events(events):
+    events = list(events)
     ids = {key:set() for key in ('invocation_ids','model_request_ids','http_attempt_ids')}
     totals = {'token_details':{field:0 for field in TOKEN_FIELDS},'catalog':Decimal(0),'public':Decimal(0),
               'unknown_usage_updates':0,'unknown_catalog_cost_updates':0,'unknown_estimates':0,
@@ -70,14 +72,14 @@ def summarize_usage_events(events):
                 ids[field].add(data[key])
         if name == 'billing.actual_charge.recorded':
             _record_actual(totals,data)
-        if name != 'usage.updated' and event.get('channel') != 'usage':
+        if not _usage_event(name, event):
             continue
         identity = usage_identity(data,event.get('event_id') or event.get('sequence'))
         if not identity or identity in totals['usage_ids']:
             continue
         totals['usage_ids'].add(identity)
         _add_usage(totals,data,event.get('at') or data.get('created_at'))
-    return _accounting_result(ids,totals)
+    return {**_accounting_result(ids,totals), "server_cache": summarize_server_cache(events)}
 
 
 def _add_usage(totals,data,at):
@@ -122,6 +124,10 @@ def _accounting_result(ids,totals):
 
 def _valid_price(price):
     return isinstance(price,dict) and price.get('currency')=='CNY' and _number(price.get('amount'))>0
+
+
+def _usage_event(name, event):
+    return not name.startswith('runner.cache.') and (name == 'usage.updated' or event.get('channel') == 'usage')
 
 
 def _record_actual(totals,data):
