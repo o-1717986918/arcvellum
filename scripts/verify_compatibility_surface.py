@@ -50,8 +50,10 @@ def audit(root: Path) -> list[str]:
         errors.append("agent runtime default is not pi-worker")
     if defaults.get("model_invocation") != "runner-managed":
         errors.append("model invocation default is not runner-managed")
-    if defaults.get("scene_generation") != "arcvellum-worker-task":
-        errors.append("scene generation default is not arcvellum-worker-task")
+    if defaults.get("scene_generation") != "arcvellum-scene-transaction":
+        errors.append("scene generation default is not arcvellum-scene-transaction")
+    if defaults.get("scene_creator") != "natural-v2" or defaults.get("conversation_cache_layout") != "stable-prefix-v2":
+        errors.append("current creative prompt/cache defaults are not declared")
     errors.extend(_runtime_default_errors(root))
     errors.extend(_history_errors(manifest))
 

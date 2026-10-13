@@ -34,7 +34,9 @@ def version_matrix(root: Path) -> dict[str, str]:
     lock = json.loads((root / "package-lock.json").read_text(encoding="utf-8"))
     worker_lock = json.loads((root / "workers/pi-worker/package-lock.json").read_text(encoding="utf-8"))
     cargo_lock = LOCK_CARGO_PATTERN.search((root / "desktop/src-tauri/Cargo.lock").read_text(encoding="utf-8"))
+    compatibility = json.loads((root / "src/literary_engineering_studio/application/compatibility_manifest.json").read_text(encoding="utf-8"))
     return {
+        "compatibility": str(compatibility.get("current_release", {}).get("version") or ""),
         "python": python_match.group(1),
         "pyproject": pyproject_match.group(1),
         "node": str(package.get("version") or ""),

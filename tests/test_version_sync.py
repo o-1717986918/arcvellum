@@ -17,7 +17,8 @@ class VersionSyncTests(unittest.TestCase):
         files=('src/literary_engineering_studio/__init__.py','pyproject.toml','package.json',
                'package-lock.json','workers/pi-worker/package.json','workers/pi-worker/package-lock.json',
                'workers/pi-worker/src/main.ts','desktop/src-tauri/Cargo.toml',
-               'desktop/src-tauri/Cargo.lock','desktop/src-tauri/tauri.conf.json')
+               'desktop/src-tauri/Cargo.lock','desktop/src-tauri/tauri.conf.json',
+               'src/literary_engineering_studio/application/compatibility_manifest.json')
         with TemporaryDirectory() as temporary:
             root=Path(temporary)
             for path in files:

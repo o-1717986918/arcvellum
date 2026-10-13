@@ -33,7 +33,7 @@ class CompatibilityManifestTests(unittest.TestCase):
         )
         self.assertEqual(
             current["defaults"]["scene_generation"],
-            "arcvellum-worker-task",
+            "arcvellum-scene-transaction",
         )
         self.assertEqual(
             current["defaults"]["model_invocation"],

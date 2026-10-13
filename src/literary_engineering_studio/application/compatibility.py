@@ -34,6 +34,9 @@ def compatibility_summary() -> dict[str, Any]:
         "default_agent_runtime": str(defaults.get("agent_runtime") or ""),
         "model_invocation": str(defaults.get("model_invocation") or ""),
         "scene_generation": str(defaults.get("scene_generation") or ""),
+        "formal_task_generation": str(defaults.get("formal_task_generation") or ""),
+        "scene_creator": str(defaults.get("scene_creator") or ""),
+        "conversation_cache_layout": str(defaults.get("conversation_cache_layout") or ""),
         "deprecated_alias_count": len(aliases) if isinstance(aliases, list) else 0,
         "legacy_provider_count": len(providers) if isinstance(providers, list) else 0,
         "minimum_compatibility_window": str(

@@ -2,12 +2,15 @@
   "schema": "arcvellum/compatibility-manifest/v2",
   "manifest_version": 2,
   "current_release": {
-    "version": "0.99.12",
+    "version": "0.99.13",
     "release_line": "0.99",
     "defaults": {
       "agent_runtime": "pi-worker",
       "model_invocation": "runner-managed",
-      "scene_generation": "arcvellum-worker-task"
+      "scene_generation": "arcvellum-scene-transaction",
+      "formal_task_generation": "arcvellum-worker-task",
+      "scene_creator": "natural-v2",
+      "conversation_cache_layout": "stable-prefix-v2"
     }
   },
   "compatibility": {
@@ -26,7 +29,11 @@
       "native_project_schema": "arcvellum/project/v2",
       "native_task_schema": "arcvellum/task/v2",
       "command": "project-migrate-schema",
-      "modes": ["preview", "backup", "apply"],
+      "modes": [
+        "preview",
+        "backup",
+        "apply"
+      ],
       "unknown_schema_policy": "retain-and-report"
     },
     "engine_public_api": {
