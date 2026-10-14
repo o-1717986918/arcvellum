@@ -109,7 +109,7 @@ jobs:
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ArcVellum-${{ github.ref_name }}-windows-x64
+          name: ArcVellum-${{ github.run_id }}-windows-x64
           path: dist/release/*
           if-no-files-found: error
 
@@ -154,7 +154,7 @@ jobs:
         run: bash packaging/build_desktop_macos.sh "${{ matrix.target }}"
       - uses: actions/upload-artifact@v4
         with:
-          name: ArcVellum-${{ github.ref_name }}-${{ matrix.artifact }}
+          name: ArcVellum-${{ github.run_id }}-${{ matrix.artifact }}
           path: dist/release/*.dmg
           if-no-files-found: error
 
