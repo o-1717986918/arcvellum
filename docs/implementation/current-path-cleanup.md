@@ -36,3 +36,11 @@ Module Change Packet：primary_module 为 Studio runtime；objective 为移除�
 另外按 automation、creative_live、persistence、Engine composition / workflow 和 narrative projection 各自所有权记录私有 helper 清理 packet：只删除已核实无调用的定义及导入。叙事图公开 projection_motion_events 导出保留。场景范围测试原先 mock 已不调用的全扫描函数，现改为观察实际场景状态构建次数，确认只处理指定场景。动态注册的吞吐事件处理器保留。
 
 Engine command-line packet：移除十处没有 handler 消费的 `--provider` 兼容参数；当前命令直接准备 Worker 任务，桥接入口拒绝旧参数的分离与等号两种写法。验证 parser、桥接安全及平台任务准备，文学行为和正式 Gate 不变。
+
+## 完成验证
+
+本轮共删除 73 个源模块和 5 个只覆盖退役实现的测试文件，净减少约 7,970 行。32 个静态无生产导入候选及 25 个私有定义候选均已保存逐项处置。14 个动态事件处理器保留。没有新增付费模型调用。
+
+最终 Python 回归运行 2,065 项，1 项跳过，其余通过。前端未使用变量/参数检查及前端、Pi Worker 构建通过；架构、版本同步、模块地图、提示词注册表和 OpenAPI 合同检查通过。架构债务收紧至 15 项文件、68 项函数，原预算不变，循环依赖及 Studio 越界 Engine 导入均为零。
+
+234 个变更文件经身份核对后同步至共享工作树，无冲突、无暂存区变动，保留备份；共享工作树另行通过 20 项入口、生命周期、文风快照及桥接测试。模块地图各自依据其工作树的已跟踪文件生成。清理代码在 refactor/current-path-cleanup 分支；v0.99.13 发布标签及安装包保持发布时的实测版本，不将之后的清理误称为已装入该安装包。
