@@ -23,7 +23,6 @@ def register_style_commands(sub) -> None:
 
     style_prompt = sub.add_parser("style-prompt", help="Write an ArcVellum Worker task for a style constraint prompt.")
     style_prompt.add_argument("profile_dir", help="Directory containing style-profile.md and style_metrics.json.")
-    style_prompt.add_argument("--provider", default="platform-agent", help="Legacy compatibility field; formal execution always targets ArcVellum Worker.")
     style_prompt.add_argument("--out", default="", help="Output style prompt path. Defaults to profile_dir/style_prompt.md.")
     style_prompt.add_argument("--manifest-out", default="", help="Output prompt manifest path. Defaults to profile_dir/style_prompt.prompt.json.")
 
@@ -32,7 +31,6 @@ def register_style_commands(sub) -> None:
     style_prompt_eval.add_argument("--reference", required=True, help="Original/reference Chinese text file.")
     style_prompt_eval.add_argument("--input", required=True, help="Back-translation English text, outline, or blind-review task input.")
     style_prompt_eval.add_argument("--mode", default="back-translation", choices=sorted(STYLE_EVAL_MODES))
-    style_prompt_eval.add_argument("--provider", default="platform-agent", help="Legacy compatibility field; formal execution always targets ArcVellum Worker.")
     style_prompt_eval.add_argument("--style-prompt", default="", help="Style prompt path. Defaults to profile_dir/style_prompt.md.")
     style_prompt_eval.add_argument("--out-dir", default="", help="Output directory. Defaults to profile_dir/evaluation_results/{mode}.")
 
@@ -87,7 +85,6 @@ def _register_style_library_commands(sub) -> None:
     style_lab_compile.add_argument("--library", default="", help="Style library root. Defaults to global config.")
     style_lab_compile.add_argument("--author-id", required=True)
     style_lab_compile.add_argument("--profile-id", default="default")
-    style_lab_compile.add_argument("--provider", default="platform-agent", help="Legacy compatibility field; formal execution always targets ArcVellum Worker.")
 
     style_lab_skill = sub.add_parser("style-lab-build-skill", help="Build a mountable style skill from an author profile.")
     style_lab_skill.add_argument("--library", default="", help="Style library root. Defaults to global config.")

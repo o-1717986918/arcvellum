@@ -28,7 +28,6 @@ from .state_scene import (
     _scene_paths_for_scope,
     _scene_scope_summary,
     _scene_state,
-    _scene_states,
     _static_review_step,
     current_scene_candidate,
     next_scene_workflow_state,

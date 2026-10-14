@@ -8,12 +8,6 @@ from literary_engineering_studio.runtime.context_cache import (
     context_cache_key_fingerprint,
     partition_reusable,
 )
-from literary_engineering_studio.runtime.session_lease import (
-    SessionLease,
-    SessionRole,
-    session_lease_violations,
-    session_reusable,
-)
 
 
 def _key(**overrides):
@@ -33,24 +27,6 @@ def _key(**overrides):
     return ContextCacheKey(**base)
 
 
-def _lease(**overrides):
-    base = dict(
-        session_id="session-1",
-        role=SessionRole.WRITER,
-        project_id="project-test",
-        model_id="model-1",
-        style_mount_hash="style-1",
-        context_ledger_epoch="epoch-1",
-        previous_task_completed=True,
-        token_used=1000,
-        elapsed_seconds=60.0,
-        failure_count=0,
-        max_tokens=5000,
-        max_seconds=600.0,
-        max_failures=2,
-    )
-    base.update(overrides)
-    return SessionLease(**base)
 
 
 class ContextCacheKeyTests(unittest.TestCase):
@@ -83,130 +59,6 @@ class ContextCacheKeyTests(unittest.TestCase):
         )
 
 
-class SessionLeaseTests(unittest.TestCase):
-    def test_identical_lease_is_reusable(self):
-        decision = session_reusable(
-            _lease(),
-            role=SessionRole.WRITER,
-            project_id="project-test",
-            model_id="model-1",
-            style_mount_hash="style-1",
-            context_ledger_epoch="epoch-1",
-        )
-
-        self.assertTrue(decision.reusable)
-        self.assertEqual(decision.reasons, ())
-
-    def test_role_mismatch_blocks_reuse(self):
-        decision = session_reusable(
-            _lease(role=SessionRole.WRITER),
-            role=SessionRole.REVIEWER,
-            project_id="project-test",
-            model_id="model-1",
-            style_mount_hash="style-1",
-            context_ledger_epoch="epoch-1",
-        )
-
-        self.assertFalse(decision.reusable)
-        self.assertIn("role-mismatch", decision.reasons)
-
-    def test_identity_changes_block_reuse(self):
-        decision = session_reusable(
-            _lease(),
-            role=SessionRole.WRITER,
-            project_id="project-other",
-            model_id="model-2",
-            style_mount_hash="style-2",
-            context_ledger_epoch="epoch-2",
-        )
-
-        self.assertFalse(decision.reusable)
-        for reason in (
-            "project-mismatch",
-            "model-mismatch",
-            "style-mismatch",
-            "context-ledger-invalidated",
-        ):
-            self.assertIn(reason, decision.reasons)
-
-    def test_budgets_and_completion_block_reuse(self):
-        decision = session_reusable(
-            _lease(
-                previous_task_completed=False,
-                token_used=6000,
-                elapsed_seconds=700.0,
-                failure_count=3,
-            ),
-            role=SessionRole.WRITER,
-            project_id="project-test",
-            model_id="model-1",
-            style_mount_hash="style-1",
-            context_ledger_epoch="epoch-1",
-        )
-
-        self.assertFalse(decision.reusable)
-        for reason in (
-            "previous-task-incomplete",
-            "token-budget-exceeded",
-            "time-budget-exceeded",
-            "failure-budget-exceeded",
-        ):
-            self.assertIn(reason, decision.reasons)
-
-    def test_exhausted_budget_boundary_blocks_reuse(self):
-        decision = session_reusable(
-            _lease(
-                token_used=5000,
-                elapsed_seconds=600.0,
-                failure_count=2,
-            ),
-            role=SessionRole.WRITER,
-            project_id="project-test",
-            model_id="model-1",
-            style_mount_hash="style-1",
-            context_ledger_epoch="epoch-1",
-        )
-
-        self.assertFalse(decision.reusable)
-        self.assertEqual(
-            decision.reasons,
-            (
-                "token-budget-exhausted",
-                "time-budget-exhausted",
-                "failure-budget-exhausted",
-            ),
-        )
-
-    def test_zero_budget_limits_are_invalid(self):
-        violations = session_lease_violations(
-            _lease(max_tokens=0, max_seconds=0.0, max_failures=0)
-        )
-
-        self.assertEqual(
-            [item.code for item in violations],
-            [
-                "invalid-budget-limit",
-                "invalid-budget-limit",
-                "invalid-budget-limit",
-            ],
-        )
-
-    def test_lease_structural_violations(self):
-        violations = session_lease_violations(
-            _lease(
-                session_id="",
-                token_used=-1,
-                elapsed_seconds=-1.0,
-            )
-        )
-
-        codes = {item.code for item in violations}
-        self.assertIn("missing-session-id", codes)
-        self.assertIn("invalid-counter", codes)
-        self.assertIn("invalid-duration", codes)
-
-    def test_valid_lease_has_no_violations(self):
-        self.assertEqual(session_lease_violations(_lease()), ())
 
 
 if __name__ == "__main__":

@@ -172,15 +172,6 @@ def serializable_branch(branch: dict[str, Any], root: Path) -> dict[str, Any]:
     }
 
 
-def _unknown_subtext(facts: SceneFacts) -> dict[str, Any]:
-    return {
-        "character_id": "unknown",
-        "name": "未建档角色",
-        "public_action": facts.scene_goal or "按场景目标行动。",
-        "hidden_pressure": facts.internal_conflict or "人物隐性压力未填写。",
-        "background_influence": "缺少正式人物 background_story，建议先补人物档案。",
-        "do_not_write_directly": ["不要用万能旁白替代人物动机。"],
-    }
 
 
 def _character_subtext(facts: SceneFacts, card: CharacterCard) -> dict[str, Any]:

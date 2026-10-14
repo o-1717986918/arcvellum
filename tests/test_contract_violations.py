@@ -32,8 +32,6 @@ from literary_engineering_studio.protocols.violations import (
     RelatedContractViolation,
 )
 from literary_engineering_studio.runtime.context_cache import CacheKeyViolation
-from literary_engineering_studio.runtime.output_repair import RepairViolation
-from literary_engineering_studio.runtime.session_lease import SessionLeaseViolation
 
 
 class ContractViolationTests(unittest.TestCase):
@@ -51,8 +49,6 @@ class ContractViolationTests(unittest.TestCase):
             SceneRiskViolation,
             RollingHorizonViolation,
             CacheKeyViolation,
-            RepairViolation,
-            SessionLeaseViolation,
         )
 
         self.assertTrue(all(alias is ContractViolation for alias in aliases))

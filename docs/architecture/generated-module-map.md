@@ -18,7 +18,7 @@
 | `src/literary_engineering_studio/application` | 82 | Studio use cases | `application services` | ports and Engine contracts | API/framework adapters |
 | `src/literary_engineering_studio/automation` | 23 | Campaign control | `automation/controller.py` | application/runtime ports | Engine route implementations |
 | `src/literary_engineering_studio/orchestration` | 51 | Adaptive plan domain | `orchestration services` | Engine catalog and ports | API or task lifecycle |
-| `src/literary_engineering_studio/runtime` | 102 | Controlled execution | `runtime worker/bundle ports` | contracts and infrastructure ports | literary route policy |
+| `src/literary_engineering_studio/runtime` | 96 | Controlled execution | `runtime worker/bundle ports` | contracts and infrastructure ports | literary route policy |
 | `src/literary_engineering_studio/runtimes` | 90 | Agent adapters | `runtimes registry` | Runtime SPI and external SDKs | Engine route implementations |
 | `src/literary_engineering_studio/persistence` | 32 | Durable adapters | `repository facades` | SQLite and file storage | literary decisions |
 | `src/literary_engineering_studio/projections` | 36 | Studio read models | `projection services` | read ports and Engine facts | promotion/writeback |

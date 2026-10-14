@@ -430,8 +430,6 @@ class JobStore:
         with self._write_lock, self._connection() as connection:
             initialize_schema(connection)
 
-    def _connect(self) -> sqlite3.Connection:
-        return self.unit_of_work.connect()
 
     @contextmanager
     def _connection(self):

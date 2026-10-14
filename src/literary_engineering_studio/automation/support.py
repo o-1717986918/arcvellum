@@ -212,13 +212,6 @@ def _delegated_direction_message(choice: dict[str, Any], decision: dict[str, Any
     return f"创作代理已在授权范围内决定：{title}选择‘{label}’。执行后续任务时必须落实该方向。理由：{rationale}"
 
 
-def _parse_time(value: str) -> datetime | None:
-    if not value:
-        return None
-    try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError:
-        return None
 
 
 def _now() -> str:

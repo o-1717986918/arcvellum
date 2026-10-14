@@ -23,6 +23,12 @@ def _subparser_action(parser: argparse.ArgumentParser) -> argparse._SubParsersAc
 
 
 class EngineCliSurfaceTests(unittest.TestCase):
+    def test_formal_commands_do_not_offer_retired_provider_options(self):
+        parser = build_parser(full_help=True)
+        for command, child in _subparser_action(parser).choices.items():
+            with self.subTest(command=command):
+                self.assertNotIn("--provider", child._option_string_actions)
+
     def test_formal_host_commands_remain_parseable(self):
         parser = build_parser()
         choices = set(_subparser_action(parser).choices)

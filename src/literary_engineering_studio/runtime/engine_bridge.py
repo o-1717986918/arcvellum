@@ -228,8 +228,5 @@ def _assert_studio_engine_args(args: list[str]) -> None:
         raise ValueError(f"embedded model/provider command is not available in Studio: {subcommand}")
     if any(item.startswith("--api-key") for item in args):
         raise ValueError("model credentials are not accepted by the Studio engine bridge")
-    if "--provider" in args:
-        index = args.index("--provider")
-        provider = args[index + 1] if index + 1 < len(args) else ""
-        if provider != "platform-agent":
-            raise ValueError("Studio only permits platform-agent task generation; direct model providers are disabled")
+    if any(item == "--provider" or item.startswith("--provider=") for item in args):
+        raise ValueError("provider options have been retired; formal commands prepare Worker tasks")

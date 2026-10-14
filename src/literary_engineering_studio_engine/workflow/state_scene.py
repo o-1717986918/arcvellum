@@ -33,11 +33,6 @@ from .state_common import (
     _file_step, _read, _read_json, _rel, _semantic_task_step,
     _task_step,
 )
-def _scene_states(root: Path) -> list[dict[str, object]]:
-    scenes = root / "scenes"
-    if not scenes.exists():
-        return []
-    return [_scene_state(root, path) for path in sorted(scenes.glob("*.yaml")) if not path.name.startswith("_")]
 
 
 def _scene_paths_for_scope(root: Path, scope: str) -> tuple[list[Path], dict[str, object]]:

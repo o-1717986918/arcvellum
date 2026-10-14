@@ -94,13 +94,15 @@ class CoreBridgeTests(unittest.TestCase):
             ["director-chat", "C:/project", "--message", "continue"],
             ["config-set-profile", "--name", "remote"],
             ["serve-api"],
+            ["style-prompt", "C:/project/style/demo", "--provider", "platform-agent"],
+            ["style-prompt", "C:/project/style/demo", "--provider=http-chat"],
         ):
             with self.subTest(args=args), self.assertRaises(ValueError):
                 _assert_studio_engine_args(args)
 
     def test_allows_platform_agent_task_generation(self):
         _assert_studio_engine_args(
-            ["style-prompt", "C:/project/style/demo", "--provider", "platform-agent"]
+            ["style-prompt", "C:/project/style/demo"]
         )
 
     def test_embedded_engine_direct_entry_rejects_provider_routes(self):

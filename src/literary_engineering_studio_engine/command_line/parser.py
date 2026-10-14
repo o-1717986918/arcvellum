@@ -161,20 +161,17 @@ def build_parser(*, full_help: bool = True) -> argparse.ArgumentParser:
     agent_build_json.add_argument("--task", default="build-json")
     agent_build_json.add_argument("--source", default="", help="Optional source file.")
     agent_build_json.add_argument("--target", default="", help="Optional target path or object.")
-    agent_build_json.add_argument("--provider", default="platform-agent", help="Legacy compatibility only; formal command always targets the ArcVellum Worker.")
     agent_build_json.add_argument("--out-dir", default="", help="Output run directory.")
 
     agent_plan_patch = sub.add_parser("agent-plan-patch", help="Write a Worker task for a controlled writeback patch plan.")
     agent_plan_patch.add_argument("project", help="Work project directory.")
     agent_plan_patch.add_argument("--target", required=True, help="Safe relative target path.")
     agent_plan_patch.add_argument("--source", default="", help="Optional source file.")
-    agent_plan_patch.add_argument("--provider", default="platform-agent", help="Legacy compatibility only; formal command always targets the ArcVellum Worker.")
     agent_plan_patch.add_argument("--out", default="", help="Output markdown path.")
     agent_plan_patch.add_argument("--json-out", default="", help="Output JSON path.")
 
     agent_style_prompt = sub.add_parser("agent-style-prompt", help="Write a Worker task for style_prompt.md and schema JSON.")
     agent_style_prompt.add_argument("profile_dir", help="Directory containing style-profile.md and style_metrics.json.")
-    agent_style_prompt.add_argument("--provider", default="platform-agent", help="Legacy compatibility only; formal command always targets the ArcVellum Worker.")
     agent_style_prompt.add_argument("--out", default="", help="Output style prompt path. Defaults to profile_dir/style_prompt.md.")
     agent_style_prompt.add_argument("--json-out", default="", help="Output agent JSON path. Defaults to profile_dir/style_prompt.agent.json.")
 
@@ -295,7 +292,6 @@ def build_parser(*, full_help: bool = True) -> argparse.ArgumentParser:
         create.add_argument("--brief", default="", help="Creative brief or constraints for the candidate.")
         create.add_argument("--target-id", default="", help="Stable id for the target character/location/organization when useful.")
         create.add_argument("--source", default="", help="Optional source file. Relative paths resolve from project root.")
-        create.add_argument("--provider", default="platform-agent", help="Legacy compatibility only; formal command always targets the ArcVellum Worker.")
         create.add_argument("--out-dir", default="", help="Legacy compatibility only; formal command writes task sidecars next to expected outputs.")
 
     create_asset = sub.add_parser("asset-create", help="Write a Worker task for any supported candidate asset by type.")
@@ -304,7 +300,6 @@ def build_parser(*, full_help: bool = True) -> argparse.ArgumentParser:
     create_asset.add_argument("--brief", default="")
     create_asset.add_argument("--target-id", default="")
     create_asset.add_argument("--source", default="")
-    create_asset.add_argument("--provider", default="platform-agent", help="Legacy compatibility only; formal command always targets the ArcVellum Worker.")
     create_asset.add_argument("--out-dir", default="", help="Legacy compatibility only; formal command writes task sidecars next to expected outputs.")
 
     seed_assets = sub.add_parser("seed-project-assets", help="Create stable Worker sidecars for a project's foundational world and protagonist assets.")
@@ -317,7 +312,6 @@ def build_parser(*, full_help: bool = True) -> argparse.ArgumentParser:
     review_asset = sub.add_parser("review-candidate-asset", help="Write a Worker task to review a candidate asset before promotion.")
     review_asset.add_argument("project", help="Work project directory.")
     review_asset.add_argument("candidate", help="Candidate path or candidate id.")
-    review_asset.add_argument("--provider", default="platform-agent", help="Legacy compatibility only; formal command always targets the ArcVellum Worker.")
 
     promote_asset = sub.add_parser("promote-candidate-asset", help="Promote any reviewed and approved candidate asset.")
     promote_asset.add_argument("project", help="Work project directory.")
@@ -365,7 +359,6 @@ def build_parser(*, full_help: bool = True) -> argparse.ArgumentParser:
     generate.add_argument("--composition", default="", help="Existing scene composition path. Defaults to drafts/compositions/{scene_id}_composition.md.")
     generate.add_argument("--query", default="", help="Extra retrieval query when context needs rebuilding.")
     generate.add_argument("--rebuild-context", action="store_true")
-    generate.add_argument("--provider", default="platform-agent", help="Legacy compatibility only; formal command always targets the ArcVellum Worker.")
     generate.add_argument("--out", default="", help="Output candidate markdown path.")
     generate.add_argument("--agent-tasks", action="store_true", help="Legacy compatibility only; formal command always writes a Worker task.")
     generate.add_argument("--materialization-scope", choices=("full", "scene"), default="full", help="Validate the full inventory or only the staged active scene.")

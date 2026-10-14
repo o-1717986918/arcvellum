@@ -223,18 +223,8 @@ def _usage(events: list[dict[str, Any]]) -> dict[str, Any]:
     return {key: result[key] for key in ('total_tokens', 'cost_usd', 'updates')}
 
 
-def _safe_non_negative_int(value: Any) -> int:
-    try:
-        return max(0, int(value or 0))
-    except (TypeError, ValueError):
-        return 0
 
 
-def _safe_non_negative_float(value: Any) -> float:
-    try:
-        return max(0.0, float(value or 0))
-    except (TypeError, ValueError):
-        return 0.0
 
 
 def _route_title(route: str) -> str:

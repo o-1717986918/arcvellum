@@ -7,7 +7,8 @@ import unittest
 from unittest.mock import patch
 
 from literary_engineering_studio.application.config import default_config
-from literary_engineering_studio.infrastructure.legacy_lifecycle import ApplicationLifecycleManager
+from literary_engineering_studio.application.lifecycle import ApplicationLifecycleManager
+from literary_engineering_studio.infrastructure.defaults import build_default_application_ports
 from literary_engineering_studio.runtime.process_manager import ProcessSpec
 from literary_engineering_studio.runtimes import RUNTIME_TYPES
 from literary_engineering_studio.runtimes.base import AgentRuntime
@@ -42,7 +43,7 @@ class RuntimeFoundationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             config = default_config()
             config["application"]["database_path"] = str(Path(temporary) / "studio.sqlite3")
-            lifecycle = ApplicationLifecycleManager(config)
+            lifecycle = ApplicationLifecycleManager(config, build_default_application_ports(config))
             health = lifecycle.health()
             lifecycle.shutdown()
             self.assertTrue(health["ready"])
@@ -68,8 +69,8 @@ class RuntimeFoundationTests(unittest.TestCase):
                 release.wait(2)
                 return [{"runner_id": "opencode", "available": True}]
 
-            with patch("literary_engineering_studio.infrastructure.legacy_lifecycle.agent_runner_status", side_effect=slow_status):
-                lifecycle = ApplicationLifecycleManager(config)
+            with patch("literary_engineering_studio.infrastructure.defaults.agent_runner_status", side_effect=slow_status):
+                lifecycle = ApplicationLifecycleManager(config, build_default_application_ports(config))
                 self.assertTrue(started.wait(1))
                 before = time.monotonic()
                 health = lifecycle.health()
@@ -89,7 +90,7 @@ class RuntimeFoundationTests(unittest.TestCase):
             config = default_config()
             config["application"]["data_root"] = str(root)
             config["application"]["database_path"] = str(root / "studio.sqlite3")
-            lifecycle = ApplicationLifecycleManager(config)
+            lifecycle = ApplicationLifecycleManager(config, build_default_application_ports(config))
             record = lifecycle.start_sidecar(
                 ProcessSpec(
                     component_id="fake-sidecar",

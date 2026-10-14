@@ -51,7 +51,6 @@ Engine 是正式文学工程真相的所有者。Studio 只能通过 `src/litera
 | `projections/` | 面向读取的正文、计数和展示投影 | `public/projections.py` | 正式项目事实 | promotion、writeback、隐藏修复 | projection/reader/API 测试 |
 | `projects/` | 初始化、现有作品导入、授权单篇演示形式化、项目级原子文件操作 | `public/projects.py` | foundation、literary ingest | Studio data root、UI 生命周期、伪造 Agent 创作或晋升历史 | project init/source ingest、`test_authorized_source_contract.py` |
 | `command_line/` | Engine CLI 解析与命令分发 adapter | `command_line/main.py` | Engine public/domain services | 新文学规则、第二套 Gate | CLI/route surface 测试 |
-| `director/` | 创作总监的正式任务模板和选择逻辑 | 现有 director facade | Engine contracts | Provider HTTP、Studio 会话 | creative director 测试 |
 
 ### Engine `public/*` 的使用规则
 

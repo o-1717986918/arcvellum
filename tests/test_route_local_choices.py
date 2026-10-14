@@ -426,9 +426,9 @@ class RouteLocalChoiceTests(unittest.TestCase):
 
             with patch.object(
                 workflow_state,
-                "_scene_states",
-                side_effect=AssertionError("full scene scan used"),
-            ):
+                "_scene_state",
+                wraps=workflow_state._scene_state,
+            ) as scene_state:
                 result = workflow_state.build_workflow_state(
                     root,
                     route="scene-development",
@@ -438,6 +438,8 @@ class RouteLocalChoiceTests(unittest.TestCase):
                 )
 
             self.assertEqual(result.scene_count, 1)
+            self.assertEqual(scene_state.call_count, 1)
+            self.assertEqual(scene_state.call_args.args[1], scenes / "scene_0002.yaml")
 
     def test_dashboard_scope_observes_frontier_without_expanding_every_planned_scene(self):
         with tempfile.TemporaryDirectory() as temporary:

@@ -28,3 +28,11 @@ Module Change Packet：
 Module Change Packet：objective 为移除当前产品入口不可达的旧 HTTP、直连 Provider 与 Director 子系统；primary_module 为 Engine 集成边界；public_entry 为 Engine public API、command_line.entry 和 Studio 所属 API / Pi Worker。输入输出继续使用现有 TaskPackage、候选记录和审批回执。允许依赖现有平台任务、资产注册和晋升；禁止额外模型调用、Studio 越过 Engine public 边界。现有正式 Gate、Canon、独立审读与原子晋升逻辑不变。测试覆盖 CLI、sidecar、旧入口不可导入、资产审批、文风快照失效和全套 Python；独立提交可回退。
 
 已核实旧 HTTP、Director、Provider 的生产调用仅在旧子系统内，旧 CLI handler 未注册。资产列表和审批晋升仍被当前路径使用，保留原实现；构造假文学内容的 helper 移至测试目录，不随 Engine 分发。文风快照链测试改用现有平台任务包及测试拥有的交付夹具，保留挂载变更必须失效的断言。CLI 和 sidecar 直接调用所属入口，撤销旧模块保留窗口并禁止重新加入已退役模块。
+
+## 未接入的 Runtime 合同与私有包装
+
+Module Change Packet：primary_module 为 Studio runtime；objective 为移除没有生产、脚本或打包调用方的未来合同和诊断包装。当前 Pi Worker 会话恢复、缓存绑定、正式修复与 preflight 保留。删除的 SessionLease / OutputRepair DTO 不是当前实现，关联独立测试随旧合同移除；混合测试保留仍在使用的缓存键及 ContractViolation 覆盖。旧 lifecycle 构造适配器移除，测试向当前应用生命周期显式注入 ports。定向和完整 Python 回归验证；独立提交可回退。
+
+另外按 automation、creative_live、persistence、Engine composition / workflow 和 narrative projection 各自所有权记录私有 helper 清理 packet：只删除已核实无调用的定义及导入。叙事图公开 projection_motion_events 导出保留。场景范围测试原先 mock 已不调用的全扫描函数，现改为观察实际场景状态构建次数，确认只处理指定场景。动态注册的吞吐事件处理器保留。
+
+Engine command-line packet：移除十处没有 handler 消费的 `--provider` 兼容参数；当前命令直接准备 Worker 任务，桥接入口拒绝旧参数的分离与等号两种写法。验证 parser、桥接安全及平台任务准备，文学行为和正式 Gate 不变。

@@ -10,25 +10,9 @@ from typing import Any
 
 from .core_read_models import build_dashboard, build_library
 from .narrative_projection_changes import projection_delta, projection_motion_events, timeline
-from .narrative_projection_evidence import append_scene_evidence, append_task_projection
 from .narrative_projection_graphs import book_graph, chapter_graph, scene_graph
 from .narrative_projection_models import ProjectionInventory
-from .narrative_projection_primitives import (
-    accessible_summary,
-    chapter_label,
-    dedupe_edges,
-    dedupe_nodes,
-    digest,
-    edge,
-    fact,
-    formal_chars_by_chapter,
-    friendly_action,
-    integer,
-    node,
-    order,
-    resolve_focus,
-    scene_chapter,
-)
+from .narrative_projection_primitives import accessible_summary, dedupe_edges, dedupe_nodes, resolve_focus
 from .reader import build_reader_manifest
 
 
@@ -128,46 +112,6 @@ def _legend() -> list[dict[str, str]]:
         {"type": "alternative", "label": "备选与不确定", "color": "iris"},
         {"type": "queued", "label": "下一项状态机任务", "color": "moss"},
     ]
-
-
-# Stable private names retained for downstream integrations that predate the split.
-def _book_graph(scenes, characters, reader, dashboard):
-    return book_graph(ProjectionInventory(scenes, characters, [], [], []), reader, dashboard)
-
-
-def _chapter_graph(scenes, characters, branches, reviews, canon_patches, reader, dashboard, chapter_id):
-    return chapter_graph(ProjectionInventory(scenes, characters, branches, reviews, canon_patches), reader, dashboard, chapter_id)
-
-
-def _scene_graph(scenes, characters, branches, reviews, canon_patches, reader, dashboard, scene_id):
-    return scene_graph(ProjectionInventory(scenes, characters, branches, reviews, canon_patches), reader, dashboard, scene_id)
-
-
-def _append_scene_evidence(nodes, edges, scene, branches, reviews, canon_patches, *, include_pending):
-    inventory = ProjectionInventory([], [], branches, reviews, canon_patches)
-    return append_scene_evidence(nodes, edges, scene, inventory, include_pending=include_pending)
-
-
-_append_task_projection = append_task_projection
-_formal_chars_by_chapter = formal_chars_by_chapter
-_timeline = timeline
-_node = node
-_edge = edge
-_resolve_focus = resolve_focus
-_scene_chapter = scene_chapter
-_fact = fact
-_dedupe = dedupe_nodes
-_dedupe_edges = dedupe_edges
-_order = order
-_integer = integer
-_chapter_label = chapter_label
-_digest = digest
-_friendly_action = friendly_action
-
-
-def _accessible_summary(level, focus, nodes, edges):
-    del focus
-    return accessible_summary(level, nodes, edges)
 
 
 __all__ = ["build_narrative_projection", "projection_delta", "projection_motion_events"]
