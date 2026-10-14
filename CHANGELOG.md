@@ -2,6 +2,23 @@
 
 All notable ArcVellum changes are documented in this file. Detailed release evidence remains under `docs/releases/`.
 
+## [0.99.13] - 2026-10-14
+
+### Changed
+
+- Made natural scene creation and stable prompt prefixes the defaults for installations and configurations without an explicit prior choice.
+- Preserved private Pi conversations within their scene, permission and source boundaries; distinguished unreported cache usage from explicit zero.
+- Shared the four-call repair budget across original deliveries and recovery, and replayed explicit author patches without repeated extraction.
+
+### Fixed
+
+- Retained complete author replies and completed repair text across failed checkpoints, including nested JSON patches and unambiguous wrapper layouts.
+- Reported every excluded Canon fact link and invalid evidence reference with exact repair fields while retaining the existing validation rules.
+- Honored formal-unit limits before editorial continuation and stopped repeated Project Agent recovery when the work and terminal failure were unchanged.
+- Used safe artifact names for release branch builds. Two real formal scenes passed individual review and committed; local Python regression ran 2,085 tests with one skip.
+
+[0.99.13]: https://github.com/o-1717986918/arcvellum/releases/tag/v0.99.13
+
 ## [0.99.12] - 2026-09-28
 
 ### Added
