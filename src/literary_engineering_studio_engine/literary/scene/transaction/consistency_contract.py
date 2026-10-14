@@ -70,17 +70,45 @@ def _facts(record, prose, delta):
 
 
 def _canon_fact_coverage(facts, delta):
+    issues, fields = [], []
     for proposal in delta.get('canon_candidates') or []:
         summary = proposal.get('summary')
-        linked = [fact for fact in facts if isinstance(fact, dict) and fact.get('durable') is True
-                  and fact.get('source_state') in {'new', 'changed'}
+        matching = [(index, fact) for index, fact in enumerate(facts) if isinstance(fact, dict)
                   and fact.get('delta_group') == 'canon_candidates'
                   and fact.get('delta_target') == proposal.get('target_ref')
                   and fact.get('delta_summary') == summary]
-        if not _text(summary) or '；' in summary or ';' in summary or len(linked) != 1:
-            raise SceneConsistencyError('每条Canon候选只对应一项持续事实；拆开合并叙述，并在facts中逐项登记当前正文证据。'
-                                        + _proposal_diagnostic(proposal, len(linked)),
-                                        ['/consistency_record', '/scene_delta'])
+        linked = [fact for _, fact in matching if fact.get('durable') is True
+                  and fact.get('source_state') in {'new', 'changed'}]
+        if _invalid_canon_summary(summary) or len(linked) != 1:
+            explanation, paths = _canon_coverage_diagnostic(matching, summary)
+            issues.append('每条Canon候选只对应一项持续事实；拆开合并叙述，并在facts中逐项登记当前正文证据。'
+                          + _proposal_diagnostic(proposal, len(linked)) + explanation)
+            fields.extend(paths)
+    if issues:
+        raise SceneConsistencyError('\n'.join(issues), list(dict.fromkeys(fields)))
+
+
+def _canon_coverage_diagnostic(matching, summary):
+    if len(matching) != 1 or _invalid_canon_summary(summary):
+        return '', ['/consistency_record/facts', '/scene_delta']
+    index, fact = matching[0]
+    path = f'/consistency_record/facts/{index}'
+    paths = []
+    if fact.get('source_state') not in {'new', 'changed'}:
+        paths.append(path+'/source_state')
+    if fact.get('durable') is not True:
+        paths.append(path+'/durable')
+    values = {key: fact.get(key) for key in ('source_state', 'durable')}
+    explanation = (f'逐字符关联已存在于 facts[{index}]，但它不符合候选关联条件：'
+                   + json.dumps(values, ensure_ascii=False)
+                   + '。条件须同时为 durable=true、source_state=new或changed。'
+                   + '仅在当前正文确证该事实时由原主创更正标签；引述内容、传闻与未定事项不可升格为已确认事实。'
+                   + '若登记的是说话行为，其事实与提案应只确认发生过这次说话，而非确认话中内容。')
+    return explanation, paths
+
+
+def _invalid_canon_summary(summary):
+    return not _text(summary) or '；' in summary or ';' in summary
 
 
 def _fact(fact, prose, delta, path):

@@ -127,6 +127,26 @@ class SceneConsistencyContractTests(unittest.TestCase):
         self.assertIn('"summary": "桌腿短一寸"',str(caught.exception))
         self.assertIn('持续事实数=0',str(caught.exception))
 
+    def test_all_attributed_canon_links_report_only_the_excluded_fact_labels(self):
+        row=creator();row['consistency_record']['canon_change']=True
+        summaries=('问桌子是否修稳','说周五回来','说不用留饭')
+        row['scene_delta']['canon_candidates']=[{'target_ref':'characters/p.yaml','summary':s} for s in summaries]
+        row['consistency_record']['facts']=[{
+            'subject':'角色','predicate':'说话','value':s,'evidence':row['prose'],
+            'source_state':'attributed','durable':True,'delta_group':'canon_candidates',
+            'delta_target':'characters/p.yaml','delta_summary':s} for s in summaries]
+        original=deepcopy(row)
+        with self.assertRaises(SceneConsistencyError) as caught:
+            validate_creator_consistency(row)
+        self.assertEqual(row,original)
+        self.assertEqual(caught.exception.fields,tuple(
+            f'/consistency_record/facts/{index}/source_state' for index in range(3)))
+        for index,summary in enumerate(summaries):
+            self.assertIn(summary,str(caught.exception))
+            self.assertIn(f'facts[{index}]',str(caught.exception))
+        self.assertIn('不可升格',str(caught.exception))
+
+
     def test_canon_proposal_cannot_merge_multiple_durable_details(self):
         row=creator();row['consistency_record']['canon_change']=True
         summary='车站明天停；桌腿短一寸；碗架存两只碗'
