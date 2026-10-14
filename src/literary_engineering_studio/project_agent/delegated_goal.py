@@ -49,7 +49,42 @@ class DelegatedGoal:
 
     @property
     def needs_observation(self) -> bool:
-        return self.run_status not in TERMINAL_GOAL_STATUSES
+        # A resumed run may stop before its tool receipt returns.
+        return self.operation in WAITING_GOAL_OPERATIONS
+
+
+def goal_progress_fingerprint(run: Mapping[str, Any], overview: Mapping[str, Any]) -> str:
+    story = {key: overview.get(key) for key in ('story_brief','macro_plan','latest_formal_scene')}
+    return json.dumps([goal_snapshot(run),story],ensure_ascii=False,sort_keys=True,default=str)
+
+
+def repeated_goal_result(run: Mapping[str, Any], result: Any) -> Any:
+    from .contracts import ProjectAgentTurnResult
+    successful = run.get('status') == 'complete' or run.get('stop_reason') == 'goal-scope-complete'
+    detail = str(run.get('last_error') or run.get('stop_reason') or '目标仍在原检查点')
+    return ProjectAgentTurnResult('completed' if successful else 'blocked',
+        detail+' 已停止没有进展的重复恢复。',result.turn_id,None,result.tool_calls,
+        'Repeated goal terminal without progress: '+detail)
+
+
+class GoalRecoveryProgress:
+    def __init__(self):
+        self._terminals: dict[str,set[str]] = {}
+
+    def stopped_result(self, run, result, overview, emit):
+        fingerprint = goal_progress_fingerprint(run,overview)
+        seen = self._terminals.setdefault(str(run.get('run_id') or ''),set())
+        if fingerprint not in seen:
+            seen.add(fingerprint)
+            return None
+        emit('project_agent.goal.repeated_stop',{'run_id':run.get('run_id'),'stop_reason':run.get('stop_reason')})
+        return repeated_goal_result(run,result)
+
+
+def cancelled_goal_result(result):
+    from .contracts import ProjectAgentTurnResult
+    return ProjectAgentTurnResult('cancelled','',result.turn_id,None,result.tool_calls,
+        'Project Agent stopped waiting; the background goal was left intact')
 
 
 class DelegatedGoalObserver:
@@ -154,4 +189,8 @@ __all__ = [
     "DelegatedGoalObserver",
     "TERMINAL_GOAL_STATUSES",
     "goal_snapshot",
+    "goal_progress_fingerprint",
+    "repeated_goal_result",
+    "GoalRecoveryProgress",
+    "cancelled_goal_result",
 ]

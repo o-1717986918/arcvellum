@@ -136,7 +136,40 @@ class _CheckpointRuntime:
         return ProjectAgentTurnResult("completed", "目标完成。", request.turn_id, 0, 1)
 
 
+class _RepeatingPausedRuntime:
+    def __init__(self):
+        self.requests=[]
+
+    def run_turn(self,request,_tool_handler,**kwargs):
+        self.requests.append(request)
+        if len(self.requests)>2:
+            raise AssertionError('unchanged failed terminal must not create a third Agent call')
+        kwargs['event_sink']('project_agent.tool.finished',{
+            'name':'project_goal_manage','ok':True,'receipt':{
+                'operation':'goal_resume','run_id':'autopilot-1','run_status':'paused','work_id':'work-1'}})
+        return ProjectAgentTurnResult('completed','已接受，正在运行。',request.turn_id,0,1)
+
+
 class ProjectAgentServiceTests(unittest.TestCase):
+    def test_immediate_terminal_receipt_is_observed_and_same_failure_is_not_retried(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary)/'project';root.mkdir()
+            store=JobStore(Path(temporary)/'studio.sqlite3')
+            runtime=_RepeatingPausedRuntime()
+            failed={'run_id':'autopilot-1','status':'paused','stop_reason':'lean-scene-checkpoint',
+                    'current_task_id':'scene:revision-needed','last_error':'original source repair budget exhausted'}
+            service=ProjectAgentService({},sessions=store.sessions,jobs=store,dependencies=_dependencies(),
+                actions=ProjectAgentActionDependencies(record_direction=lambda *_args:{},
+                    creation_control=lambda *_args:{},manage_goal=lambda *_args:{}),
+                runtime_factory=lambda *_args:runtime,goal_run_reader=lambda _run_id:dict(failed),goal_poll_interval=0.001)
+            session=service.create_session(root)
+            result=service.run_turn(session['session_id'],'继续这两场')
+            self.assertEqual(result['status'],'blocked')
+            self.assertEqual(len(runtime.requests),2)
+            self.assertIn('budget exhausted',result['answer'])
+            self.assertNotIn('正在运行',result['answer'])
+            self.assertIn('project_agent.goal.repeated_stop',[event['event'] for event in store.events_since(result['job_id'])])
+
     def test_v2_creator_persona_initialization_uses_prompt_tools_and_version_store(self):
         with tempfile.TemporaryDirectory() as temporary:
             folder = Path(temporary)

@@ -17,7 +17,7 @@ from .contracts import (
     ProjectAgentTurnResult,
 )
 from .factory import build_project_agent_runtime
-from .delegated_goal import DelegatedGoal, DelegatedGoalObserver, goal_snapshot
+from .delegated_goal import DelegatedGoal, DelegatedGoalObserver, goal_snapshot, GoalRecoveryProgress, cancelled_goal_result
 from .prompt_policy import (
     creator_persona_guidance, delegated_goal_followup_prompt, delegated_scene_checkpoint_prompt,
     system_prompt, turn_prompt, project_prompt_options,
@@ -369,6 +369,7 @@ class ProjectAgentService:
         emit: EventSink,
     ) -> ProjectAgentTurnResult:
         options = project_prompt_options(self.config, self.prompt_resolver, root)
+        progress = GoalRecoveryProgress()
         while delegated_goal[0] is not None and delegated_goal[0].needs_observation:
             if self.goal_observer is None:
                 raise RuntimeError("Project Agent goal observer is unavailable")
@@ -394,11 +395,11 @@ class ProjectAgentService:
                 heartbeat=lambda: self.jobs.heartbeat(job_id, worker_id, lease_seconds=120),
             )
             if terminal_run is None:
-                return ProjectAgentTurnResult(
-                    "cancelled", "", request.turn_id, None, result.tool_calls,
-                    "Project Agent stopped waiting; the background goal was left intact",
-                )
+                return cancelled_goal_result(result)
             emit("project_agent.goal.terminal", goal_snapshot(terminal_run))
+            goal_root = Path(str(terminal_run.get('project_root') or root))
+            if stopped := progress.stopped_result(terminal_run,result,self._session_overview(goal_root),emit):
+                return stopped
             emit("project_agent.goal.followup.started", {"run_id": current_goal.run_id})
             checkpoint = str(terminal_run.get("stop_reason") or "") == "scene-editorial-checkpoint"
             followup = ProjectAgentTurnRequest(
