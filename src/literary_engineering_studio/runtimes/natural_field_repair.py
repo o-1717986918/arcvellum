@@ -95,6 +95,10 @@ def _repair_prose_context(scoped,payload,fields,context,roots):
 
 
 def _field_value_contract(path,context):
+    if path.endswith('/prose_sha256'):
+        return '逐字符复制 context.prose_source.sha256；这是当前正文的摘要，不计算，不取历史摘要。'
+    if path.endswith('/prose_block'):
+        return '仅选择 context.prose_source.blocks 中支持该判断的现有 id。'
     if context.get('creation_integrity_contract'):
         contract = integrity_field_contract(path)
         if contract is not None:

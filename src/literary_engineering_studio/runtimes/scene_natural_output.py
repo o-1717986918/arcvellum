@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 from .natural_field_repair import apply_field_patch, field_repair_task
 from .natural_authored_records import authored_record, replay_authored_patch
-from .evidence_patch_source import resolve_evidence_patches
+from .evidence_patch_source import resolve_evidence_patches, resolve_review_record_evidence
 from .material_need import require_source_needs
 
 from .commission_source_format import restore_commission_source, restore_tone_source, tone_text_matches_source
@@ -123,9 +123,10 @@ class NaturalOutputProcessor:
         combined=source+'\n\n【原作者指定字段补交】\n'+reply
         def prepare(_answer,patch,_kind,_context):
             patch=replay_authored_patch(patch,source,reply,fields)
-            patch=resolve_evidence_patches(patch,str(payload.get('prose') or context.get('prose') or ''),fields)
             merged=apply_field_patch(payload,patch,fields)
             try:
+                patch=resolve_evidence_patches(patch,str(payload.get('prose') or context.get('prose') or ''),fields)
+                merged=apply_field_patch(payload,patch,fields)
                 value=self._prepare(combined,merged,kind,context)
             except NaturalSourceClarificationError as error:
                 error.source_text=combined
@@ -161,6 +162,8 @@ def _prepare_transport_payload(answer, payload, kind, context):
         payload = recover_event_source_status(answer, payload)
     if kind == 'tone':
         payload = restore_tone_source(answer,payload,context.get('prose'))
+    if kind == 'review':
+        payload = resolve_review_record_evidence(payload,context.get('prose',''))
     validate_extracted_text(answer, payload, kind, context)
     if kind == 'material':
         restore_material_receipts(answer, payload)

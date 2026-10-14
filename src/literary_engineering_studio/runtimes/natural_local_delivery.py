@@ -6,11 +6,13 @@ from .natural_card_source import _labelled_cards, _CARD_SETS
 from .natural_material_response import whole_material_response
 from .natural_choice_labels import local_choice_labels
 from .natural_authored_records import authored_record
+from .evidence_patch_source import resolve_review_record_evidence
+from .natural_transport_repair import NaturalExtractionError, NaturalSourceClarificationError
 
 
 def local_delivery(answer, kind, context):
     if kind == 'review' and context.get('creation_integrity_contract'):
-        return authored_record(answer, 'review_record')
+        return _local_review(answer,context)
     if kind == 'creator' and context.get('creation_integrity_contract') and authored_record(answer, 'creator_record'):
         fields = local_creator_fields(answer, kind, context)
         if fields.get('prose') or fields.get('material_requests'):
@@ -31,6 +33,18 @@ def local_delivery(answer, kind, context):
             fields['required_kinds'] = _identifiers(fields['required_kinds'])
             return {'material_plan': fields}
     return None
+
+
+def _local_review(answer, context):
+    record = authored_record(answer, 'review_record')
+    if record is None:
+        return None
+    try:
+        return resolve_review_record_evidence(record,context.get('prose',''))
+    except NaturalExtractionError as error:
+        clarified = NaturalSourceClarificationError(str(error),fields=error.fields,payload=record)
+        clarified.source_text=answer
+        raise clarified from error
 
 
 def local_cards(answer, context):

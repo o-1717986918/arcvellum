@@ -4,6 +4,8 @@ from copy import deepcopy
 import re
 from .natural_transport_repair import NaturalExtractionError
 
+_REVIEW_FIELDS = {'strengths', 'major_issues', 'optional_explorations', 'issue_progress', 'consistency_checks'}
+
 
 def prose_evidence_source(prose):
     blocks=[]
@@ -14,32 +16,56 @@ def prose_evidence_source(prose):
 
 def resolve_evidence_patches(reply,prose,allowed):
     result=deepcopy(reply)
+    source=prose_evidence_source(prose)
+    issues,fields=[],[]
     for patch in result.get('patches') or []:
         path=patch.get('path') if isinstance(patch,dict) else None
         value=patch.get('value') if isinstance(patch,dict) else None
-        if path in allowed and path.split('/')[1] in {'strengths', 'major_issues', 'optional_explorations',
-                                                     'issue_progress', 'consistency_checks'}:
-            patch['value'] = _nested_review_evidence(value, prose_evidence_source(prose), allowed)
-            value = patch['value']
-        if path not in allowed or not path.endswith('/evidence') or not isinstance(value,dict):
+        if path not in allowed:
             continue
-        source=prose_evidence_source(prose)
-        block=next((row for row in source['blocks'] if row['id']==value.get('prose_block')),None)
-        if set(value)!={'prose_sha256','prose_block'} or value.get('prose_sha256')!=source['sha256'] or block is None:
-            raise NaturalExtractionError('evidence reference does not match the frozen current prose',fields=allowed)
-        patch['value']=block['text']
+        if path.split('/')[1] in _REVIEW_FIELDS or path.endswith('/evidence'):
+            patch['value']=_resolve_review_evidence(value,source,path,issues,fields)
+    _raise_reference_errors(issues,fields)
     return result
 
 
-def _nested_review_evidence(value, source, allowed):
+def resolve_review_record_evidence(record, prose):
+    issues,fields=[],[]
+    result=_resolve_review_evidence(record,prose_evidence_source(prose),'',issues,fields)
+    _raise_reference_errors(issues,fields)
+    return result
+
+
+def _resolve_review_evidence(value, source, path, issues, fields):
     if isinstance(value, list):
-        return [_nested_review_evidence(row, source, allowed) for row in value]
+        return [_resolve_review_evidence(row,source,path+'/'+str(index),issues,fields)
+                for index,row in enumerate(value)]
     if not isinstance(value, dict):
         return value
-    if set(value) == {'prose_sha256', 'prose_block'}:
-        block = next((row for row in source['blocks'] if row['id'] == value['prose_block']), None)
-        if value['prose_sha256'] != source['sha256'] or block is None:
-            raise NaturalExtractionError('review evidence reference does not match current prose', fields=allowed)
-        return block['text']
-    return {key: _nested_review_evidence(item, source, allowed)
-            if key in {'evidence', 'counter_excerpt'} else item for key, item in value.items()}
+    if 'prose_sha256' in value or 'prose_block' in value:
+        return _resolve_reference(value,source,path,issues,fields)
+    return {key: _resolve_review_evidence(item,source,path+'/'+key,issues,fields)
+            if key in {'evidence','counter_excerpt'} or not path and key in _REVIEW_FIELDS else deepcopy(item)
+            for key,item in value.items()}
+
+
+def _resolve_reference(value, source, path, issues, fields):
+    if set(value) != {'prose_sha256','prose_block'}:
+        issues.append(path+': evidence reference requires prose_sha256 and prose_block')
+        fields.append(path)
+        return deepcopy(value)
+    block=next((row for row in source['blocks'] if row['id']==value['prose_block']),None)
+    if value['prose_sha256']!=source['sha256']:
+        issues.append(path+': evidence reference does not match current prose; current prose_sha256='+source['sha256'])
+        fields.append(path+'/prose_sha256')
+    if block is None:
+        issues.append(path+': evidence paragraph is absent from current prose')
+        fields.append(path+'/prose_block')
+    if value['prose_sha256']!=source['sha256'] or block is None:
+        return deepcopy(value)
+    return block['text']
+
+
+def _raise_reference_errors(issues, fields):
+    if issues:
+        raise NaturalExtractionError('\n'.join(issues),fields=tuple(dict.fromkeys(fields)))
