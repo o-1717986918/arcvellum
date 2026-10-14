@@ -12,7 +12,7 @@ from ruamel.yaml import YAML
 from ruamel.yaml.error import YAMLError
 
 from ..contracts import TaskPackage
-from ..sandbox import SandboxManifest
+from literary_engineering_studio.runtime.sandbox import SandboxManifest
 from literary_engineering_studio_engine.public.literary import (
     SCENE_LIFECYCLE_VALUES,
     SceneLifecycleStatus,

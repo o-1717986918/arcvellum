@@ -8,7 +8,7 @@ except ImportError:  # pragma: no cover
     TestClient = None
 
 from literary_engineering_studio.api_server import create_app
-from literary_engineering_studio.config import default_config
+from literary_engineering_studio.application.config import default_config
 from literary_engineering_studio.preflight.scene import _append_candidate_language_issue
 from literary_engineering_studio_engine.literary.style.anti_ai import style_lint_gate, style_lint_gate_message
 from literary_engineering_studio_engine.literary.review.creative_quality import (

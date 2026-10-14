@@ -12,7 +12,7 @@ from .scene_review_contract import validate_scene_review_contract as _validate_s
 from .scene_manifest_metadata import scene_revision_paths
 from .scene_length_repair import target_length_revision_errors
 from .revision_guidance import revision_manifest_repair
-from ..sandbox import SandboxManifest
+from literary_engineering_studio.runtime.sandbox import SandboxManifest
 from literary_engineering_studio_engine.public.tasking import SCENE_CANDIDATE_STATES, SCENE_REVISION_STATES
 
 

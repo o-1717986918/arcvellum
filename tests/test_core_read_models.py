@@ -4,9 +4,9 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-import literary_engineering_studio.core_read_models as core_read_models
-from literary_engineering_studio.config import default_config
-from literary_engineering_studio.core_read_models import (
+import literary_engineering_studio.projections.core_read_models as core_read_models
+from literary_engineering_studio.application.config import default_config
+from literary_engineering_studio.projections.core_read_models import (
     build_dashboard,
     build_library,
     install_core_import_path,

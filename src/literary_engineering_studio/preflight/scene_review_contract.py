@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from ..contracts import TaskPackage
-from ..sandbox import SandboxManifest
+from literary_engineering_studio.runtime.sandbox import SandboxManifest
 from .common import PreflightIssue
 
 

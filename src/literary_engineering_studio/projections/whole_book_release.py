@@ -19,8 +19,8 @@ from literary_engineering_studio_engine.public.literary import (
 )
 from literary_engineering_studio_engine.public.projections import final_body_from_workbench_text
 
-from ..advisor_snapshot import project_hashes
-from ..core_bridge import CoreBridge
+from literary_engineering_studio.advisor.advisor_snapshot import project_hashes
+from literary_engineering_studio.runtime.engine_bridge import CoreBridge
 
 
 RELEASE_SCHEMA = "arcvellum/whole-book-release/v0.1"

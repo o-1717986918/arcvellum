@@ -3,7 +3,7 @@ import tempfile
 import unittest
 
 from literary_engineering_studio.advisor import _advisor_prompt
-from literary_engineering_studio.advisor_personas import (
+from literary_engineering_studio.advisor.advisor_personas import (
     active_persona,
     persona_catalog,
     save_custom_persona,

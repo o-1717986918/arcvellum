@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 import sqlite3
 
-from literary_engineering_studio.jobs import JobStore
+from literary_engineering_studio.persistence.job_store import JobStore
 from literary_engineering_studio.orchestration import (
     FreedomBudget,
     FormalTaskObservation,

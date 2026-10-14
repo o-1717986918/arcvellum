@@ -32,7 +32,7 @@ from .preflight.scene import (
     _validate_scene_revision_contract,
 )
 from .preflight.style import validate_style_prompt_contract
-from .sandbox import SandboxManifest, sandbox_change_issues
+from literary_engineering_studio.runtime.sandbox import SandboxManifest, sandbox_change_issues
 from literary_engineering_studio_engine.public.tasking import (
     semantic_artifact_definition,
     semantic_artifact_errors,

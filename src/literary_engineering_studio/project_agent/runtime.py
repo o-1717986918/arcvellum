@@ -13,7 +13,7 @@ import time
 from typing import Any
 from uuid import uuid4
 
-from ..subprocess_utils import popen_hidden
+from literary_engineering_studio.runtime.subprocess_utils import popen_hidden
 from .contracts import (
     MAX_TOOL_RESULT_BYTES,
     BridgeEnvelope,

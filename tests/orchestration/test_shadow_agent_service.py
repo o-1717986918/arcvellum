@@ -4,7 +4,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from literary_engineering_studio.jobs import JobStore
+from literary_engineering_studio.persistence.job_store import JobStore
 from literary_engineering_studio.orchestration.agent_protocol import (
     REVIEW_JUDGMENT_SCHEMA,
 )

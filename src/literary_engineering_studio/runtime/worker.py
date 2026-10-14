@@ -9,7 +9,7 @@ from collections.abc import Callable
 
 from ..application.config import load_config
 from ..contracts import TaskPackage, load_task_package
-from ..core_bridge import CoreBridge
+from literary_engineering_studio.runtime.engine_bridge import CoreBridge
 from ..orchestration.active_plan import ActivePlanLoader, ActiveScenePlan
 from ..orchestration.chapter_facts_io import load_production_chapter_policy
 from ..orchestration.project_fingerprint import planning_project_fingerprint

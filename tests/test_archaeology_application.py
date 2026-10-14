@@ -15,7 +15,7 @@ from literary_engineering_studio.application.archaeology import (
     ArchaeologyApplicationService,
     ArchaeologyImportSpec,
 )
-from literary_engineering_studio.config import default_config
+from literary_engineering_studio.application.config import default_config
 
 
 class ArchaeologyApplicationTests(unittest.TestCase):

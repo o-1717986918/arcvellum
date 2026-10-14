@@ -17,7 +17,7 @@ from typing import Any, Protocol
 from collections.abc import Callable
 from typing import Sequence
 
-from ..subprocess_utils import popen_hidden, run_hidden
+from literary_engineering_studio.runtime.subprocess_utils import popen_hidden, run_hidden
 
 
 @dataclass(frozen=True)

@@ -9,7 +9,7 @@ from literary_engineering_studio.advisor.creative_steward import (
     _decision_evidence_packet,
     _decision_prompt,
 )
-from literary_engineering_studio import core_read_models
+from literary_engineering_studio.projections import core_read_models
 from literary_engineering_studio_engine.projections.interaction import choices as project_interaction_choices
 from literary_engineering_studio_engine.projections.interaction import choices as project_interaction
 from literary_engineering_studio_engine.workflow import state as workflow_state

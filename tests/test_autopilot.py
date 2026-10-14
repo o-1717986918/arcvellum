@@ -21,15 +21,15 @@ from literary_engineering_studio.automation.run_result_handler import (
     RouteCycle,
 )
 from literary_engineering_studio.automation.run_loop import ClaimedRunLoop
-from literary_engineering_studio.creative_steward import (
+from literary_engineering_studio.advisor.creative_steward import (
     _decision_evidence_packet,
     _decision_prompt,
     _has_declared_selection,
     _parse_decision,
 )
-from literary_engineering_studio.jobs import JobStore
-from literary_engineering_studio.project_manager import record_direction
-from literary_engineering_studio.worker import WorkerRunResult
+from literary_engineering_studio.persistence.job_store import JobStore
+from literary_engineering_studio.application.project_manager import record_direction
+from literary_engineering_studio.runtime.worker import WorkerRunResult
 from literary_engineering_studio.projections.whole_book_release import WholeBookReleaseCoordinator
 from literary_engineering_studio_engine.projections.interaction.choice_recording import record_human_choice
 

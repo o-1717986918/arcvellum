@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 from ..contracts import TaskPackage
-from ..sandbox import SandboxManifest
+from literary_engineering_studio.runtime.sandbox import SandboxManifest
 from .asset_evidence import review_digest_issues
 from .common import PreflightIssue
 

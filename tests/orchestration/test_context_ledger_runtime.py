@@ -9,13 +9,13 @@ import unittest
 
 from literary_engineering_studio.observability.agent_session_tracking import track_agent_session_event
 from literary_engineering_studio.contracts import load_task_package
-from literary_engineering_studio.jobs import JobStore
+from literary_engineering_studio.persistence.job_store import JobStore
 from literary_engineering_studio.observability.context_ledger import parse_context_ledger
 from literary_engineering_studio.observability.context_ledger_tracking import (
     persist_context_ledger_from_run,
 )
-from literary_engineering_studio.sandbox import stage_task
-from literary_engineering_studio.sandbox import materialize_agent_workspace
+from literary_engineering_studio.runtime.sandbox import stage_task
+from literary_engineering_studio.runtime.sandbox import materialize_agent_workspace
 from literary_engineering_studio_engine.tasking.registry import _enrich_task_payload
 
 

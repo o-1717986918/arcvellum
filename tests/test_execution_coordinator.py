@@ -9,7 +9,7 @@ from literary_engineering_studio.runtime.execution_admission import (
     release_execution_admission,
 )
 from literary_engineering_studio.runtime.resources import ResourceClaim, project_identity
-from literary_engineering_studio.supervisor import project_lock_key
+from literary_engineering_studio.runtime.supervisor import project_lock_key
 
 
 class ProjectExecutionCoordinatorTests(unittest.TestCase):

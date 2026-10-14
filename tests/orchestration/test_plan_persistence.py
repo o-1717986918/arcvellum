@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from literary_engineering_studio.jobs import JobStore
+from literary_engineering_studio.persistence.job_store import JobStore
 from literary_engineering_studio.orchestration import (
     FreedomBudget,
     NormalizationContext,

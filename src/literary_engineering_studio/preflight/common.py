@@ -9,7 +9,7 @@ import re
 from typing import Any
 
 from ..contracts import TaskPackage
-from ..sandbox import SandboxManifest
+from literary_engineering_studio.runtime.sandbox import SandboxManifest
 from literary_engineering_studio_engine.public.tasking import COMPLETION_SCHEMA, schema_matches
 
 

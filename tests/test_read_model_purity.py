@@ -5,7 +5,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from literary_engineering_studio.config import default_config
+from literary_engineering_studio.application.config import default_config
 from literary_engineering_studio.projections.core_read_models import build_dashboard
 from literary_engineering_studio_engine.projects.init import InitOptions, init_work_project
 from literary_engineering_studio_engine.projections.interaction.choices import build_current_human_choices

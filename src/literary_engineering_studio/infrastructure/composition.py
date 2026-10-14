@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from ..application.container import ApplicationContainer, build_application_container
-from ..config import load_config
+from literary_engineering_studio.application.config import load_config
 from .defaults import build_default_application_ports
 
 

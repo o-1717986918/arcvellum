@@ -7,7 +7,7 @@ from literary_engineering_studio.contracts import TaskPackage
 from literary_engineering_studio.preflight.style_metadata import (
     canonicalize_style_machine_metadata,
 )
-from literary_engineering_studio.sandbox import SandboxManifest
+from literary_engineering_studio.runtime.sandbox import SandboxManifest
 
 
 class StylePreflightMetadataTests(unittest.TestCase):

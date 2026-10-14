@@ -6,7 +6,7 @@ import tempfile
 import unittest
 
 from literary_engineering_studio.contracts import TaskPackage
-from literary_engineering_studio.sandbox import SandboxManifest
+from literary_engineering_studio.runtime.sandbox import SandboxManifest
 from literary_engineering_studio.task_preflight import validate_task_outputs
 from literary_engineering_studio_engine.public.literary import canon_patch_candidate_issues
 

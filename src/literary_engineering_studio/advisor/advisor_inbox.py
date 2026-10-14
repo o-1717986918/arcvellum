@@ -10,7 +10,7 @@ import re
 from typing import Any
 
 from ..projections.core_read_models import build_dashboard, current_choices
-from ..jobs import JobStore
+from literary_engineering_studio.persistence.job_store import JobStore
 from ..projections.reader import build_reader_manifest
 from ..application.failures import failure_identity, present_failure
 

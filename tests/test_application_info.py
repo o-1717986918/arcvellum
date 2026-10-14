@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from literary_engineering_studio.application_info import (
+from literary_engineering_studio.application.application_info import (
     build_application_info,
     build_diagnostic_report,
     export_diagnostic_report,
@@ -31,7 +31,7 @@ class ApplicationInfoTests(unittest.TestCase):
                 "updates": {"channel": "stable"},
             }
             with patch(
-                "literary_engineering_studio.application_info.locate_pi_worker",
+                "literary_engineering_studio.application.application_info.locate_pi_worker",
                 return_value=PiWorkerInstallation("node", None, "missing"),
             ):
                 payload = build_application_info(config)
@@ -49,11 +49,11 @@ class ApplicationInfoTests(unittest.TestCase):
             }
             with (
                 patch(
-                    "literary_engineering_studio.application_info.locate_pi_worker",
+                    "literary_engineering_studio.application.application_info.locate_pi_worker",
                     return_value=PiWorkerInstallation("node", None, "missing"),
                 ),
-                patch("literary_engineering_studio.application_info.list_projects", return_value={"projects": [], "current_project": "C:/private/work"}),
-                patch("literary_engineering_studio.application_info.agent_runner_status", return_value=[]),
+                patch("literary_engineering_studio.application.application_info.list_projects", return_value={"projects": [], "current_project": "C:/private/work"}),
+                patch("literary_engineering_studio.application.application_info.agent_runner_status", return_value=[]),
             ):
                 report = build_diagnostic_report(config, _Lifecycle(), _Bootstrap())
                 target = export_diagnostic_report(config, _Lifecycle(), _Bootstrap())

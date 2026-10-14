@@ -3,7 +3,7 @@ import tempfile
 import unittest
 
 from literary_engineering_studio.api_server import create_app
-from literary_engineering_studio.config import default_config
+from literary_engineering_studio.application.config import default_config
 
 
 class ApiRouteSurfaceTests(unittest.TestCase):

@@ -23,7 +23,7 @@
 以下已落地，作为后续迁移的基础，不再回退：
 
 - `literary_engineering_studio.sidecar_protocol`：桌面 sidecar ready-file、端口和 loopback 安全边界。
-- `literary_engineering_studio.api_read_models`：revision-aware read model 组合。
+- `literary_engineering_studio.projections.api_read_models`：revision-aware read model 组合。
 - `literary_engineering_studio_engine.task_package_contract`：任务契约、输出所有权、提示词投影和 Markdown 渲染。
 - `literary_engineering_studio_engine.task_paths`：任务、submission、事件账本和路径规范化。
 - `literary_engineering_studio_engine.route_selection`：route 工作项选择。

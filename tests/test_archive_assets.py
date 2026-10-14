@@ -14,7 +14,7 @@ from literary_engineering_studio.application.assets.owner_transactions import (
 from literary_engineering_studio.application.assets.registry import AssetViewRegistry
 from literary_engineering_studio.application.assets.revisions import AssetRevisionService
 from literary_engineering_studio.application.assets.validation import validate_asset_content
-from literary_engineering_studio.jobs import JobStore
+from literary_engineering_studio.persistence.job_store import JobStore
 from literary_engineering_studio.projections.archive.service import ArchiveProjectionService
 from literary_engineering_studio_engine.literary.scene.context.broker import (
     context_trace_status,

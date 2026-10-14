@@ -5,10 +5,10 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from literary_engineering_studio.config import default_config
-from literary_engineering_studio.core_read_models import install_core_import_path
-from literary_engineering_studio.project_manager import record_direction
-from literary_engineering_studio.worker import AgentWorker, _resolve_task_json_path
+from literary_engineering_studio.application.config import default_config
+from literary_engineering_studio.projections.core_read_models import install_core_import_path
+from literary_engineering_studio.application.project_manager import record_direction
+from literary_engineering_studio.runtime.worker import AgentWorker, _resolve_task_json_path
 from literary_engineering_studio.runtime.worker_writeback import WritebackCoordinator
 
 
@@ -85,7 +85,7 @@ class WorkerIntegrationTests(unittest.TestCase):
             config["worker"]["runs_root"] = str(temporary_root / "runs")
 
             with patch(
-                "literary_engineering_studio.worker.build_runtime",
+                "literary_engineering_studio.runtime.worker.build_runtime",
                 side_effect=AssertionError("runtime must not run"),
             ):
                 worker_result = AgentWorker(config).run_once(
@@ -133,9 +133,9 @@ class WorkerIntegrationTests(unittest.TestCase):
             init_work_project(InitOptions(target=project, title="Asset Seed Verification", target_length=50000))
             config["worker"]["runs_root"] = str(temporary_root / "runs")
             with (
-                patch("literary_engineering_studio.worker.build_runtime", side_effect=AssertionError("runtime must not run")),
+                patch("literary_engineering_studio.runtime.worker.build_runtime", side_effect=AssertionError("runtime must not run")),
                 patch(
-                    "literary_engineering_studio.core_bridge.CoreBridge.route_audit",
+                    "literary_engineering_studio.runtime.engine_bridge.CoreBridge.route_audit",
                     side_effect=AssertionError("full route audit must not run after every exact task"),
                 ),
             ):
@@ -158,7 +158,7 @@ class WorkerIntegrationTests(unittest.TestCase):
             project = temporary_root / "work"
             init_work_project(InitOptions(target=project, title="Deterministic Worker Verification", target_length=30000))
             config["worker"]["runs_root"] = str(temporary_root / "runs")
-            with patch("literary_engineering_studio.worker.build_runtime", side_effect=AssertionError("runtime must not run")):
+            with patch("literary_engineering_studio.runtime.worker.build_runtime", side_effect=AssertionError("runtime must not run")):
                 result = AgentWorker(config).run_once(
                     project,
                     route="longform-planning",

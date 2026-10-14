@@ -5,7 +5,7 @@ from pathlib import Path
 import subprocess
 from typing import Any
 
-from ..subprocess_utils import run_hidden
+from literary_engineering_studio.runtime.subprocess_utils import run_hidden
 from .base import AgentRunnerCapabilities, AgentRuntime, RuntimeAvailability, executable_prefix, resolve_executable
 
 

@@ -4,7 +4,7 @@ import sys
 import unittest
 from unittest.mock import MagicMock, patch
 
-from literary_engineering_studio.subprocess_utils import hidden_process_options, run_hidden
+from literary_engineering_studio.runtime.subprocess_utils import hidden_process_options, run_hidden
 
 
 class HiddenSubprocessTests(unittest.TestCase):
@@ -23,7 +23,7 @@ class HiddenSubprocessTests(unittest.TestCase):
         startupinfo = MagicMock()
         startupinfo.dwFlags = 0
         with (
-            patch("literary_engineering_studio.subprocess_utils.os.name", "nt"),
+            patch("literary_engineering_studio.runtime.subprocess_utils.os.name", "nt"),
             patch.object(subprocess, "STARTUPINFO", return_value=startupinfo, create=True),
             patch.object(subprocess, "STARTF_USESHOWWINDOW", 1, create=True),
             patch.object(subprocess, "SW_HIDE", 0, create=True),
@@ -37,7 +37,7 @@ class HiddenSubprocessTests(unittest.TestCase):
         self.assertEqual(startupinfo.wShowWindow, 0)
 
     def test_non_windows_options_are_empty(self):
-        with patch("literary_engineering_studio.subprocess_utils.os.name", "posix"):
+        with patch("literary_engineering_studio.runtime.subprocess_utils.os.name", "posix"):
             self.assertEqual(hidden_process_options(), {})
 
 

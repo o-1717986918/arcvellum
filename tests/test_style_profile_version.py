@@ -8,9 +8,9 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from literary_engineering_studio.config import default_config
-from literary_engineering_studio.core_read_models import install_core_import_path
-from literary_engineering_studio.worker import AgentWorker
+from literary_engineering_studio.application.config import default_config
+from literary_engineering_studio.projections.core_read_models import install_core_import_path
+from literary_engineering_studio.runtime.worker import AgentWorker
 from literary_engineering_studio_engine.tasking.agent_tasks.writer import (
     write_agent_completion_marker,
     write_agent_tasks,
@@ -42,7 +42,7 @@ class StyleProfileVersionTests(unittest.TestCase):
 
             config["worker"]["runs_root"] = str(base / "runs")
             with patch(
-                "literary_engineering_studio.worker.build_runtime",
+                "literary_engineering_studio.runtime.worker.build_runtime",
                 side_effect=AssertionError("version build must remain deterministic"),
             ):
                 worker_result = AgentWorker(config).run_once(

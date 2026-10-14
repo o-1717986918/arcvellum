@@ -4,8 +4,8 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from literary_engineering_studio.config import default_config
-from literary_engineering_studio.core_bridge import CoreBridge
+from literary_engineering_studio.application.config import default_config
+from literary_engineering_studio.runtime.engine_bridge import CoreBridge
 from literary_engineering_studio_engine.public.tasking import EngineOperation
 
 

@@ -13,7 +13,7 @@ except ImportError:  # pragma: no cover
     TestClient = None
 
 from literary_engineering_studio.api_server import create_app
-from literary_engineering_studio.config import default_config
+from literary_engineering_studio.application.config import default_config
 
 
 @unittest.skipIf(TestClient is None, "FastAPI test dependencies are not installed")

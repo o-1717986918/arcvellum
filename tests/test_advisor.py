@@ -4,8 +4,8 @@ import tempfile
 import unittest
 
 from literary_engineering_studio.advisor import METADATA_END, METADATA_MARKER, _PublicAnswerStream, _advisor_prompt, _parse_answer
-from literary_engineering_studio.advisor_snapshot import create_advisor_snapshot, project_hashes
-from literary_engineering_studio.jobs import JobStore
+from literary_engineering_studio.advisor.advisor_snapshot import create_advisor_snapshot, project_hashes
+from literary_engineering_studio.persistence.job_store import JobStore
 
 
 class AdvisorTests(unittest.TestCase):

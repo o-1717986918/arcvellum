@@ -7,7 +7,7 @@ from literary_engineering_studio.contracts import TaskPackage
 from literary_engineering_studio.preflight.declared_repair import (
     validate_source_extraction_revision,
 )
-from literary_engineering_studio.sandbox import SandboxManifest
+from literary_engineering_studio.runtime.sandbox import SandboxManifest
 
 
 class DeclaredRepairPreflightTests(unittest.TestCase):

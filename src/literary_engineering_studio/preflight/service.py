@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from ..contracts import TaskPackage
-from ..sandbox import SandboxManifest
+from literary_engineering_studio.runtime.sandbox import SandboxManifest
 from .canonicalization import (
     _read_object,
     _write_machine_fields,

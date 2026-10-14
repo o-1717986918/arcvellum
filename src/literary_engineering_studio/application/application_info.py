@@ -13,7 +13,7 @@ from typing import Any
 from .. import __version__
 from .config import default_config_path, default_data_root
 from .compatibility import compatibility_summary
-from ..model_connections import model_connection_status
+from literary_engineering_studio.integrations.model_connections import model_connection_status
 from ..integrations.pi_worker import locate_pi_worker
 from .project_manager import list_projects
 from ..runtimes import agent_runner_status

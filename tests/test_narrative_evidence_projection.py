@@ -6,8 +6,8 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from literary_engineering_studio.api_server import create_app
-from literary_engineering_studio.config import default_config
-from literary_engineering_studio.narrative_projection_v3 import (
+from literary_engineering_studio.application.config import default_config
+from literary_engineering_studio.projections.narrative_projection_v3 import (
     build_narrative_projection_v3,
 )
 from literary_engineering_studio_engine.projections.library.service import (

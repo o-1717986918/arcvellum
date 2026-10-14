@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 from literary_engineering_studio.api_server import create_app
 from literary_engineering_studio.application.style import StyleApplicationService
-from literary_engineering_studio.config import default_config
+from literary_engineering_studio.application.config import default_config
 from literary_engineering_studio_engine.literary.style.version import (
     build_style_profile_version,
 )
@@ -262,7 +262,7 @@ class StyleApplicationServiceTests(unittest.TestCase):
             )
             config["worker"]["runs_root"] = str(base / "runs")
             with TestClient(create_app(config)) as client, patch(
-                "literary_engineering_studio.worker.build_runtime",
+                "literary_engineering_studio.runtime.worker.build_runtime",
                 side_effect=AssertionError(
                     "deterministic style build must not start a model runtime"
                 ),

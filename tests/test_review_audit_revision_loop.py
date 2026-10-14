@@ -7,7 +7,7 @@ import unittest
 
 from literary_engineering_studio.contracts import TASK_SCHEMA, load_task_package
 from literary_engineering_studio.runtime.context_budget import resolve_task_context_budget
-from literary_engineering_studio.sandbox import stage_task
+from literary_engineering_studio.runtime.sandbox import stage_task
 from literary_engineering_studio.preflight.service import canonicalize_task_outputs
 from literary_engineering_studio.task_preflight import COMPLETION_SCHEMA, validate_task_outputs
 from literary_engineering_studio_engine.tasking.agent_tasks.writer import write_agent_completion_marker

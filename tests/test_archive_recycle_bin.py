@@ -10,7 +10,7 @@ from literary_engineering_studio.application.assets.recycle_bin import (
     RestoreConflictError,
 )
 from literary_engineering_studio.application.assets.registry import AssetViewRegistry
-from literary_engineering_studio.jobs import JobStore
+from literary_engineering_studio.persistence.job_store import JobStore
 
 
 class ArchiveRecycleBinTests(unittest.TestCase):

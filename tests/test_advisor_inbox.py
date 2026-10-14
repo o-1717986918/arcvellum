@@ -3,8 +3,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from literary_engineering_studio.advisor_inbox import inbox_snapshot, refresh_advisor_inbox, save_inbox_settings
-from literary_engineering_studio.jobs import JobStore
+from literary_engineering_studio.advisor.advisor_inbox import inbox_snapshot, refresh_advisor_inbox, save_inbox_settings
+from literary_engineering_studio.persistence.job_store import JobStore
 
 
 class AdvisorInboxStoreTests(unittest.TestCase):
@@ -50,9 +50,9 @@ class AdvisorInboxStoreTests(unittest.TestCase):
                     {"route": "scene-development", "target": "scene_0002", "next_action": "准备第二场的角色推演。"}
                 ],
             }
-            with patch("literary_engineering_studio.advisor_inbox.current_choices", return_value={"items": []}), patch(
-                "literary_engineering_studio.advisor_inbox.build_dashboard", return_value=dashboard
-            ), patch("literary_engineering_studio.advisor_inbox.build_reader_manifest", return_value={"units": []}):
+            with patch("literary_engineering_studio.advisor.advisor_inbox.current_choices", return_value={"items": []}), patch(
+                "literary_engineering_studio.advisor.advisor_inbox.build_dashboard", return_value=dashboard
+            ), patch("literary_engineering_studio.advisor.advisor_inbox.build_reader_manifest", return_value={"units": []}):
                 first = refresh_advisor_inbox(config, store, root)
                 second = refresh_advisor_inbox(config, store, root)
 
@@ -71,9 +71,9 @@ class AdvisorInboxStoreTests(unittest.TestCase):
                 "route_audits": [],
                 "next_actions": [{"route": "scene-development", "target": "scene_0002", "next_action": "继续创作。"}],
             }
-            with patch("literary_engineering_studio.advisor_inbox.current_choices", return_value={"items": []}), patch(
-                "literary_engineering_studio.advisor_inbox.build_dashboard", return_value=dashboard
-            ), patch("literary_engineering_studio.advisor_inbox.build_reader_manifest", return_value={"units": []}):
+            with patch("literary_engineering_studio.advisor.advisor_inbox.current_choices", return_value={"items": []}), patch(
+                "literary_engineering_studio.advisor.advisor_inbox.build_dashboard", return_value=dashboard
+            ), patch("literary_engineering_studio.advisor.advisor_inbox.build_reader_manifest", return_value={"units": []}):
                 snapshot = refresh_advisor_inbox(config, store, root)
 
             self.assertFalse(any(item["kind"] == "next_action_ready" for item in snapshot["items"]))

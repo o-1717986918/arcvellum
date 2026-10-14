@@ -7,7 +7,7 @@ import unittest
 from unittest.mock import patch
 
 from literary_engineering_studio.contracts import TASK_SCHEMA, TaskPackage, load_task_package
-from literary_engineering_studio.sandbox import SandboxManifest, stage_task
+from literary_engineering_studio.runtime.sandbox import SandboxManifest, stage_task
 from literary_engineering_studio.preflight.scene_manifest_metadata import canonicalize_scene_revision_manifest
 from literary_engineering_studio.task_preflight import COMPLETION_SCHEMA, canonicalize_task_outputs, validate_task_outputs
 import literary_engineering_studio_engine.tasking.registry as task_registry

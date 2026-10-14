@@ -7,7 +7,7 @@ import unittest
 from unittest.mock import patch
 
 from literary_engineering_studio.contracts import TASK_SCHEMA, TaskPackage, load_task_package
-from literary_engineering_studio.sandbox import SandboxManifest, stage_task
+from literary_engineering_studio.runtime.sandbox import SandboxManifest, stage_task
 from literary_engineering_studio.runtime.sandbox import (
     control_sandbox_view,
     refresh_sandbox_baseline,

@@ -43,8 +43,8 @@ from .api.routers.project_details import ProjectDetailRouterDependencies, build_
 from .api.routers.worker import WorkerRouterDependencies, build_worker_router, launch_worker
 from .observability.agent_observability import build_agent_observability
 from .projections.api_read_models import ProjectReadModels
-from .advisor_inbox import refresh_advisor_inbox, save_inbox_settings
-from .advisor_personas import persona_catalog, save_custom_persona, select_persona
+from literary_engineering_studio.advisor.advisor_inbox import refresh_advisor_inbox, save_inbox_settings
+from literary_engineering_studio.advisor.advisor_personas import persona_catalog, save_custom_persona, select_persona
 from .application.config import default_projects_root, save_config
 from .projections.core_read_models import build_activity, build_dashboard, build_task_summary, current_choices
 from .projections.core_read_models import record_choice, record_ui_note, save_display_field

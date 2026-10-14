@@ -10,8 +10,8 @@ from pathlib import Path
 import threading
 from typing import Any
 
-from ..creative_steward import CreativeSteward
-from ..project_manager import read_directions
+from literary_engineering_studio.advisor.creative_steward import CreativeSteward
+from literary_engineering_studio.application.project_manager import read_directions
 from literary_engineering_studio_engine.public.workflow import (
     build_workflow_state,
     next_scene_workflow_state,

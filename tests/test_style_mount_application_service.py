@@ -13,8 +13,8 @@ from literary_engineering_studio.application.style.mount_service import (
     StyleMountChoiceError,
     StyleMountPreviewError,
 )
-from literary_engineering_studio.config import default_config
-from literary_engineering_studio.core_read_models import record_choice
+from literary_engineering_studio.application.config import default_config
+from literary_engineering_studio.projections.core_read_models import record_choice
 from literary_engineering_studio_engine.literary.style.version import (
     build_style_profile_version,
 )

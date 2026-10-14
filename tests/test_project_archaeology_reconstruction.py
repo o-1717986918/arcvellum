@@ -12,7 +12,7 @@ from literary_engineering_studio.preflight.archaeology import (
     canonicalize_archaeology_metadata,
     validate_archaeology_reconstruction_output,
 )
-from literary_engineering_studio.sandbox import SandboxManifest
+from literary_engineering_studio.runtime.sandbox import SandboxManifest
 from literary_engineering_studio_engine.tasking.agent_tasks.writer import write_agent_completion_marker
 from literary_engineering_studio_engine.tasking.approval import record_workflow_approval
 from literary_engineering_studio_engine.literary.assets.workshop import _dry_payload

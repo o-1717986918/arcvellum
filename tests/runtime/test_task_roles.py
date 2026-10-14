@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from literary_engineering_studio.config import default_config
+from literary_engineering_studio.application.config import default_config
 from literary_engineering_studio.contracts import TaskPackage
 from literary_engineering_studio.runtime.sandbox import SandboxManifest
 from literary_engineering_studio.runtime.task_roles import runtime_role_for_task

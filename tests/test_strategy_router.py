@@ -11,7 +11,7 @@ from literary_engineering_studio.application.strategy_projection import (
     strategy_projection,
     typed_plan_events,
 )
-from literary_engineering_studio.config import default_config
+from literary_engineering_studio.application.config import default_config
 from literary_engineering_studio.orchestration import (
     OrchestrationMode,
     OrchestrationSettings,

@@ -17,7 +17,7 @@ from literary_engineering_studio.application.style.transactions import (
 from literary_engineering_studio_engine.literary.style.session import (
     source_content_digest,
 )
-from literary_engineering_studio.config import default_config
+from literary_engineering_studio.application.config import default_config
 
 
 class StyleAuthoringTransactionTests(unittest.TestCase):

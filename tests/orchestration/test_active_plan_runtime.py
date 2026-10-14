@@ -8,9 +8,9 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from literary_engineering_studio.config import default_config
+from literary_engineering_studio.application.config import default_config
 from literary_engineering_studio.contracts import TaskPackage
-from literary_engineering_studio.jobs import JobStore
+from literary_engineering_studio.persistence.job_store import JobStore
 from literary_engineering_studio.observability.context_ledger import parse_context_ledger
 from literary_engineering_studio.orchestration import (
     ActivePlanLoader,
@@ -32,7 +32,7 @@ from literary_engineering_studio.runtime.mutation_tracking import (
 from literary_engineering_studio.runtime.sandbox import stage_task
 from literary_engineering_studio.runtime.task_snapshot import load_run_task_snapshot
 from literary_engineering_studio.runtime.worker_results import WorkerRunResult
-from literary_engineering_studio.worker import AgentWorker
+from literary_engineering_studio.runtime.worker import AgentWorker
 from literary_engineering_studio_engine.tasking.agent_tasks.writer import (
     write_agent_completion_marker,
 )

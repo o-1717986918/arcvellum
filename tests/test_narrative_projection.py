@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from literary_engineering_studio.narrative_projection import (
+from literary_engineering_studio.projections.narrative_projection import (
     build_narrative_projection,
     projection_delta,
     projection_motion_events,
@@ -17,7 +17,7 @@ class NarrativeProjectionTests(unittest.TestCase):
             chapter = f"chapter_{index // 10 + 1:04d}"
             scenes.append({"id": f"scene_{index + 1:04d}", "title": f"场景 {index + 1}", "subtitle": chapter, "facts": [{"label": "章节", "value": chapter}, {"label": "目标字数", "value": "1400"}]})
         library = {"sections": {"scenes": scenes, "characters": [], "branches": [], "reviews": [], "canon_patches": []}}
-        with tempfile.TemporaryDirectory() as temporary, patch("literary_engineering_studio.narrative_projection.build_library", return_value=library), patch("literary_engineering_studio.narrative_projection.build_dashboard", return_value={"next_actions": []}), patch("literary_engineering_studio.narrative_projection.build_reader_manifest", return_value={"units": [], "total_chinese_content_chars": 0}):
+        with tempfile.TemporaryDirectory() as temporary, patch("literary_engineering_studio.projections.narrative_projection.build_library", return_value=library), patch("literary_engineering_studio.projections.narrative_projection.build_dashboard", return_value={"next_actions": []}), patch("literary_engineering_studio.projections.narrative_projection.build_reader_manifest", return_value={"units": [], "total_chinese_content_chars": 0}):
             projection = build_narrative_projection({}, Path(temporary), level="book")
         self.assertTrue(projection["summary"]["aggregated"])
         self.assertEqual(projection["summary"]["scene_count"], 1000)
@@ -56,7 +56,7 @@ class NarrativeProjectionTests(unittest.TestCase):
             }
         }
         reader = {"units": [{"coverage": ["scene_0001"], "content_hash": "one", "chapter_id": "chapter_0001", "chinese_content_chars": 1180}], "total_chinese_content_chars": 1180}
-        with tempfile.TemporaryDirectory() as temporary, patch("literary_engineering_studio.narrative_projection.build_library", return_value=library), patch("literary_engineering_studio.narrative_projection.build_dashboard", return_value={"next_actions": []}), patch("literary_engineering_studio.narrative_projection.build_reader_manifest", return_value=reader):
+        with tempfile.TemporaryDirectory() as temporary, patch("literary_engineering_studio.projections.narrative_projection.build_library", return_value=library), patch("literary_engineering_studio.projections.narrative_projection.build_dashboard", return_value={"next_actions": []}), patch("literary_engineering_studio.projections.narrative_projection.build_reader_manifest", return_value=reader):
             projection = build_narrative_projection({}, Path(temporary), level="book")
         chapter = next(node for node in projection["nodes"] if node["type"] == "chapter")
         self.assertEqual(projection["schema"], "arcvellum/narrative-projection/v2")
@@ -77,7 +77,7 @@ class NarrativeProjectionTests(unittest.TestCase):
                 "canon_patches": [],
             }
         }
-        with tempfile.TemporaryDirectory() as temporary, patch("literary_engineering_studio.narrative_projection.build_library", return_value=library), patch("literary_engineering_studio.narrative_projection.build_dashboard", return_value={"next_actions": []}), patch("literary_engineering_studio.narrative_projection.build_reader_manifest", return_value={"units": [], "total_chinese_content_chars": 0}):
+        with tempfile.TemporaryDirectory() as temporary, patch("literary_engineering_studio.projections.narrative_projection.build_library", return_value=library), patch("literary_engineering_studio.projections.narrative_projection.build_dashboard", return_value={"next_actions": []}), patch("literary_engineering_studio.projections.narrative_projection.build_reader_manifest", return_value={"units": [], "total_chinese_content_chars": 0}):
             projection = build_narrative_projection({}, Path(temporary), level="scene", focus="scene_0001")
         kinds = {node["type"] for node in projection["nodes"]}
         self.assertIn("branch", kinds)
@@ -107,7 +107,7 @@ class NarrativeProjectionTests(unittest.TestCase):
                 "canon_patches": [],
             }
         }
-        with tempfile.TemporaryDirectory() as temporary, patch("literary_engineering_studio.narrative_projection.build_library", return_value=library), patch("literary_engineering_studio.narrative_projection.build_dashboard", return_value={"next_actions": []}), patch("literary_engineering_studio.narrative_projection.build_reader_manifest", return_value={"units": [], "total_chinese_content_chars": 0}):
+        with tempfile.TemporaryDirectory() as temporary, patch("literary_engineering_studio.projections.narrative_projection.build_library", return_value=library), patch("literary_engineering_studio.projections.narrative_projection.build_dashboard", return_value={"next_actions": []}), patch("literary_engineering_studio.projections.narrative_projection.build_reader_manifest", return_value={"units": [], "total_chinese_content_chars": 0}):
             chapter = build_narrative_projection({}, Path(temporary), level="chapter", focus="chapter_0001")
             scene = build_narrative_projection({}, Path(temporary), level="scene", focus="scene_0002")
         for projection in (chapter, scene):
@@ -124,7 +124,7 @@ class NarrativeProjectionTests(unittest.TestCase):
     def test_projection_shows_current_state_machine_action(self):
         library = {"sections": {"scenes": [{"id": "scene_0001", "title": "场景一", "subtitle": "chapter_0001", "facts": [{"label": "章节", "value": "chapter_0001"}]}], "characters": [], "branches": [], "reviews": [], "canon_patches": []}}
         dashboard = {"next_actions": [{"route": "scene-development", "target": "scene_0001", "next_action": "先完成角色推演。"}]}
-        with tempfile.TemporaryDirectory() as temporary, patch("literary_engineering_studio.narrative_projection.build_library", return_value=library), patch("literary_engineering_studio.narrative_projection.build_dashboard", return_value=dashboard), patch("literary_engineering_studio.narrative_projection.build_reader_manifest", return_value={"units": [], "total_chinese_content_chars": 0}):
+        with tempfile.TemporaryDirectory() as temporary, patch("literary_engineering_studio.projections.narrative_projection.build_library", return_value=library), patch("literary_engineering_studio.projections.narrative_projection.build_dashboard", return_value=dashboard), patch("literary_engineering_studio.projections.narrative_projection.build_reader_manifest", return_value={"units": [], "total_chinese_content_chars": 0}):
             projection = build_narrative_projection({}, Path(temporary), level="book")
         task = next(node for node in projection["nodes"] if node["type"] == "task")
         self.assertEqual(task["status"], "queued")

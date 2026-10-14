@@ -5,7 +5,7 @@ import unittest
 from literary_engineering_studio.contracts import TaskPackage
 from literary_engineering_studio.preflight.common import PreflightIssue
 from literary_engineering_studio.preflight.style import validate_style_prompt_contract
-from literary_engineering_studio.sandbox import SandboxManifest
+from literary_engineering_studio.runtime.sandbox import SandboxManifest
 
 
 class StylePromptPreflightTests(unittest.TestCase):

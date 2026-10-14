@@ -4,7 +4,7 @@ from pathlib import Path
 import sys
 import unittest
 
-from literary_engineering_studio.config import (
+from literary_engineering_studio.application.config import (
     CONFIG_SCHEMA,
     default_config,
     get_pi_thinking_preferences,

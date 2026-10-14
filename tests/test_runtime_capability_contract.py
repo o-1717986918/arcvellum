@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
-from literary_engineering_studio.config import default_config
+from literary_engineering_studio.application.config import default_config
 from literary_engineering_studio.runtimes import RUNTIME_TYPES, agent_runner_status, build_runtime
 from literary_engineering_studio.runtimes.base import AgentRunnerCapabilities
 from literary_engineering_studio.runtimes.base import RuntimeAvailability

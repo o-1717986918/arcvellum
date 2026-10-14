@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from ..contracts import TaskPackage
-from ..sandbox import SandboxManifest
+from literary_engineering_studio.runtime.sandbox import SandboxManifest
 from literary_engineering_studio_engine.public.tasking import agent_task_digest
 
 

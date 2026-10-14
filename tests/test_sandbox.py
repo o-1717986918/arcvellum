@@ -6,7 +6,7 @@ import unittest
 from unittest.mock import patch
 
 from literary_engineering_studio.contracts import load_task_package
-from literary_engineering_studio.sandbox import (
+from literary_engineering_studio.runtime.sandbox import (
     apply_expected_outputs,
     capture_core_managed_outputs,
     changed_agent_outputs,

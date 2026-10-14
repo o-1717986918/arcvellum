@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from ..contracts import TaskPackage
-from ..core_bridge import CoreBridge
+from literary_engineering_studio.runtime.engine_bridge import CoreBridge
 from literary_engineering_studio_engine.public.tasking import operation_parameters
 from .context_budget import TaskContextBudget, resolve_task_context_budget
 from .execution_profiles import TaskExecutionProfile

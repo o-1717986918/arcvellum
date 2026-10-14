@@ -6,9 +6,9 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from literary_engineering_studio.config import default_config
-from literary_engineering_studio.core_read_models import install_core_import_path
-from literary_engineering_studio.jobs import JobStore
+from literary_engineering_studio.application.config import default_config
+from literary_engineering_studio.projections.core_read_models import install_core_import_path
+from literary_engineering_studio.persistence.job_store import JobStore
 from literary_engineering_studio.persistence.mutation_receipts import (
     MutationReceiptRepository,
 )
@@ -26,7 +26,7 @@ from literary_engineering_studio.observability.mutation_receipts import (
 from literary_engineering_studio.runtime.mutation_tracking import (
     load_worker_mutation_receipts,
 )
-from literary_engineering_studio.worker import AgentWorker
+from literary_engineering_studio.runtime.worker import AgentWorker
 
 
 class MutationReceiptTests(unittest.TestCase):
@@ -38,7 +38,7 @@ class MutationReceiptTests(unittest.TestCase):
                 raise OSError("event projection unavailable")
 
             with patch(
-                "literary_engineering_studio.worker.build_runtime",
+                "literary_engineering_studio.runtime.worker.build_runtime",
                 side_effect=AssertionError("deterministic task must not run an Agent"),
             ):
                 result = AgentWorker(config, event_sink=unavailable_sink).run_once(
@@ -164,7 +164,7 @@ class MutationReceiptTests(unittest.TestCase):
                 )
 
             with patch(
-                "literary_engineering_studio.worker.build_runtime",
+                "literary_engineering_studio.runtime.worker.build_runtime",
                 side_effect=AssertionError("deterministic task must not run an Agent"),
             ):
                 result = AgentWorker(config, event_sink=emit).run_once(
@@ -206,7 +206,7 @@ class MutationReceiptTests(unittest.TestCase):
             worker = AgentWorker(config)
             with (
                 patch(
-                    "literary_engineering_studio.worker.build_runtime",
+                    "literary_engineering_studio.runtime.worker.build_runtime",
                     side_effect=AssertionError("deterministic task must not run an Agent"),
                 ),
                 patch.object(

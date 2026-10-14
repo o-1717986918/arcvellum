@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from ..contracts import TaskPackage
-from ..sandbox import SandboxManifest
+from literary_engineering_studio.runtime.sandbox import SandboxManifest
 from .common import PreflightIssue
 from literary_engineering_studio_engine.public.literary import (
     style_prompt_quality_report,

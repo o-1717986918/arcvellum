@@ -13,7 +13,7 @@ except ImportError:  # pragma: no cover
     TestClient = None
 
 from literary_engineering_studio.api_server import create_app
-from literary_engineering_studio.config import default_config
+from literary_engineering_studio.application.config import default_config
 from literary_engineering_studio_engine.tasking.agent_tasks.writer import write_agent_completion_marker
 from literary_engineering_studio_engine.tasking.approval import record_workflow_approval
 from literary_engineering_studio_engine.literary.assets.workshop import _dry_payload

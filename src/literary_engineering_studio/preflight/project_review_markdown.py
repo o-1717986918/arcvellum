@@ -7,7 +7,7 @@ import re
 from typing import Any, Callable
 
 from ..contracts import TaskPackage
-from ..sandbox import SandboxManifest
+from literary_engineering_studio.runtime.sandbox import SandboxManifest
 
 
 _MACHINE_LINE_VARIANT = re.compile(

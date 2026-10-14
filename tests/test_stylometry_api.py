@@ -8,7 +8,7 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from literary_engineering_studio.api_server import create_app
-from literary_engineering_studio.config import default_config
+from literary_engineering_studio.application.config import default_config
 from literary_engineering_studio.application.container import build_application_container
 from literary_engineering_studio.infrastructure.defaults import build_default_application_ports
 

@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from literary_engineering_studio.project_manager import (
+from literary_engineering_studio.application.project_manager import (
     create_project,
     list_projects,
     validate_project_location,

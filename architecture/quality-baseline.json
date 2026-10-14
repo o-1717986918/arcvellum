@@ -17,83 +17,19 @@
     "literary_engineering_studio.advisor": [
       "literary_engineering_studio"
     ],
-    "literary_engineering_studio.advisor_inbox": [],
-    "literary_engineering_studio.advisor_personas": [],
-    "literary_engineering_studio.advisor_snapshot": [],
-    "literary_engineering_studio.agent_observability": [
-      "literary_engineering_studio.observability",
-      "literary_engineering_studio.observability.agent_observability"
-    ],
     "literary_engineering_studio.api.routers": [],
-    "literary_engineering_studio.api_read_models": [
-      "literary_engineering_studio.projections",
-      "literary_engineering_studio.projections.api_read_models"
-    ],
     "literary_engineering_studio.application.compatibility": [],
-    "literary_engineering_studio.application_info": [
-      "literary_engineering_studio.application",
-      "literary_engineering_studio.application.application_info"
-    ],
     "literary_engineering_studio.autopilot": [],
     "literary_engineering_studio.cli": [],
     "literary_engineering_studio.compatibility": [],
-    "literary_engineering_studio.config": [
-      "literary_engineering_studio.application",
-      "literary_engineering_studio.application.config"
-    ],
-    "literary_engineering_studio.core_bridge": [],
-    "literary_engineering_studio.core_read_models": [
-      "literary_engineering_studio.projections",
-      "literary_engineering_studio.projections.core_read_models"
-    ],
-    "literary_engineering_studio.creative_steward": [],
-    "literary_engineering_studio.delivery": [
-      "literary_engineering_studio.projections",
-      "literary_engineering_studio.projections.delivery"
-    ],
-    "literary_engineering_studio.jobs": [],
-    "literary_engineering_studio.live_events": [
-      "literary_engineering_studio.observability",
-      "literary_engineering_studio.observability.live_events"
-    ],
-    "literary_engineering_studio.model_connections": [
-      "literary_engineering_studio.integrations",
-      "literary_engineering_studio.integrations.model_connections"
-    ],
-    "literary_engineering_studio.narrative_projection": [
-      "literary_engineering_studio.projections",
-      "literary_engineering_studio.projections.narrative_projection"
-    ],
-    "literary_engineering_studio.narrative_projection_v3": [
-      "literary_engineering_studio.projections",
-      "literary_engineering_studio.projections.narrative_projection_v3"
-    ],
     "literary_engineering_studio.persistence.facade": [],
-    "literary_engineering_studio.project_manager": [
-      "literary_engineering_studio.application",
-      "literary_engineering_studio.application.project_manager"
-    ],
-    "literary_engineering_studio.reader": [
-      "literary_engineering_studio.projections",
-      "literary_engineering_studio.projections.reader"
-    ],
     "literary_engineering_studio.runtime.sidecar_protocol": [
       "literary_engineering_studio"
     ],
-    "literary_engineering_studio.sandbox": [
-      "literary_engineering_studio.runtime",
-      "literary_engineering_studio.runtime.sandbox"
-    ],
-    "literary_engineering_studio.subprocess_utils": [
-      "literary_engineering_studio.runtime",
-      "literary_engineering_studio.runtime.subprocess_utils"
-    ],
-    "literary_engineering_studio.supervisor": [],
     "literary_engineering_studio.whole_book_release": [
       "literary_engineering_studio.projections",
       "literary_engineering_studio.projections.whole_book_release"
     ],
-    "literary_engineering_studio.worker": [],
     "literary_engineering_studio_engine.agent_provider": [],
     "literary_engineering_studio_engine.api_server": [
       "literary_engineering_studio_engine",

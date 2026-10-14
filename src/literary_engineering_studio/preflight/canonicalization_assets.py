@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from ..contracts import TaskPackage
-from ..sandbox import SandboxManifest
+from literary_engineering_studio.runtime.sandbox import SandboxManifest
 from .asset_evidence import review_machine_fields
 from .asset_review_metadata import (
     canonicalize_asset_review_action_targets,

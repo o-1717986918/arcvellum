@@ -10,7 +10,7 @@ from unittest.mock import patch
 from literary_engineering_studio.application.config import default_config
 from literary_engineering_studio.automation.controller import AutopilotService
 from literary_engineering_studio.automation.policy import default_policy
-from literary_engineering_studio.jobs import JobStore
+from literary_engineering_studio.persistence.job_store import JobStore
 from literary_engineering_studio.runtime.worker import WorkerRunResult
 
 

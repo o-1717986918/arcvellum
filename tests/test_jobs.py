@@ -6,8 +6,8 @@ import time
 import unittest
 from unittest.mock import patch
 
-from literary_engineering_studio.jobs import JobStore
-from literary_engineering_studio.supervisor import WorkerSupervisor
+from literary_engineering_studio.persistence.job_store import JobStore
+from literary_engineering_studio.runtime.supervisor import WorkerSupervisor
 from literary_engineering_studio.runtime.execution_admission import ExecutionAdmission
 from literary_engineering_studio.runtime.resources import ResourceClaim, project_identity
 

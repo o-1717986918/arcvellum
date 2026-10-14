@@ -11,8 +11,8 @@ from .models import WorkerRequest
 from .routers.project_agent import ProjectAgentRouterDependencies, build_project_agent_router
 from .streaming import numeric_resume_cursor, sse, stream_terminal
 from .routers.worker import launch_worker
-from ..advisor_personas import active_persona
-from ..core_read_models import current_choices, record_choice
+from literary_engineering_studio.advisor.advisor_personas import active_persona
+from literary_engineering_studio.projections.core_read_models import current_choices, record_choice
 from ..project_agent import ProjectAgentService
 from ..project_agent.actions import dependencies_from_actions
 from ..project_agent.archive_actions import archive_read_action
@@ -26,7 +26,7 @@ from ..application.lean_longform_planning import LeanLongformPlanningService
 from ..application.lean_assets import ensure_lean_planning_assets, lean_asset_alignment
 from ..application.lean_asset_enrichment import enrich_lean_planning_assets
 from ..runtime.role_conversation import RoleConversationGateway
-from ..project_manager import create_project, list_projects, record_direction
+from literary_engineering_studio.application.project_manager import create_project, list_projects, record_direction
 from literary_engineering_studio_engine.public.literary import (
     load_creative_quality_profile,
     load_rhythm_plan,

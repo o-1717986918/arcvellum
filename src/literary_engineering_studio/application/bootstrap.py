@@ -7,8 +7,8 @@ from datetime import datetime, timezone
 import threading
 from typing import Any, Callable
 
-from ..core_bridge import CoreBridge
-from ..model_connections import model_connection_status
+from literary_engineering_studio.runtime.engine_bridge import CoreBridge
+from literary_engineering_studio.integrations.model_connections import model_connection_status
 from ..integrations.pi_worker import pi_worker_catalog
 from .project_manager import list_projects
 

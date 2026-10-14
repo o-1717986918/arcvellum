@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 import subprocess
 
-from literary_engineering_studio.config import load_config
+from literary_engineering_studio.application.config import load_config
 from literary_engineering_studio.application.container import build_application_container
 from literary_engineering_studio.infrastructure.defaults import build_default_application_ports
 from literary_engineering_studio.infrastructure.lean_scene_runtime import build_lean_scene_runtime

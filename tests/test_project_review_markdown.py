@@ -5,7 +5,7 @@ import unittest
 
 from literary_engineering_studio.contracts import TaskPackage
 from literary_engineering_studio.preflight.canonicalization import canonicalize_task_outputs
-from literary_engineering_studio.sandbox import SandboxManifest
+from literary_engineering_studio.runtime.sandbox import SandboxManifest
 from literary_engineering_studio.task_preflight import validate_task_outputs
 
 

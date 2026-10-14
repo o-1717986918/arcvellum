@@ -25,7 +25,7 @@ from .scene_manifest_metadata import (
 from .scene_review_metadata import canonicalize_scene_review_metadata
 from .style_snapshot import prompt_style_snapshot
 from .style_metadata import canonicalize_style_machine_metadata
-from ..sandbox import SandboxManifest
+from literary_engineering_studio.runtime.sandbox import SandboxManifest
 from literary_engineering_studio_engine.public.literary import REQUIRED_FIELDS
 from .completion_receipts import canonicalize_agent_completion_markers
 from .project_review_repair_scope import canonicalize_project_review_repair_scope

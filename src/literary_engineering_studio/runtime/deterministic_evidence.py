@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 from ..contracts import TaskPackage
-from ..core_bridge import CoreBridge
+from literary_engineering_studio.runtime.engine_bridge import CoreBridge
 
 
 CANON_LINT_PATHS = ("reviews/canon_lint.md", "reviews/canon_lint.json")

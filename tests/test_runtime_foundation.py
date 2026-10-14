@@ -6,7 +6,7 @@ import time
 import unittest
 from unittest.mock import patch
 
-from literary_engineering_studio.config import default_config
+from literary_engineering_studio.application.config import default_config
 from literary_engineering_studio.infrastructure.legacy_lifecycle import ApplicationLifecycleManager
 from literary_engineering_studio.runtime.process_manager import ProcessSpec
 from literary_engineering_studio.runtimes import RUNTIME_TYPES

@@ -10,7 +10,7 @@ from typing import Any
 from collections.abc import Mapping, Sequence
 
 from ..integrations.pi_worker import locate_pi_worker
-from ..subprocess_utils import run_hidden
+from literary_engineering_studio.runtime.subprocess_utils import run_hidden
 from .base import (
     AgentRunnerCapabilities,
     AgentRuntime,

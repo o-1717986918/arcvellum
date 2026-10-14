@@ -12,7 +12,7 @@ from typing import Any
 from collections.abc import Callable, Sequence
 
 from ..integrations.pi_rpc import PiRpcProcess, PiRpcProcessError
-from ..subprocess_utils import run_hidden
+from literary_engineering_studio.runtime.subprocess_utils import run_hidden
 from .base import AgentRunnerCapabilities, AgentRuntime, RuntimeAvailability, RuntimeResult, resolve_executable
 
 

@@ -12,7 +12,7 @@ from ..application.style import (
     StyleMountApplicationService,
 )
 from ..application.style.task_service import StyleTaskService
-from ..core_read_models import style_library
+from literary_engineering_studio.projections.core_read_models import style_library
 from .routers.archaeology import ArchaeologyRouterDependencies
 from .routers.style_lab import StyleLabRouterDependencies
 

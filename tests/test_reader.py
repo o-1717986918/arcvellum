@@ -4,8 +4,8 @@ import tempfile
 import time
 import unittest
 
-from literary_engineering_studio.reader import build_reader_manifest, public_reader_manifest, read_reader_unit, search_reader
-from literary_engineering_studio.jobs import JobStore
+from literary_engineering_studio.projections.reader import build_reader_manifest, public_reader_manifest, read_reader_unit, search_reader
+from literary_engineering_studio.persistence.job_store import JobStore
 
 
 class ReaderProjectionTests(unittest.TestCase):

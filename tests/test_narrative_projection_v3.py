@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from literary_engineering_studio.narrative_projection_v3 import (
+from literary_engineering_studio.projections.narrative_projection_v3 import (
     build_narrative_node_detail_v3,
     build_narrative_projection_v3,
 )
@@ -60,7 +60,7 @@ class NarrativeProjectionV3Tests(unittest.TestCase):
         self.reader = {"units": [], "total_chinese_content_chars": 0}
 
     def _projection(self, **kwargs):
-        with tempfile.TemporaryDirectory() as temporary, patch("literary_engineering_studio.narrative_projection.build_reader_manifest", return_value=self.reader):
+        with tempfile.TemporaryDirectory() as temporary, patch("literary_engineering_studio.projections.narrative_projection.build_reader_manifest", return_value=self.reader):
             return build_narrative_projection_v3(
                 {},
                 Path(temporary),
@@ -126,7 +126,7 @@ class NarrativeProjectionV3Tests(unittest.TestCase):
                 ],
             }
         )
-        with tempfile.TemporaryDirectory() as temporary, patch("literary_engineering_studio.narrative_projection.build_reader_manifest", return_value=self.reader):
+        with tempfile.TemporaryDirectory() as temporary, patch("literary_engineering_studio.projections.narrative_projection.build_reader_manifest", return_value=self.reader):
             root = Path(temporary)
             chapter = build_narrative_projection_v3(
                 {}, root, level="chapter", focus="chapter_0001", library_payload=library, dashboard_payload=self.dashboard,
@@ -143,7 +143,7 @@ class NarrativeProjectionV3Tests(unittest.TestCase):
     def test_auto_grammar_and_detail_are_safe_and_evidence_bound(self):
         projection = self._projection(level="scene", focus="scene_0001")
         self.assertEqual(projection["spatial_grammar"], "stage")
-        with tempfile.TemporaryDirectory() as temporary, patch("literary_engineering_studio.narrative_projection.build_reader_manifest", return_value=self.reader):
+        with tempfile.TemporaryDirectory() as temporary, patch("literary_engineering_studio.projections.narrative_projection.build_reader_manifest", return_value=self.reader):
             detail = build_narrative_node_detail_v3(
                 {},
                 Path(temporary),
@@ -159,7 +159,7 @@ class NarrativeProjectionV3Tests(unittest.TestCase):
         self.assertTrue(detail["relationships"])
 
     def test_v3_is_stable_for_same_evidence_and_requested_grammar(self):
-        with tempfile.TemporaryDirectory() as temporary, patch("literary_engineering_studio.narrative_projection.build_reader_manifest", return_value=self.reader):
+        with tempfile.TemporaryDirectory() as temporary, patch("literary_engineering_studio.projections.narrative_projection.build_reader_manifest", return_value=self.reader):
             root = Path(temporary)
             first = build_narrative_projection_v3(
                 {}, root, level="chapter", focus="chapter_0001", grammar="strata",
@@ -185,7 +185,7 @@ class NarrativeProjectionV3Tests(unittest.TestCase):
                 ],
             })
         library = {"sections": {"scenes": scenes, "characters": [], "branches": [], "reviews": [], "canon_patches": []}}
-        with tempfile.TemporaryDirectory() as temporary, patch("literary_engineering_studio.narrative_projection.build_reader_manifest", return_value=self.reader):
+        with tempfile.TemporaryDirectory() as temporary, patch("literary_engineering_studio.projections.narrative_projection.build_reader_manifest", return_value=self.reader):
             projection = build_narrative_projection_v3(
                 {},
                 Path(temporary),
@@ -229,7 +229,7 @@ class NarrativeProjectionV3Tests(unittest.TestCase):
             }
         }
         with tempfile.TemporaryDirectory() as temporary, patch(
-            "literary_engineering_studio.narrative_projection.build_reader_manifest",
+            "literary_engineering_studio.projections.narrative_projection.build_reader_manifest",
             return_value=self.reader,
         ):
             projection = build_narrative_projection_v3(
@@ -255,7 +255,7 @@ class NarrativeProjectionV3Tests(unittest.TestCase):
         )
 
     def test_v3_exposes_the_formal_rhythm_plan_as_a_spatial_hint(self):
-        with tempfile.TemporaryDirectory() as temporary, patch("literary_engineering_studio.narrative_projection.build_reader_manifest", return_value=self.reader):
+        with tempfile.TemporaryDirectory() as temporary, patch("literary_engineering_studio.projections.narrative_projection.build_reader_manifest", return_value=self.reader):
             root = Path(temporary)
             (root / "scenes").mkdir()
             (root / "scenes" / "scene_0001.yaml").write_text(

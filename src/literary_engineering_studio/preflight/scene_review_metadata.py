@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 
 from ..contracts import TaskPackage
-from ..sandbox import SandboxManifest
+from literary_engineering_studio.runtime.sandbox import SandboxManifest
 from .style_snapshot import candidate_style_snapshot
 from literary_engineering_studio_engine.public.literary import (
     creative_quality_profile_exists,

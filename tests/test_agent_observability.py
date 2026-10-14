@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import unittest
 
-from literary_engineering_studio.agent_observability import build_agent_observability
+from literary_engineering_studio.observability.agent_observability import build_agent_observability
 
 
 class AgentObservabilityTests(unittest.TestCase):

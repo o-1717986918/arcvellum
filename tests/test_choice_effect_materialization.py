@@ -2,9 +2,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from literary_engineering_studio.config import default_config
-from literary_engineering_studio.core_read_models import record_choice
-from literary_engineering_studio.project_manager import read_directions
+from literary_engineering_studio.application.config import default_config
+from literary_engineering_studio.projections.core_read_models import record_choice
+from literary_engineering_studio.application.project_manager import read_directions
 
 
 class ChoiceEffectMaterializationTests(unittest.TestCase):

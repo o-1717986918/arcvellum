@@ -10,7 +10,7 @@ import subprocess
 import tempfile
 from typing import Any
 
-from ...subprocess_utils import run_hidden
+from literary_engineering_studio.runtime.subprocess_utils import run_hidden
 from .installation import locate_pi_worker
 
 

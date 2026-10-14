@@ -10,7 +10,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from ...subprocess_utils import popen_hidden
+from literary_engineering_studio.runtime.subprocess_utils import popen_hidden
 from .framing import JsonlFramer, PiRpcProtocolError, encode_jsonl
 
 

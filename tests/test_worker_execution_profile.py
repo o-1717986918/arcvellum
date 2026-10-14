@@ -7,7 +7,7 @@ import threading
 import unittest
 
 from literary_engineering_studio.contracts import TaskPackage
-from literary_engineering_studio.config import default_config
+from literary_engineering_studio.application.config import default_config
 from literary_engineering_studio.runtime.execution_profiles import resolve_task_execution_profile
 from literary_engineering_studio.runtime.sandbox import SandboxManifest
 from literary_engineering_studio.runtime.worker_execution_profile import (

@@ -86,7 +86,7 @@
 - Status: in_progress
 - Safe boundaries already extracted:
   - `literary_engineering_studio.sidecar_protocol`: loopback policy, ready-file IPC, bound-port discovery and nonce contract. CLI compatibility exports are retained.
-  - `literary_engineering_studio.api_read_models`: revision-aware Dashboard, Library, Reader, Progress, Delivery and Workspace composition. API routes keep their existing public surface and late-bound Dashboard instrumentation seam.
+  - `literary_engineering_studio.projections.api_read_models`: revision-aware Dashboard, Library, Reader, Progress, Delivery and Workspace composition. API routes keep their existing public surface and late-bound Dashboard instrumentation seam.
   - `literary_engineering_studio_engine.task_package_contract`: formal task contract constants, fingerprinting, prompt projection, output ownership and Markdown rendering. Registry compatibility facades are retained; the next safe cleanup is removal of the now-unreachable legacy bodies after an exact task-package snapshot is added.
   - `literary_engineering_studio_engine.route_selection`: route-local work-item selection, including explicit exact-identifier versus path-suffix matching rules.
   - `literary_engineering_studio_engine.task_lifecycle`: route-neutral issue/open/submit/complete/revert/advance/event operations. Registry injects the route definition, payload builder, renderer and Gate services through a compatibility facade; the former duplicate lifecycle bodies were removed after focused lifecycle, task-contract, rollback and Worker integration regressions passed.

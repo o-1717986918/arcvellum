@@ -10,7 +10,7 @@ except ImportError:  # pragma: no cover
 
 from literary_engineering_studio.api_server import create_app
 from literary_engineering_studio.api.models import ProjectAgentTurnRequest
-from literary_engineering_studio.config import default_config
+from literary_engineering_studio.application.config import default_config
 from literary_engineering_studio.project_agent import ProjectAgentDependencies, ProjectAgentTurnResult
 
 

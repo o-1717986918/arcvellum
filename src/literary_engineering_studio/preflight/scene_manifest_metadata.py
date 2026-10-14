@@ -9,7 +9,7 @@ from typing import Any, Callable
 
 from ..contracts import TaskPackage
 from ..protocols.scene_artifacts import is_scene_revision_candidate_path
-from ..sandbox import SandboxManifest
+from literary_engineering_studio.runtime.sandbox import SandboxManifest
 from literary_engineering_studio_engine.public.tasking import SCENE_REVISION_STATES
 from .style_snapshot import prompt_style_snapshot
 

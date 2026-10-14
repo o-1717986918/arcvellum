@@ -11,10 +11,10 @@ from literary_engineering_studio.application.style.task_service import (
     StyleTaskService,
 )
 from literary_engineering_studio.application.style.transactions import StyleAuthoringService
-from literary_engineering_studio.config import default_config
-from literary_engineering_studio.core_bridge import task_command_parameters
-from literary_engineering_studio.core_read_models import install_core_import_path
-from literary_engineering_studio.worker import AgentWorker
+from literary_engineering_studio.application.config import default_config
+from literary_engineering_studio.runtime.engine_bridge import task_command_parameters
+from literary_engineering_studio.projections.core_read_models import install_core_import_path
+from literary_engineering_studio.runtime.worker import AgentWorker
 from literary_engineering_studio_engine.projects.init import InitOptions, init_work_project
 from literary_engineering_studio_engine.literary.style.session import (
     StyleSessionSourceError,
@@ -108,7 +108,7 @@ class StyleTaskServiceTests(unittest.TestCase):
 
             config["worker"]["runs_root"] = str(base / "runs")
             with patch(
-                "literary_engineering_studio.worker.build_runtime",
+                "literary_engineering_studio.runtime.worker.build_runtime",
                 side_effect=AssertionError("runtime must not run for deterministic compilation"),
             ):
                 result = AgentWorker(config).run_once(

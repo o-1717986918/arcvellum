@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 from ..contracts import TaskPackage
-from ..sandbox import SandboxManifest
+from literary_engineering_studio.runtime.sandbox import SandboxManifest
 from .scene_manifest_metadata import scene_revision_paths
 
 

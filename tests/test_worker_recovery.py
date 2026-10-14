@@ -3,10 +3,10 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from literary_engineering_studio.config import default_config
+from literary_engineering_studio.application.config import default_config
 from literary_engineering_studio.contracts import load_task_package
 from literary_engineering_studio.runtime.sandbox import stage_task
-from literary_engineering_studio.worker import AgentWorker
+from literary_engineering_studio.runtime.worker import AgentWorker
 
 
 class WorkerRecoveryTests(unittest.TestCase):

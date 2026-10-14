@@ -7,8 +7,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from literary_engineering_studio.config import default_config
-from literary_engineering_studio.core_bridge import CoreBridge, CoreCommandResult, _assert_studio_engine_args, parse_cli_fields, task_command_parameters
+from literary_engineering_studio.application.config import default_config
+from literary_engineering_studio.runtime.engine_bridge import CoreBridge, CoreCommandResult, _assert_studio_engine_args, parse_cli_fields, task_command_parameters
 from literary_engineering_studio_engine.command_line.entry import main as engine_main
 
 
@@ -27,7 +27,7 @@ class CoreBridgeTests(unittest.TestCase):
             (root / "src" / "literary_engineering_studio_engine").mkdir(parents=True)
             config = default_config()
             config["engine"]["python"] = "D:/ArcVellum/literary-engineering-studio-sidecar.exe"
-            with patch("literary_engineering_studio.core_bridge.repository_root", return_value=root):
+            with patch("literary_engineering_studio.runtime.engine_bridge.repository_root", return_value=root):
                 bridge = CoreBridge(config)
             self.assertEqual(bridge.python, sys.executable)
 
@@ -36,9 +36,9 @@ class CoreBridgeTests(unittest.TestCase):
         config["engine"]["python"] = "D:/removed/ArcVellum/literary-engineering-studio-sidecar.exe"
         current_sidecar = "C:/current/ArcVellum/literary-engineering-studio-sidecar.exe"
         with (
-            patch("literary_engineering_studio.core_bridge.repository_root", return_value=Path("C:/installed")),
-            patch("literary_engineering_studio.core_bridge.sys.frozen", True, create=True),
-            patch("literary_engineering_studio.core_bridge.sys.executable", current_sidecar),
+            patch("literary_engineering_studio.runtime.engine_bridge.repository_root", return_value=Path("C:/installed")),
+            patch("literary_engineering_studio.runtime.engine_bridge.sys.frozen", True, create=True),
+            patch("literary_engineering_studio.runtime.engine_bridge.sys.executable", current_sidecar),
         ):
             bridge = CoreBridge(config)
         self.assertEqual(bridge.python, current_sidecar)
@@ -79,7 +79,7 @@ class CoreBridgeTests(unittest.TestCase):
 
     def test_engine_subprocess_forces_utf8_transport_on_windows_code_pages(self):
         bridge = CoreBridge(default_config())
-        with patch("literary_engineering_studio.core_bridge.run_hidden") as run:
+        with patch("literary_engineering_studio.runtime.engine_bridge.run_hidden") as run:
             run.return_value = type("Completed", (), {"returncode": 0, "stdout": "", "stderr": ""})()
             bridge.run(["--help"])
         env = run.call_args.kwargs["env"]

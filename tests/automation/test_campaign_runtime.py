@@ -11,7 +11,7 @@ from literary_engineering_studio.automation.campaign_runtime import (
     formal_progress_evidence,
 )
 from literary_engineering_studio.automation.policy import default_policy
-from literary_engineering_studio.jobs import JobStore
+from literary_engineering_studio.persistence.job_store import JobStore
 
 
 class FormalProgressEvidenceTests(unittest.TestCase):

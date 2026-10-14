@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 
 from ..contracts import TaskPackage
-from ..sandbox import SandboxManifest
+from literary_engineering_studio.runtime.sandbox import SandboxManifest
 from .common import PreflightIssue
 from literary_engineering_studio_engine.public.literary import canon_patch_candidate_issues
 

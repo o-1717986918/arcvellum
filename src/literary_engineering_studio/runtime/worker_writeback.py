@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ..contracts import TaskPackage
-from ..core_bridge import CoreBridge
+from literary_engineering_studio.runtime.engine_bridge import CoreBridge
 from ..preflight.common import PreflightIssue, PreflightResult
 from ..task_preflight import canonicalize_task_outputs, validate_task_outputs
 from .deterministic_evidence import refresh_deterministic_evidence

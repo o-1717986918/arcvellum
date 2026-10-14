@@ -9,7 +9,7 @@ import unittest
 from fastapi.testclient import TestClient
 
 from literary_engineering_studio.api_server import create_app
-from literary_engineering_studio.config import default_config
+from literary_engineering_studio.application.config import default_config
 from literary_engineering_studio.observability.creative_live.contracts import project_channel
 from literary_engineering_studio.application.scene_transaction import SceneTransaction
 from literary_engineering_studio_engine.literary.scene.transaction import (

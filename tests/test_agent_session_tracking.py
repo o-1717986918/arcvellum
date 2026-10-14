@@ -9,7 +9,7 @@ from literary_engineering_studio.observability.agent_session_tracking import (
     AgentSessionEventProjector,
     track_agent_session_event,
 )
-from literary_engineering_studio.jobs import JobStore
+from literary_engineering_studio.persistence.job_store import JobStore
 
 
 class AgentSessionTrackingTests(unittest.TestCase):
