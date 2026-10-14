@@ -1,4 +1,6 @@
 from types import SimpleNamespace
+from pathlib import Path
+import tempfile
 import threading
 import unittest
 
@@ -31,6 +33,34 @@ class _PausedRuns:
 
 
 class SceneEditorialCheckpointTests(unittest.TestCase):
+    def test_formal_unit_limit_takes_precedence_after_commit(self):
+        for editorial in (True, False):
+            for limit, reason in ((1, "goal-scope-complete"), (2, "scene-editorial-checkpoint")):
+                with self.subTest(editorial=editorial, limit=limit), tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    commits = root / "workflow" / "scene_commits"
+                    commits.mkdir(parents=True)
+                    (commits / "scene_0001.json").write_text("{}", encoding="utf-8")
+                    runs, pauses = _Runs(), []
+                    host = LeanSceneAutopilotHost(
+                        config={}, runs=runs, scene_transactions=None, execution_coordinator=None,
+                        emit_event=lambda *_args: None, pause=lambda *args: pauses.append(args),
+                    )
+                    policy = default_policy("full_auto", literary_kernel="lean-v2")
+                    policy["limits"]["stop_after_formal_units"] = limit
+                    policy["editorial_scene_checkpoint"] = editorial
+                    step = SimpleNamespace(
+                        route_ready=False, waiting_human=False, blocked=False, committed=True,
+                        scene_id="scene_0001", transaction_status="committed",
+                    )
+                    stopped = host._apply_step(
+                        "run-1", {"project_root": str(root)}, step, policy=DelegationPolicy(policy),
+                    )
+                    expected = limit == 1 or editorial
+                    self.assertEqual(stopped, expected)
+                    self.assertEqual(len(runs.advanced), 1)
+                    self.assertEqual([item[1] for item in pauses], [reason] if expected else [])
+
     def test_managed_scene_commit_pauses_before_next_scene(self):
         runs = _Runs()
         pauses = []

@@ -12,6 +12,7 @@ from literary_engineering_studio_engine.public.literary import SceneExecutionMod
 from .lean_scene_loop import LeanSceneRunCoordinator
 from ..application.lean_longform_planning import LeanLongformPlanningService
 from .policy import DelegationPolicy
+from .formal_unit_checkpoint import formal_unit_checkpoint
 from ..infrastructure.lean_scene_runtime import build_lean_scene_runtime
 from ..observability.creative_live.scene_transactions import scene_transaction_summary
 from ..runtime.runtime_selection import runtime_for_role
@@ -211,6 +212,11 @@ class LeanSceneAutopilotHost:
                 last_error="",
                 consecutive_revisions=0,
             )
+            limit = policy.stop_after_formal_units
+            checkpoint = formal_unit_checkpoint(Path(run["project_root"]), limit) if limit else ""
+            if checkpoint:
+                self._pause(run_id, "goal-scope-complete", checkpoint)
+                return True
             if policy.editorial_scene_checkpoint:
                 self._pause(
                     run_id, "scene-editorial-checkpoint",

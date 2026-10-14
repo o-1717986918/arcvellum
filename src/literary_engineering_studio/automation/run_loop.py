@@ -16,6 +16,7 @@ from ..advisor.creative_steward import CreativeSteward
 from ..runtime.worker import WorkerRunResult
 from .campaign_runtime import CampaignRuntimeCoordinator
 from .policy import DelegationPolicy
+from .formal_unit_checkpoint import formal_unit_checkpoint
 from .route_dependencies import resolve_route_cycle
 from .run_result_contracts import RouteCycle
 from .run_result_handler import ClaimedRunResultHandler, RunLoopHost
@@ -110,16 +111,13 @@ class ClaimedRunLoop:
                 return
 
     def _formal_unit_limit_stopped(self) -> bool:
-        limit = self.policy.stop_after_formal_units
-        if not limit:
-            return False
-        committed = len(tuple((self.project / "workflow" / "scene_commits").glob("*.json")))
-        if committed < limit:
+        message = formal_unit_checkpoint(self.project, self.policy.stop_after_formal_units)
+        if not message:
             return False
         self.host._pause_for(
             self.run_id,
             "goal-scope-complete",
-            f"已达到长期目标的正式单元检查点：{committed}/{limit}。",
+            message,
         )
         return True
 
