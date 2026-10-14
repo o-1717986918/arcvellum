@@ -76,7 +76,11 @@ class NaturalCreatorMixin:
                 layers=self._v2_prompt_snapshot(transaction_id)['texts']
                 context={**context,'actor_system_template':layers['scene.v2.material.actor'],
                     'actor_card_design_guidance':layers['scene.v2.creator.actor-card']}
-            signature=progress.register(error)
+            try:
+                signature=progress.register(error)
+            except NaturalSourceClarificationError as stopped:
+                stopped.source_text = answer
+                raise
             task = json.dumps({**field_repair_task(answer,error.payload,error.fields,context),
                               "failure":recovery_issue(error,answer),
                               **progress.feedback_fields()},ensure_ascii=False)
@@ -152,9 +156,9 @@ class NaturalCreatorMixin:
                 memory = next_memory
             except ValueError as error:
                 if isinstance(error, NaturalExtractionError):
-                    journal.reject(prompt, error, technical_only=True, answer=answer)
+                    journal.reject(prompt, error, technical_only=True, answer=getattr(error, 'source_text', answer))
                     raise
-                journal.reject(prompt, error, answer=answer)
+                journal.reject(prompt, error, answer=getattr(error, 'source_text', answer))
                 raise
             memory.save(memory_path)
             journal.accept()
@@ -282,7 +286,7 @@ class NaturalCreatorMixin:
             try:
                 extracted = processor.process(answer, kind="review", context=context)
             except NaturalSourceClarificationError as error:
-                purpose = "evidence-repair" if all(path.endswith("/evidence") for path in error.fields) else "review"
+                purpose = "evidence-repair" if all(path.endswith(("/evidence","/prose_sha256","/prose_block")) for path in error.fields) else "review"
                 extracted = self._source_field_repair(transaction_id,processor,answer,"review",context,error,
                     lambda task:self._run_natural_text(system,task,transaction_id,"reviewer",purpose=purpose))
             except NaturalExtractionError as error:
@@ -295,9 +299,9 @@ class NaturalCreatorMixin:
             review = review_result_from_payload(review_payload)
         except ValueError as error:
             if isinstance(error, NaturalExtractionError):
-                journal.reject(system+prompt,error,technical_only=True,answer=answer,context_digest=context_binding)
+                journal.reject(system+prompt,error,technical_only=True,answer=getattr(error,'source_text',answer),context_digest=context_binding)
                 raise
-            journal.reject(system + prompt, error,answer=answer,context_digest=context_binding)
+            journal.reject(system + prompt, error,answer=getattr(error,'source_text',answer),context_digest=context_binding)
             raise
         journal.accept()
         save_review_integrity(memory_path.parent / 'v2', result.prose, extracted)

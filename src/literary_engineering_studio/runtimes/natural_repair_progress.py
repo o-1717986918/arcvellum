@@ -75,4 +75,7 @@ class SourceRepairProgress:
 
 
 def _exhausted(error, message):
-    return NaturalSourceClarificationError(message+'；'+str(error), fields=error.fields, payload=error.payload)
+    stopped = NaturalSourceClarificationError(message+'；'+str(error), fields=error.fields, payload=error.payload)
+    if getattr(error, 'source_text', None):
+        stopped.source_text = error.source_text
+    return stopped

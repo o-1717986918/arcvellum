@@ -52,9 +52,11 @@ class CacheSessionIntegrityTests(unittest.TestCase):
             failure=NaturalSourceClarificationError('bad link',
                 fields=('/consistency_record/facts/0/delta_summary',),
                 payload={'consistency_record':{'facts':[{'delta_summary':'new'}]}})
+            failure.source_text = 'original source plus completed author patch'
             with self.assertRaisesRegex(NaturalSourceClarificationError,'original source repair budget exhausted') as caught:
                 progress.register(failure)
             self.assertEqual(caught.exception.fields,failure.fields)
+            self.assertEqual(caught.exception.source_text, failure.source_text)
             self.assertEqual(len(json.loads(progress.budget.path.read_text())['calls']),4)
 
     def test_granular_author_patch_preserves_valid_facts_and_rejects_broad_rewrite(self):

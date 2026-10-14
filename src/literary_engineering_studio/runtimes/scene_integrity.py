@@ -8,12 +8,13 @@ from literary_engineering_studio_engine.public.literary import (
 )
 from .natural_transport_repair import NaturalSourceClarificationError, NaturalExtractionError
 from .natural_transport_store import save_json
-from .natural_authored_records import author_field_present
+from .natural_authored_records import author_field_present, restore_authored_consistency_layout
 
 
 def validate_integrity_delivery(answer, payload, context):
     if context.get('creation_integrity_contract') != CONSISTENCY_CONTRACT or context.get('selection_only'):
         return
+    restore_authored_consistency_layout(answer, payload)
     try:
         validate_creator_consistency(payload, (context.get('revision_context') or {}).get('previous_scene_delta'))
     except SceneConsistencyError as error:
