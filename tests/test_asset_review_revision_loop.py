@@ -12,7 +12,8 @@ from literary_engineering_studio_engine.tasking.agent_tasks.writer import write_
 from literary_engineering_studio_engine.tasking.approval import record_workflow_approval
 from literary_engineering_studio_engine.literary.assets.context import compact_asset_context_relpaths
 import literary_engineering_studio_engine.routes.assets.definition as asset_route
-from literary_engineering_studio_engine.literary.assets.workshop import _dry_payload, promote_candidate_asset
+from tests.asset_fixtures import candidate_fixture
+from literary_engineering_studio_engine.literary.assets.workshop import promote_candidate_asset
 from literary_engineering_studio_engine.workflow.state import _asset_state
 
 
@@ -59,7 +60,7 @@ class AssetReviewRevisionLoopTests(unittest.TestCase):
             root = Path(temporary)
             candidate = root / "characters" / "candidates" / "protagonist-foundation.json"
             candidate.parent.mkdir(parents=True)
-            payload = _dry_payload("character", "protagonist-foundation", root, "", "protagonist", None)
+            payload = candidate_fixture("character", "protagonist-foundation", root, "", "protagonist", None)
             payload["candidate_id"] = "protagonist-foundation-v1"
             payload["asset_type"] = "character_profile"
             candidate.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")

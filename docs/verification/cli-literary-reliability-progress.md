@@ -131,7 +131,7 @@
 - `python -m unittest discover -s tests -q`: **305 passed** in 49.819s after the complete Studio/Engine source-directory allocation.
 - `python -m compileall -q src`: passed.
 - `python -m literary_engineering_studio_engine prompt-registry-validate --json`: passed (`41` prompt assets, `51` declared task prompt IDs).
-- `python -m literary_engineering_studio.cli doctor`: passed; embedded Engine is ready and the bundled OpenCode runtime is discoverable.
+- `python -m literary_engineering_studio.application.cli doctor`: passed; embedded Engine is ready and the bundled OpenCode runtime is discoverable.
 - `git diff --check`: passed. The working tree contains expected source moves and compatibility facades, not whitespace errors.
 - Source encoding audit: **0** Python source files retain a UTF-8 BOM. This specifically protects AST-based dependency-direction tests after the Windows-side mechanical moves.
 - Remaining Batch 12 gates are now strictly cross-stack and packaging gates, rather than unresolved source allocation work.
@@ -151,7 +151,7 @@
 ## Batch 11：目录归位收尾（2026-07-24）
 
 - Status: implementation complete; final cross-stack and packaging exit gates remain in Batch 12.
-- Studio runtime/application completion: the sidecar, subprocess, process coordinator, sandbox, task program, Worker, JobStore, Autopilot Controller, Supervisor, Engine bridge, prompt evaluation and Studio CLI implementations now live under `runtime/`, `persistence/`, `automation/`, and `application/`. Root paths remain import-compatible aliases; the Studio CLI compatibility module also preserves `python -m literary_engineering_studio.cli` execution.
+- Studio runtime/application completion: the sidecar, subprocess, process coordinator, sandbox, task program, Worker, JobStore, Autopilot Controller, Supervisor, Engine bridge, prompt evaluation and Studio CLI implementations now live under `runtime/`, `persistence/`, `automation/`, and `application/`. Root paths remain import-compatible aliases; the Studio CLI compatibility module also preserves `python -m literary_engineering_studio.application.cli` execution.
 - Engine command surface completion: command groups, parser, policy, formal-mode rules and dispatch now live in `command_line/`. The implementation intentionally avoids an `engine/cli/` package because it would collide with the stable root `cli.py` module and make Python module/package resolution ambiguous.
 - Engine workflow completion: route catalog/selection are in `routes/`; route definitions are grouped by business route; route audit and sidecar status are in `workflow/audit/`; the compatibility workflow runner is `workflow/runner.py`; registry, protocol, gates, blueprint and workflow contract are in `tasking/`.
 - Engine literary completion: scene context/RP/branch/composition/promotion/state, assets/Canon/continuity, planning/rhythm, style, review, export, prompting/provider contracts and project initialization now have explicit domain homes. Root modules remain compatibility aliases only.

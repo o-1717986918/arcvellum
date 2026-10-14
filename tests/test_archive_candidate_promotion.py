@@ -16,7 +16,7 @@ from literary_engineering_studio.api_server import create_app
 from literary_engineering_studio.application.config import default_config
 from literary_engineering_studio_engine.tasking.agent_tasks.writer import write_agent_completion_marker
 from literary_engineering_studio_engine.tasking.approval import record_workflow_approval
-from literary_engineering_studio_engine.literary.assets.workshop import _dry_payload
+from tests.asset_fixtures import candidate_fixture
 from literary_engineering_studio_engine.literary.scene.context.broker import write_context_trace
 
 
@@ -184,7 +184,7 @@ class ArchiveCandidatePromotionApiTests(unittest.TestCase):
     def _write_candidate(self) -> Path:
         candidate = self.root / "characters" / "candidates" / "protagonist-foundation.json"
         candidate.parent.mkdir(parents=True, exist_ok=True)
-        payload = _dry_payload("character", candidate.stem, self.root, "", "protagonist", None)
+        payload = candidate_fixture("character", candidate.stem, self.root, "", "protagonist", None)
         payload["name"] = "林昭"
         candidate.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
         candidate.with_suffix(".md").write_text("# 主角候选\n\n林昭的人物基础设定。\n", encoding="utf-8")

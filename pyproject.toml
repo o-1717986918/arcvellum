@@ -21,7 +21,7 @@ test = [
 ]
 
 [project.scripts]
-les = "literary_engineering_studio.cli:main"
+les = "literary_engineering_studio.application.cli:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

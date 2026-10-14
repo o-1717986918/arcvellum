@@ -7,7 +7,7 @@ import os
 import threading
 import time
 
-from literary_engineering_studio.cli import main
+from literary_engineering_studio.application.cli import main
 
 
 def _monitor_parent(parent_pid: int) -> None:
@@ -42,7 +42,7 @@ if __name__ == "__main__":
         _monitor_parent(int(arguments[index + 1]))
         del arguments[index : index + 2]
     if arguments[:2] == ["-m", "literary_engineering_studio_engine"]:
-        from literary_engineering_studio_engine.cli import main as engine_main
+        from literary_engineering_studio_engine.command_line.entry import main as engine_main
 
         raise SystemExit(engine_main(arguments[2:]))
     raise SystemExit(main(arguments))

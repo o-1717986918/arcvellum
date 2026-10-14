@@ -9,7 +9,7 @@ from __future__ import annotations
 import argparse
 import unittest
 
-from literary_engineering_studio_engine.cli import FORMAL_HELP_COMMANDS, build_parser
+from literary_engineering_studio_engine.command_line.entry import FORMAL_HELP_COMMANDS, build_parser
 from literary_engineering_studio_engine.command_line.policy import STUDIO_DISABLED_COMMANDS
 from literary_engineering_studio_engine.command_line.commands.formal import FORMAL_HANDLERS
 from literary_engineering_studio_engine.command_line.commands.scene import SCENE_HANDLERS

@@ -4,16 +4,16 @@ import unittest
 from contextlib import redirect_stdout
 from unittest.mock import patch
 
-from literary_engineering_studio.cli import main
+from literary_engineering_studio.application.cli import main
 
 
 class CliCommandTests(unittest.TestCase):
     def test_doctor_serializes_a_command_result(self):
         bridge_result = type("Result", (), {"returncode": 0, "stderr": ""})()
         with (
-            patch("literary_engineering_studio.cli.CoreBridge.doctor", return_value=bridge_result),
-            patch("literary_engineering_studio.cli.agent_runner_status", return_value=[]),
-            patch("literary_engineering_studio.cli.model_connection_status", return_value={}),
+            patch("literary_engineering_studio.application.cli.CoreBridge.doctor", return_value=bridge_result),
+            patch("literary_engineering_studio.application.cli.agent_runner_status", return_value=[]),
+            patch("literary_engineering_studio.application.cli.model_connection_status", return_value={}),
         ):
             output = io.StringIO()
             with redirect_stdout(output):
@@ -22,7 +22,7 @@ class CliCommandTests(unittest.TestCase):
 
     def test_prompt_eval_serializes_a_command_result(self):
         with patch(
-            "literary_engineering_studio.cli.evaluate_prompt_assets",
+            "literary_engineering_studio.application.cli.evaluate_prompt_assets",
             return_value={"status": "pass", "cases": []},
         ):
             output = io.StringIO()

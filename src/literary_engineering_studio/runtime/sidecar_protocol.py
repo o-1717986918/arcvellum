@@ -3,7 +3,7 @@
 This module owns the loopback binding policy and the ready-file handoff used
 by the Tauri shell.  Keeping it outside the user-facing CLI parser gives the
 desktop lifecycle a focused, independently testable boundary while preserving
-the ``literary_engineering_studio.cli`` compatibility exports.
+the ``literary_engineering_studio.application.cli`` compatibility exports.
 """
 
 from __future__ import annotations

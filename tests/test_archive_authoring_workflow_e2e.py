@@ -16,7 +16,7 @@ from literary_engineering_studio.api_server import create_app
 from literary_engineering_studio.application.config import default_config
 from literary_engineering_studio_engine.tasking.agent_tasks.writer import write_agent_completion_marker
 from literary_engineering_studio_engine.tasking.approval import record_workflow_approval
-from literary_engineering_studio_engine.literary.assets.workshop import _dry_payload
+from tests.asset_fixtures import candidate_fixture
 from literary_engineering_studio_engine.literary.scene.context.broker import (
     context_trace_status,
     write_context_trace,
@@ -219,7 +219,7 @@ class ArchiveAuthoringWorkflowE2ETests(unittest.TestCase):
 
     def _write_reviewed_candidate(self) -> Path:
         candidate = self.root / "characters" / "candidates" / "protagonist-foundation.json"
-        payload = _dry_payload(
+        payload = candidate_fixture(
             "character",
             candidate.stem,
             self.root,

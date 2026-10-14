@@ -5,7 +5,7 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
-from literary_engineering_studio.cli import main
+from literary_engineering_studio.application.cli import main
 
 
 class CliServeTests(unittest.TestCase):

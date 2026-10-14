@@ -5,7 +5,6 @@ import subprocess
 import sys
 from pathlib import Path
 import unittest
-import warnings
 
 from literary_engineering_studio.application.compatibility import (
     compatibility_summary,
@@ -41,15 +40,15 @@ class CompatibilityManifestTests(unittest.TestCase):
         )
         compatibility = manifest["compatibility"]
         aliases = compatibility["deprecated_aliases"]
-        self.assertTrue(aliases)
+        self.assertEqual(aliases, [])
         self.assertTrue(
             all(item["canonical_module"] for item in aliases),
         )
         providers = {
             item["id"]: item for item in compatibility["legacy_providers"]
         }
-        self.assertFalse(providers["http-chat"]["production_default"])
-        self.assertFalse(providers["dry-run"]["production_default"])
+        self.assertEqual(providers, {})
+        self.assertEqual(compatibility["minimum_window"], "none")
         public_api = compatibility["engine_public_api"]
         self.assertEqual(public_api["status"], "stable-cross-package-surface")
         self.assertFalse(public_api["internal_imports_allowed"])
@@ -76,21 +75,15 @@ class CompatibilityManifestTests(unittest.TestCase):
         self.assertEqual(summary["release_version"], __version__)
         self.assertEqual(summary["default_agent_runtime"], "pi-worker")
         self.assertEqual(summary["model_invocation"], "runner-managed")
-        self.assertGreater(summary["deprecated_alias_count"], 0)
+        self.assertEqual(summary["deprecated_alias_count"], 0)
+        self.assertEqual(summary["legacy_provider_count"], 0)
 
-    def test_declared_deprecated_aliases_warn_and_resolve_to_canonical_modules(self):
-        aliases = load_compatibility_manifest()["compatibility"]["deprecated_aliases"]
-
-        for item in aliases:
-            alias = item["module"]
-            canonical = item["canonical_module"]
-            sys.modules.pop(alias, None)
-            with self.subTest(alias=alias), warnings.catch_warnings(record=True) as caught:
-                warnings.simplefilter("always")
-                imported = importlib.import_module(alias)
-                implementation = importlib.import_module(canonical)
-                self.assertIs(imported, implementation)
-                self.assertTrue(any(issubclass(entry.category, DeprecationWarning) for entry in caught))
+    def test_retired_integrations_cannot_be_imported(self):
+        retired = load_compatibility_manifest()["compatibility"]["retired_modules"]
+        self.assertTrue(retired)
+        for module in retired:
+            with self.subTest(module=module), self.assertRaises(ModuleNotFoundError):
+                importlib.import_module(module)
 
     def test_release_audit_accepts_the_current_source_tree(self):
         result = subprocess.run(

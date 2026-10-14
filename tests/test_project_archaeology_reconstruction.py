@@ -15,7 +15,7 @@ from literary_engineering_studio.preflight.archaeology import (
 from literary_engineering_studio.runtime.sandbox import SandboxManifest
 from literary_engineering_studio_engine.tasking.agent_tasks.writer import write_agent_completion_marker
 from literary_engineering_studio_engine.tasking.approval import record_workflow_approval
-from literary_engineering_studio_engine.literary.assets.workshop import _dry_payload
+from tests.asset_fixtures import candidate_fixture
 from literary_engineering_studio_engine.literary.assets.promotion import (
     promotion_eligibility_errors,
 )
@@ -404,7 +404,7 @@ def _write_candidate(
     recommendation: str,
 ) -> dict[str, object]:
     evidence_ref = str(aggregate["entity_occurrences"][0]["evidence_refs"][0])
-    world = _dry_payload("world", "source-world", root, "", "", None)
+    world = candidate_fixture("world", "source-world", root, "", "", None)
     world["source_paths"] = [paths["resolution"], str(manifest["evidence_index"]["path"])]
     payload: dict[str, object] = {
         "schema": RECONSTRUCTION_CANDIDATE_SCHEMA,

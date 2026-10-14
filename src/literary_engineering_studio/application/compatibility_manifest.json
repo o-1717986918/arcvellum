@@ -11,19 +11,23 @@
       "formal_task_generation": "arcvellum-worker-task",
       "scene_creator": "natural-v2",
       "conversation_cache_layout": "stable-prefix-v2"
-    }
+    },
+    "entrypoints": [
+      "literary_engineering_studio.application.cli",
+      "literary_engineering_studio_engine.command_line.entry"
+    ]
   },
   "compatibility": {
-    "minimum_window": "one-stable-release",
+    "minimum_window": "none",
     "facade_budget": {
       "previous_release_count": 143,
-      "maximum_current_count": 8
+      "maximum_current_count": 0
     },
     "alias_policy": {
       "scope": "declared literary_engineering_studio_engine top-level compatibility modules",
       "internal_imports_allowed": false,
-      "external_imports_supported": true,
-      "removal_requires": "the declared remove_not_before release and a fresh external-consumer audit"
+      "external_imports_supported": false,
+      "removal_requires": "no retained aliases"
     },
     "schema_migration": {
       "native_project_schema": "arcvellum/project/v2",
@@ -51,70 +55,54 @@
       ],
       "removal_requires": "one published deprecation window and a public symbol migration guide"
     },
-    "supported_entrypoints": [
-      {
-        "module": "literary_engineering_studio_engine.cli",
-        "canonical_module": "literary_engineering_studio_engine.command_line.entry",
-        "status": "current-cli-entrypoint"
-      },
-      {
-        "module": "literary_engineering_studio_engine.api_server",
-        "canonical_module": "literary_engineering_studio_engine.api",
-        "status": "legacy-http-entrypoint",
-        "remove_not_before": "1.0.0"
-      }
-    ],
-    "deprecated_aliases": [
-      {
-        "module": "literary_engineering_studio_engine.generation_provider",
-        "canonical_module": "literary_engineering_studio_engine.literary.scene.generation_provider",
-        "status": "deprecated",
-        "remove_not_before": "1.0.0"
-      },
-      {
-        "module": "literary_engineering_studio_engine.cli_legacy_commands",
-        "canonical_module": "literary_engineering_studio_engine.command_line.commands.legacy",
-        "status": "deprecated",
-        "remove_not_before": "1.0.0"
-      },
-      {
-        "module": "literary_engineering_studio_engine.model_config",
-        "canonical_module": "literary_engineering_studio_engine.foundation.model_config",
-        "status": "deprecated",
-        "remove_not_before": "1.0.0"
-      },
-      {
-        "module": "literary_engineering_studio_engine.agent_provider",
-        "canonical_module": "literary_engineering_studio_engine.prompting.agents.provider",
-        "status": "deprecated",
-        "remove_not_before": "1.0.0"
-      },
-      {
-        "module": "literary_engineering_studio_engine.workflow_state",
-        "canonical_module": "literary_engineering_studio_engine.workflow.state",
-        "status": "deprecated",
-        "remove_not_before": "1.0.0"
-      },
-      {
-        "module": "literary_engineering_studio_engine.init_project",
-        "canonical_module": "literary_engineering_studio_engine.projects.init",
-        "status": "deprecated",
-        "remove_not_before": "1.0.0"
-      }
-    ],
-    "legacy_providers": [
-      {
-        "id": "http-chat",
-        "module": "literary_engineering_studio_engine.literary.scene.generation_provider.HttpChatProvider",
-        "status": "legacy-manual-only",
-        "production_default": false
-      },
-      {
-        "id": "dry-run",
-        "module": "literary_engineering_studio_engine.literary.scene.generation_provider.DryRunProvider",
-        "status": "test-only",
-        "production_default": false
-      }
+    "supported_entrypoints": [],
+    "deprecated_aliases": [],
+    "legacy_providers": [],
+    "retired_modules": [
+      "literary_engineering_studio.cli",
+      "literary_engineering_studio_engine.agent_provider",
+      "literary_engineering_studio_engine.api",
+      "literary_engineering_studio_engine.api.common",
+      "literary_engineering_studio_engine.api.models",
+      "literary_engineering_studio_engine.api.routers",
+      "literary_engineering_studio_engine.api.routers.agents",
+      "literary_engineering_studio_engine.api.routers.application",
+      "literary_engineering_studio_engine.api.routers.assets",
+      "literary_engineering_studio_engine.api.routers.projects",
+      "literary_engineering_studio_engine.api.routers.style_lab",
+      "literary_engineering_studio_engine.api.routers.workflow",
+      "literary_engineering_studio_engine.api_server",
+      "literary_engineering_studio_engine.cli",
+      "literary_engineering_studio_engine.cli_legacy_commands",
+      "literary_engineering_studio_engine.command_line.commands.legacy",
+      "literary_engineering_studio_engine.director",
+      "literary_engineering_studio_engine.director.bootstrap",
+      "literary_engineering_studio_engine.director.contracts",
+      "literary_engineering_studio_engine.director.helpers",
+      "literary_engineering_studio_engine.director.loop",
+      "literary_engineering_studio_engine.director.prompts",
+      "literary_engineering_studio_engine.director.records",
+      "literary_engineering_studio_engine.director.routing",
+      "literary_engineering_studio_engine.director.service",
+      "literary_engineering_studio_engine.director.status",
+      "literary_engineering_studio_engine.director.tool_calls",
+      "literary_engineering_studio_engine.director.tool_execution",
+      "literary_engineering_studio_engine.director.tool_observation",
+      "literary_engineering_studio_engine.foundation.dify_dsl",
+      "literary_engineering_studio_engine.foundation.langgraph_adapter",
+      "literary_engineering_studio_engine.foundation.model_config",
+      "literary_engineering_studio_engine.generation_provider",
+      "literary_engineering_studio_engine.init_project",
+      "literary_engineering_studio_engine.literary.review.scene_agent",
+      "literary_engineering_studio_engine.literary.review.scene_agent_context",
+      "literary_engineering_studio_engine.literary.review.scene_agent_dry",
+      "literary_engineering_studio_engine.literary.review.scene_agent_prompt",
+      "literary_engineering_studio_engine.literary.review.scene_agent_report",
+      "literary_engineering_studio_engine.literary.scene.generation_provider",
+      "literary_engineering_studio_engine.model_config",
+      "literary_engineering_studio_engine.prompting.agents.provider",
+      "literary_engineering_studio_engine.tasking.orchestration",
+      "literary_engineering_studio_engine.workflow_state"
     ]
   },
   "history": {

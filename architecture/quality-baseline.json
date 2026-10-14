@@ -20,7 +20,6 @@
     "literary_engineering_studio.api.routers": [],
     "literary_engineering_studio.application.compatibility": [],
     "literary_engineering_studio.autopilot": [],
-    "literary_engineering_studio.cli": [],
     "literary_engineering_studio.compatibility": [],
     "literary_engineering_studio.persistence.facade": [],
     "literary_engineering_studio.runtime.sidecar_protocol": [
@@ -29,28 +28,6 @@
     "literary_engineering_studio.whole_book_release": [
       "literary_engineering_studio.projections",
       "literary_engineering_studio.projections.whole_book_release"
-    ],
-    "literary_engineering_studio_engine.agent_provider": [],
-    "literary_engineering_studio_engine.api_server": [
-      "literary_engineering_studio_engine",
-      "literary_engineering_studio_engine.api.common",
-      "literary_engineering_studio_engine.api.models",
-      "literary_engineering_studio_engine.api.routers.agents",
-      "literary_engineering_studio_engine.api.routers.application",
-      "literary_engineering_studio_engine.api.routers.assets",
-      "literary_engineering_studio_engine.api.routers.projects",
-      "literary_engineering_studio_engine.api.routers.style_lab",
-      "literary_engineering_studio_engine.api.routers.workflow"
-    ],
-    "literary_engineering_studio_engine.cli": [],
-    "literary_engineering_studio_engine.cli_legacy_commands": [],
-    "literary_engineering_studio_engine.command_line.commands.legacy": [
-      "literary_engineering_studio_engine.command_line.commands",
-      "literary_engineering_studio_engine.command_line.support",
-      "literary_engineering_studio_engine.director",
-      "literary_engineering_studio_engine.foundation.dify_dsl",
-      "literary_engineering_studio_engine.foundation.langgraph_adapter",
-      "literary_engineering_studio_engine.foundation.model_config"
     ],
     "literary_engineering_studio_engine.command_line.entry": [
       "literary_engineering_studio_engine.command_line.commands.agent",
@@ -62,13 +39,6 @@
       "literary_engineering_studio_engine.command_line.parser",
       "literary_engineering_studio_engine.command_line.policy"
     ],
-    "literary_engineering_studio_engine.generation_provider": [],
-    "literary_engineering_studio_engine.init_project": [],
-    "literary_engineering_studio_engine.model_config": [
-      "literary_engineering_studio_engine.foundation",
-      "literary_engineering_studio_engine.foundation.model_config"
-    ],
-    "literary_engineering_studio_engine.tasking.orchestration": [],
     "literary_engineering_studio_engine.workflow.audit.task_status": [
       "literary_engineering_studio_engine.tasking.agent_tasks.inventory",
       "literary_engineering_studio_engine.tasking.agent_tasks.rendering",
@@ -89,10 +59,6 @@
     "literary_engineering_studio_engine.workflow.state_common": [
       "literary_engineering_studio_engine.tasking.agent_tasks.writer",
       "literary_engineering_studio_engine.tasking.semantic_contracts"
-    ],
-    "literary_engineering_studio_engine.workflow_state": [
-      "literary_engineering_studio_engine.workflow",
-      "literary_engineering_studio_engine.workflow.state"
     ]
   },
   "import_cycles": [],

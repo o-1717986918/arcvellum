@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from literary_engineering_studio_engine.foundation.model_config import load_config
 from literary_engineering_studio_engine.prompting.platform_tasks import write_platform_style_prompt_task
 from literary_engineering_studio_engine.literary.style.compiler import StyleCompileOptions, compile_style_profile
 from literary_engineering_studio_engine.literary.style.prompt import (
@@ -97,11 +96,6 @@ class StyleMountResult:
 
 
 def default_style_library_root() -> Path:
-    cfg = load_config()
-    defaults = cfg.get("defaults", {}) if isinstance(cfg.get("defaults"), dict) else {}
-    configured = str(defaults.get("style_library_root") or "").strip()
-    if configured:
-        return Path(configured).expanduser().resolve()
     return (Path.home() / ".lew" / "style-library").resolve()
 
 

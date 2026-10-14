@@ -1,6 +1,6 @@
 import unittest
 
-from literary_engineering_studio.cli import _is_loopback_host, _validate_serve_binding, _write_ready_file, build_parser
+from literary_engineering_studio.application.cli import _is_loopback_host, _validate_serve_binding, _write_ready_file, build_parser
 
 
 class CliSecurityTests(unittest.TestCase):

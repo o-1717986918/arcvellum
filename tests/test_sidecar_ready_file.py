@@ -34,7 +34,7 @@ class SidecarReadyFileTests(unittest.TestCase):
                 [
                     sys.executable,
                     "-m",
-                    "literary_engineering_studio.cli",
+                    "literary_engineering_studio.application.cli",
                     "serve",
                     "--host",
                     "127.0.0.1",

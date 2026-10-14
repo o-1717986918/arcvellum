@@ -73,12 +73,19 @@ def audit(root: Path) -> list[str]:
         errors.append(f"undeclared compatibility modules remain: {', '.join(undeclared)}")
 
     budget = _mapping(compatibility.get("facade_budget"))
-    maximum = _positive_int(budget.get("maximum_current_count"))
+    maximum = _non_negative_int(budget.get("maximum_current_count"))
     previous = _positive_int(budget.get("previous_release_count"))
     if maximum is None or len(surfaces) > maximum:
         errors.append(f"compatibility facade budget exceeded: {len(surfaces)} > {maximum or 0}")
     if previous is None or len(surfaces) >= previous:
         errors.append("compatibility facade count did not decrease from the previous release")
+
+    for module in current.get("entrypoints") or []:
+        if not _module_exists(root, str(module)):
+            errors.append(f"current entrypoint is missing: {module}")
+    for module in compatibility.get("retired_modules") or []:
+        if _module_exists(root, str(module)):
+            errors.append(f"retired integration has returned: {module}")
 
     for item in [*aliases, *entrypoints]:
         module = str(item.get("module") or "")
@@ -311,6 +318,10 @@ def _records(value: object) -> list[dict[str, object]]:
 
 def _positive_int(value: object) -> int | None:
     return value if isinstance(value, int) and value > 0 else None
+
+
+def _non_negative_int(value: object) -> int | None:
+    return value if isinstance(value, int) and value >= 0 else None
 
 
 if __name__ == "__main__":

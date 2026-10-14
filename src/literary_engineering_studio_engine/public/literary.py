@@ -25,7 +25,7 @@ from ..literary.assets.promotion import (
     promotion_output_paths,
 )
 from ..literary.assets.registry import ASSET_SCHEMA_NAMES
-from ..literary.assets.workshop import ASSET_CANDIDATE_DIRS
+from ..literary.assets.registry import ASSET_CANDIDATE_DIRS
 from ..literary.assets.character_identity import (
     character_field_value,
     character_slug,

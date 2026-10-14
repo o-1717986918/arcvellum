@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import argparse
-from literary_engineering_studio_engine.literary.assets.workshop import ASSET_TYPES
+from literary_engineering_studio_engine.literary.assets.registry import ASSET_TYPES
 from .policy import FORMAL_HELP_COMMANDS, FORMAL_HELP_METAVAR
 from literary_engineering_studio_engine.literary.export.docx import DOCX_KINDS
 from literary_engineering_studio_engine.foundation.knowledge_store import KNOWLEDGE_BACKENDS

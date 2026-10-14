@@ -1,21 +1,20 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from pathlib import Path
 import tempfile
 import unittest
 
 from literary_engineering_studio_engine.literary.scene.context.broker import context_trace_status
 from literary_engineering_studio_engine.literary.scene.context.packet import build_context_packet
-from literary_engineering_studio_engine.literary.review.scene_agent import (
-    review_scene_with_agent,
-)
 from literary_engineering_studio_engine.literary.scene.composition.composer import (
     build_scene_composition,
 )
-from literary_engineering_studio_engine.literary.scene.generation_provider import (
-    generate_scene_candidate,
+from literary_engineering_studio_engine.prompting.platform_tasks import (
+    write_platform_scene_generation_task, write_platform_scene_review_task,
 )
+from literary_engineering_studio_engine.prompting.pack import build_scene_prompt_pack, write_prompt_manifest
 from literary_engineering_studio_engine.literary.scene.promotion.candidate import (
     candidate_generation_gate,
     candidate_review_gate,
@@ -84,33 +83,50 @@ class StyleMountSceneChainTests(unittest.TestCase):
                 scene=Path("scenes/scene_0001.yaml"),
                 allow_missing_branch=True,
             )
-            generation = generate_scene_candidate(
-                root,
-                scene=Path("scenes/scene_0001.yaml"),
-                context=context.output_path.relative_to(root),
-                composition=composition.output_path.relative_to(root),
-                provider="dry-run",
+            scene = root / "scenes/scene_0001.yaml"
+            prompt_pack = build_scene_prompt_pack(
+                root, scene, context.output_path,
+                composition=composition.output_path,
                 allow_unselected_composition=True,
             )
-            review = review_scene_with_agent(
-                root,
-                scene=Path("scenes/scene_0001.yaml"),
-                draft=generation.candidate_path.relative_to(root),
-                provider="dry-run",
+            candidate = root / "drafts/candidates/scene_0001-platform-agent.md"
+            candidate.parent.mkdir(parents=True, exist_ok=True)
+            prompt_manifest = candidate.with_suffix(".prompt.json")
+            write_prompt_manifest(prompt_pack, prompt_manifest, provider="platform-agent", model="tool-layer-agent")
+            generation = write_platform_scene_generation_task(
+                root, scene_path=scene, context_path=context.output_path,
+                composition_path=composition.output_path,
+                prompt_manifest_path=prompt_manifest, candidate_path=candidate,
             )
+            # Test-owned delivery fixtures exercise snapshot gates without a synthetic model provider.
+            candidate.write_text("## 正文候选\n\n守门人蹲在界桩旁，抹去刻痕里的积水。", encoding="utf-8")
+            snapshot = prompt_pack.style_mount_snapshot
+            generation.expected_json_path.write_text(json.dumps({
+                "scene_id": "scene_0001", "candidate": candidate.relative_to(root).as_posix(),
+                "style_mount_snapshot": snapshot,
+            }, ensure_ascii=False), encoding="utf-8")
+            review = write_platform_scene_review_task(root, scene_path=scene, draft_path=candidate)
+            review.expected_json_path.parent.mkdir(parents=True, exist_ok=True)
+            review.expected_json_path.write_text(json.dumps({
+                "scene_id": "scene_0001", "conclusion": "revise_required",
+                "candidate_sha256": hashlib.sha256(candidate.read_bytes()).hexdigest(),
+                "style_mount_snapshot": snapshot,
+            }, ensure_ascii=False), encoding="utf-8")
+            self.assertIn(prompt_manifest.relative_to(root).as_posix(), generation.task_path.read_text(encoding="utf-8"))
+            self.assertIn(snapshot["version_id"], review.task_path.read_text(encoding="utf-8"))
             revision = build_scene_revision_task(
                 root,
                 scene=Path("scenes/scene_0001.yaml"),
-                draft=generation.candidate_path.relative_to(root),
-                review=review.json_path.relative_to(root),
+                draft=candidate.relative_to(root),
+                review=review.expected_json_path.relative_to(root),
             )
 
             artifacts = {
                 "context": self._payload(context.trace_path),
                 "composition": self._payload(composition.json_path),
-                "prompt": self._payload(generation.prompt_manifest_path),
-                "candidate": self._payload(generation.manifest_path),
-                "review": self._payload(review.json_path),
+                "prompt": self._payload(prompt_manifest),
+                "candidate": self._payload(generation.expected_json_path),
+                "review": self._payload(review.expected_json_path),
                 "revision": self._payload(revision.prompt_manifest_path),
             }
             snapshots = {
@@ -139,7 +155,7 @@ class StyleMountSceneChainTests(unittest.TestCase):
             generation_gate = candidate_generation_gate(
                 root,
                 "scene_0001",
-                generation.candidate_path,
+                candidate,
             )
             self.assertTrue(
                 any(
@@ -151,7 +167,7 @@ class StyleMountSceneChainTests(unittest.TestCase):
             review_gate = candidate_review_gate(
                 root,
                 "scene_0001",
-                generation.candidate_path,
+                candidate,
             )
             self.assertTrue(
                 review_gate["style_mount_snapshot_errors"],

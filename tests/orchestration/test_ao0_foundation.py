@@ -18,7 +18,7 @@ from literary_engineering_studio_engine.orchestration import (
 from literary_engineering_studio_engine.platforms.orchestration_blueprint import (
     build_orchestration_blueprint as platform_blueprint,
 )
-from literary_engineering_studio_engine.tasking.orchestration import (
+from literary_engineering_studio_engine.platforms.orchestration_blueprint import (
     build_orchestration_blueprint as tasking_blueprint,
 )
 

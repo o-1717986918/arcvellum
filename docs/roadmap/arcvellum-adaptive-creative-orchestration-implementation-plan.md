@@ -2276,7 +2276,7 @@ project_plan_projection(...)
 ArcVellum 已有多个顶层 facade。新增兼容层必须登记：
 
 ```yaml
-facade: literary_engineering_studio_engine.tasking.orchestration
+facade: literary_engineering_studio_engine.platforms.orchestration_blueprint
 target: literary_engineering_studio_engine.platforms.orchestration_blueprint
 introduced_in: v0.96
 remove_after: v0.98

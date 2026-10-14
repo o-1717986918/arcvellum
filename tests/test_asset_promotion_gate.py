@@ -9,7 +9,8 @@ from unittest.mock import patch
 
 from literary_engineering_studio_engine.tasking.agent_tasks.writer import write_agent_completion_marker
 from literary_engineering_studio_engine.tasking.approval import record_workflow_approval
-from literary_engineering_studio_engine.literary.assets.workshop import _dry_payload, promote_candidate_asset
+from tests.asset_fixtures import candidate_fixture
+from literary_engineering_studio_engine.literary.assets.workshop import promote_candidate_asset
 
 
 class AssetPromotionGateTests(unittest.TestCase):
@@ -147,7 +148,7 @@ class AssetPromotionGateTests(unittest.TestCase):
     def _write_candidate(root: Path) -> Path:
         candidate = root / "characters" / "candidates" / "protagonist-foundation.json"
         candidate.parent.mkdir(parents=True)
-        payload = _dry_payload("character", candidate.stem, root, "", "protagonist", None)
+        payload = candidate_fixture("character", candidate.stem, root, "", "protagonist", None)
         candidate.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
         candidate.with_suffix(".md").write_text("# 主角候选\n", encoding="utf-8")
         return candidate

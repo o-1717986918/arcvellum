@@ -9,7 +9,6 @@ import typing
 import unittest
 
 from literary_engineering_studio.persistence.autopilot_runs import AutopilotRepository
-from literary_engineering_studio_engine.director.records import _append_project_direction_memory
 from literary_engineering_studio_engine.projections.interaction.choices import _latest_approval_record
 from literary_engineering_studio_engine.projections.interaction.editing import record_ui_note
 from literary_engineering_studio_engine.routes.export.definition import _to_int
@@ -22,14 +21,6 @@ class ModularRuntimeImportTests(unittest.TestCase):
     def test_autopilot_type_annotations_resolve(self):
         hints = typing.get_type_hints(AutopilotRepository._append_autopilot_event_tx)
         self.assertIn("connection", hints)
-
-    def test_director_memory_fallback_writes_a_digest(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            result = _append_project_direction_memory(root, "director-01", "让叙事保持克制而有余韵", {})
-            self.assertTrue(result["index"].is_file())
-            self.assertTrue(result["digest"].is_file())
-            self.assertIn("叙事保持克制", result["digest"].read_text(encoding="utf-8"))
 
     def test_interaction_records_use_json_and_stable_note_ids(self):
         with tempfile.TemporaryDirectory() as temporary:
