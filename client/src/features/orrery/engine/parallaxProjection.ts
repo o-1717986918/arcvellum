@@ -64,6 +64,23 @@ export function scenePoint(
   };
 }
 
+/** Compile the quaternion once per view, rather than several times for every anchor. */
+export function createParallaxProjector(depth: OrreryDepth, view: ParallaxView) {
+  const axes = [{ x: 1, y: 0, z: 0 }, { x: 0, y: 1, z: 0 }, { x: 0, y: 0, z: 1 }]
+    .map((point) => orientWorldPoint(point, view));
+  const zFactor = depth === "deep" ? 1 : depth === "balanced" ? 0.56 : 0.08;
+  const xFactor = depth === "deep" ? 1 : depth === "balanced" ? 0.78 : 0.65;
+  const x = axes.map((axis) => axis.x * 126 * xFactor + axis.z * 29 * zFactor);
+  const y = axes.map((axis) => axis.z * 58 * zFactor - axis.y * 88);
+  const scale = axes.map((axis) => axis.z * 0.025 * (depth === "deep" ? 1 : 0.48) + axis.y * 0.012);
+  return {
+    project: (p: WorldPoint) => ({ x: ORIGIN.x + p.x * x[0] + p.y * x[1] + p.z * x[2],
+      y: ORIGIN.y + p.x * y[0] + p.y * y[1] + p.z * y[2] }),
+    depthScale: (p: WorldPoint) => depth === "flat" ? 1
+      : Math.max(0.72, Math.min(1.28, 0.99 + p.x * scale[0] + p.y * scale[1] + p.z * scale[2])),
+  };
+}
+
 export function planeBounds(points: Array<{ x: number; y: number }>): PlaneBounds | null {
   if (!points.length) return null;
   const minX = Math.min(...points.map((point) => point.x));

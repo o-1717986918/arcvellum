@@ -77,7 +77,7 @@ function addPreset() {
 }
 </script>
 <template>
-  <details class="stylo-presets" open aria-label="叙述方式文风预设">
+  <details class="stylo-presets" aria-label="叙述方式文风预设">
     <summary>叙述方式与文风预设 · 版本 {{ catalog?.revision || 0 }}</summary>
     <p>主创在新交易开场阅读完整目录，根据章节任务选择预设和参照。选择后冻结实际文风。</p>
     <p v-if="error" role="alert" class="stylo-error">{{ error }}</p><p v-if="notice" role="status">{{ notice }}</p>

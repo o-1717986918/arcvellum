@@ -12,6 +12,7 @@ from literary_engineering_studio_engine.public.literary import (
     chapter_obligations,
     materialize_lean_window,
     normalize_scene_window,
+    normalize_narrative_design,
     render_outline,
 )
 from literary_engineering_studio_engine.public.projects import atomic_write_batch
@@ -19,6 +20,7 @@ from ruamel.yaml import YAML
 
 from ..runtime.role_conversation import RoleConversationGateway
 from .future_plan_budget import allocate_future_targets, proposed_counts
+from .lean_source_context import current_story_context
 
 
 def replan_lean_future(
@@ -40,6 +42,7 @@ def replan_lean_future(
     project_bytes = project_path.read_bytes()
     plan_bytes, budget_bytes = plan_path.read_bytes(), budget_path.read_bytes()
     plan, budget = json.loads(plan_bytes), json.loads(budget_bytes)
+    story_context = current_story_context(project)
     committed = _committed_prefix(project, list(plan.get("scenes") or []))
     chapter_scene_counts, proposal = _count_proposal(
         project, gateway, plan, budget, committed, chapter_scene_counts, direction, planning_delivery,
@@ -48,6 +51,8 @@ def replan_lean_future(
     future, event_budget, narrative_design, chapter_updates, selected_budget = _ask_for_future(
         project, gateway, plan, budget, committed, counts, direction, planning_delivery=planning_delivery, initial_response=proposal,
     )
+    if current_story_context(project) != story_context:
+        raise ValueError('planning story sources changed during future replanning; reconcile before saving')
     revised_budget = _rebalance_budget(selected_budget, counts)
     revised_project = _revised_project_contract(
         project_bytes, int(revised_budget["totals"]["scene_count"]),
@@ -163,6 +168,7 @@ def _ask_for_future(
     response: dict[str, Any] = {}
     try:
         response = initial_response or _future_delivery(root, gateway, prompt, counts, planning_delivery, plan)
+        design = normalize_narrative_design(response.get('narrative_design'))
         selected_budget = allocate_future_targets(budget, committed, response, counts)
         future, events = _normalize_future(plan, selected_budget, committed, counts, response)
         _reject_exact_event_replays(committed, future)
@@ -170,15 +176,12 @@ def _ask_for_future(
         repaired = _repair_future(
             root, gateway, plan, budget, committed, counts, direction, response, exc, planning_delivery=planning_delivery,
         )
+        design = normalize_narrative_design(repaired.get('narrative_design'))
         selected_budget = allocate_future_targets(budget, committed, repaired, counts)
         future, events = _normalize_future(plan, selected_budget, committed, counts, repaired)
         _reject_exact_event_replays(committed, future)
         response = repaired
-    design = response.get("narrative_design")
-    return future, events, (
-        {key: str(value).strip() for key, value in design.items() if isinstance(key, str) and str(value).strip()}
-        if isinstance(design, dict) else {}
-    ), {row["chapter_id"]: {key: row[key] for key in ("title", "literary_task", "obligation", "dramatic_turn", "reader_question") if key in row}
+    return future, events, design, {row["chapter_id"]: {key: row[key] for key in ("title", "literary_task", "obligation", "dramatic_turn", "reader_question") if key in row}
         for row in response["chapters"]}, selected_budget
 
 
@@ -460,6 +463,7 @@ __all__ = ["replan_lean_future"]
 
 
 def _future_delivery(root, gateway, prompt, counts, delivery, plan=None):
+    prompt += '\n' + current_story_context(root)
     if delivery:
         context = {'chapter_counts': counts}
         if plan is not None:

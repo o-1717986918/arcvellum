@@ -17,6 +17,7 @@ import { useSpatialWindowsStore } from "@/stores/spatialWindows";
 import type { SpatialWindowKind } from "@/types/spatialWindows";
 
 const store = useAppStore();
+const props = withDefaults(defineProps<{ active?: boolean }>(), { active: true });
 const route = useRoute();
 const humanChoices = useHumanChoicesStore();
 const spatialWindows = useSpatialWindowsStore();
@@ -46,21 +47,28 @@ onMounted(async () => {
   resetOrreryColorIdentity();
   applyOrreryExperience({ theme: "moss" });
   localStorage.setItem("arcvellum.orreryMode", "immersive");
-  document.documentElement.classList.add("orrery-immersive");
-  openWorkspaceQuery(route.query.workspace);
-  await store.refreshWorkspace();
-  await loadChoices();
+  document.documentElement.classList.toggle("orrery-immersive", props.active);
+  if (props.active) openWorkspaceQuery(route.query.workspace);
+  if (props.active) {
+    await store.refreshWorkspace();
+    await loadChoices();
+  }
 });
 
 onBeforeUnmount(() => document.documentElement.classList.remove("orrery-immersive"));
 
+watch(() => props.active, (active) => {
+  document.documentElement.classList.toggle("orrery-immersive", active);
+  if (active) openWorkspaceQuery(route.query.workspace);
+});
+
 watch(
   [() => route.query.workspace, () => store.currentProjectPath],
   ([workspace, projectRoot]) => {
-    if (!projectRoot) return;
+    if (!projectRoot || !props.active) return;
     void store.refreshWorkspace();
     void loadChoices();
-    openWorkspaceQuery(workspace);
+    if (props.active) openWorkspaceQuery(workspace);
   },
 );
 

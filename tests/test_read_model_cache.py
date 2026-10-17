@@ -2,6 +2,8 @@ from pathlib import Path
 import tempfile
 import time
 import unittest
+from concurrent.futures import ThreadPoolExecutor
+from threading import Event
 from unittest import mock
 
 from literary_engineering_studio.projections import read_model_cache
@@ -9,6 +11,55 @@ from literary_engineering_studio.projections.read_model_cache import ReadModelCa
 
 
 class ReadModelCacheTests(unittest.TestCase):
+    def test_selected_values_are_isolated_and_do_not_copy_unselected_bulk_on_hits(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            project = Path(temporary)
+            cache = ReadModelCache()
+            value = {"revision": "one", "nodes": [{"label": "原文"}]}
+            cache.get("projection", project, lambda: value)
+            with mock.patch.object(read_model_cache, "deepcopy", wraps=read_model_cache.deepcopy) as clone:
+                self.assertIsNone(cache.get("projection", project, lambda: None,
+                                            selector=lambda p: None if p["revision"] == "one" else p))
+                self.assertIsNone(clone.call_args.args[0])
+            detail = cache.get("projection", project, lambda: None, selector=lambda p: p["nodes"][0])
+            detail["label"] = "修改返回值"
+            self.assertEqual(cache.get("projection", project, lambda: None)["nodes"][0]["label"], "原文")
+
+    def test_slow_build_does_not_block_unrelated_keys_and_same_key_builds_once(self):
+        with tempfile.TemporaryDirectory() as temporary, ThreadPoolExecutor(max_workers=3) as pool:
+            project = Path(temporary)
+            cache, started, release = ReadModelCache(), Event(), Event()
+            calls = []
+            def slow():
+                calls.append(1)
+                started.set()
+                if not release.wait(5):
+                    raise TimeoutError("test did not release builder")
+                return {"value": 1}
+            first = pool.submit(cache.get, "slow", project, slow)
+            self.assertTrue(started.wait(2))
+            second = pool.submit(cache.get, "slow", project, slow)
+            try:
+                fast = pool.submit(cache.get, "other", project, lambda: {"value": 2})
+                self.assertEqual(fast.result(timeout=2), {"value": 2})
+            finally:
+                release.set()
+            self.assertEqual(first.result(timeout=2), second.result(timeout=2))
+            self.assertEqual(len(calls), 1)
+
+    def test_invalidation_or_clear_during_build_cannot_publish_the_old_snapshot(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            for clear_all in (False, True):
+                cache, calls = ReadModelCache(), []
+                root = Path(temporary)
+                def build():
+                    calls.append(1)
+                    if len(calls) == 1:
+                        cache.clear() if clear_all else cache.invalidate(root)
+                    return {"value": len(calls)}
+                self.assertEqual(cache.get("x", root, build), {"value": 2})
+                self.assertEqual(cache.get("x", root, lambda: {"value": 99}), {"value": 2})
+
     def test_reuses_same_revision_and_rebuilds_after_project_change(self):
         with tempfile.TemporaryDirectory() as temporary:
             project = Path(temporary)

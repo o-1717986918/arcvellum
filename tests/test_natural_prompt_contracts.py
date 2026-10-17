@@ -4,6 +4,20 @@ from literary_engineering_studio_engine.public.prompting import prompt_layer_spe
 from literary_engineering_studio_engine.public.literary import parse_scene_material_requests_v3
 
 class NaturalPromptContractTests(unittest.TestCase):
+    def test_creator_and_reviewer_compare_registered_sources_and_narration_scope(self):
+        creator = prompt_layer_spec('scene.v2.creator.protocol')
+        reviewer = prompt_layer_spec('scene.v2.review.protocol')
+        self.assertEqual(creator.package_version, 6)
+        self.assertEqual(reviewer.package_version, 7)
+        for spec in (creator, reviewer):
+            for phrase in ('character_source', 'current_scene_source', 'narrative_design', 'canon_sources'):
+                self.assertIn(phrase, spec.default_text)
+        self.assertIn('发话人、受话人与实际动作', creator.default_text)
+        self.assertIn('prior_delta_dispositions 统一写在 consistency_record 内', creator.default_text)
+        self.assertIn('consistency_checks.note 写档案路径', reviewer.default_text)
+        self.assertIn('uncertain', reviewer.default_text)
+        self.assertIn('escalate', reviewer.default_text)
+
     def test_creative_identities_are_positive_and_style_ready(self):
         for kind in ('creator.identity','review','material.environment','material.character-description',
                      'material.event-narration','material.scene-description'):

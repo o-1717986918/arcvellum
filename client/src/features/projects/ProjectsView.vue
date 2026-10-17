@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import StudioGlyph from "@/components/StudioGlyph.vue";
 import { computed, onMounted, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 import { ArrowRight, BookOpenText, BookPlus, Check, Copy, FolderOpen, LocateFixed, ShieldCheck, Sparkles } from "lucide-vue-next";
@@ -172,10 +173,10 @@ async function copyDemoForWriting(): Promise<void> {
     <section class="view-intro project-intro">
       <div>
         <span class="eyebrow">作品起点</span>
-        <h1>从一个念头，建立一部能持续生长的长篇。</h1>
-        <p>人物、世界、剧情、文风和正文会被放进同一个作品里。你只需要先说清想写什么。</p>
+        <h1>你的作品</h1>
+        <p>建立一部新作品，或回到已有作品继续与 Agent 交谈。</p>
       </div>
-      <div class="intro-emblem" aria-hidden="true"><Sparkles :size="24" /><span>ARC</span><i></i><span>VELLUM</span></div>
+      <StudioGlyph class="intro-emblem" />
     </section>
 
     <p v-if="feedback" class="inline-feedback danger" role="alert">{{ feedback }}</p>

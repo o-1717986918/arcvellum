@@ -19,7 +19,7 @@ function replayTour(): void {
 
 <template>
   <div class="view help-view">
-    <header class="help-hero"><CircleHelp :size="30" /><div><span class="eyebrow">使用帮助</span><h1>从作品方向开始，其余交给 Agent</h1><p>你可以用自然语言管理项目，也可以随时打开正文、档案和创作现场核对结果。</p></div></header>
+    <header class="help-hero"><CircleHelp :size="30" /><div><span class="eyebrow">使用帮助</span><h1>使用 ArcVellum</h1><p>你可以用自然语言管理项目，也可以随时打开正文、档案和创作现场核对结果。</p></div></header>
     <section class="help-current"><span></span><div><strong>{{ phase }}</strong><p>{{ store.currentProject ? `当前作品：${store.currentProject.title}` : "先建立或打开一部作品。" }}</p></div><div class="help-current-actions"><button class="secondary-button" @click="replayTour"><Compass :size="15" />观看界面引导</button><button class="secondary-button" @click="store.initialize"><RotateCw :size="15" />重新检查</button></div></section>
     <div class="help-grid">
       <article><Sparkles :size="20" /><h2>第一次使用</h2><p>建立作品，写下创作方向，连接一个 Agent 与模型，然后在创作总控准备下一项任务。无需手工管理项目文件。</p></article>

@@ -31,7 +31,7 @@ if (missing.length) fail(`desktop asset copy is incomplete: ${missing.join(", ")
 if (sourceAssets.some((name) => name.endsWith(".png"))) fail("PNG assets remain in the production frontend build");
 
 const webpAssets = sourceAssets.filter((name) => name.endsWith(".webp"));
-const expectedVisualAssets = ["narrative-observatory-startup-"];
+const expectedVisualAssets = ["narrative-observatory-startup-", "vellum-orbits-"];
 const missingVisualAssets = expectedVisualAssets.filter((prefix) => !webpAssets.some((name) => name.startsWith(prefix)));
 if (missingVisualAssets.length) fail(`required default visual assets are missing: ${missingVisualAssets.join(", ")}`);
 if (webpAssets.length !== expectedVisualAssets.length) {

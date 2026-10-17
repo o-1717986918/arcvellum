@@ -1,0 +1,58 @@
+/* The language lab has a deliberate index / working sheet composition. */
+.studio-shell .pa-subworkspace[data-workspace="style"] .stylo-desk { margin: 0 0 26px; padding: 0; border: 0; border-radius: 0; background: transparent; --pa-accent: var(--pa-green); --pa-deep: var(--pa-surface); }
+.studio-shell .stylo-heading { gap: 18px; padding: 0 0 16px; }
+.studio-shell .stylo-heading h2 { font-size: 22px; margin: 2px 0; }
+.studio-shell .stylo-heading .eyebrow { font-size: 10px; }
+.studio-shell .stylo-heading p { font-size: 12px; }
+.studio-shell .stylo-heading .stylo-actions { margin: 0; }
+.studio-shell .stylo-desk :is(button,.stylo-file-button) { background: color-mix(in srgb,var(--pa-surface) 76%,transparent); border-radius: 6px; min-height: 34px; font-size: 12px; }
+.studio-shell .stylo-desk .stylo-primary { color: var(--pa-surface); background: var(--pa-green); }
+.studio-shell .stylo-tabs { gap: 4px; margin: 18px 0 0; padding: 5px; border: 1px solid var(--pa-line); border-radius: 9px; background: color-mix(in srgb,var(--pa-raised) 55%,transparent); }
+.studio-shell .stylo-tabs button { flex: 1; border: 0; border-radius: 6px; min-height: 38px; background: transparent; }
+.studio-shell .stylo-tabs [aria-pressed="true"] { color: var(--pa-green); background: var(--pa-surface); box-shadow: 0 2px 6px rgba(25,62,53,.06); font-weight: 600; }
+.studio-shell .stylo-import-bar { display: flex; align-items: center; gap: 16px; padding: 16px 0; border-bottom: 1px solid var(--pa-line); }
+.studio-shell .stylo-import-bar small { flex: 1; line-height: 1.7; }
+.studio-shell .stylo-body { gap: 24px; grid-template-columns: 174px minmax(0,1fr); padding-top: 22px; }
+.studio-shell .stylo-library { gap: 10px; padding-right: 22px; }
+.studio-shell .stylo-library h3 { font: 600 15px/1.6 var(--pa-sans); }
+.studio-shell .stylo-library button { padding: 12px; border: 0; background: var(--pa-green-soft); }
+.studio-shell .stylo-content { padding: 0 0 12px; }
+.studio-shell .stylo-content label { font-size: 13px; }
+.studio-shell .stylo-content input,.studio-shell .stylo-content textarea { padding: 11px 13px; font-size: 13px; }
+.studio-shell .stylo-source-row { padding: 16px; border-radius: 8px; background: color-mix(in srgb,var(--pa-surface) 65%,transparent); }
+.studio-shell .style-preset-panel { border: 1px solid var(--pa-line); border-radius: 8px; background: color-mix(in srgb,var(--pa-raised) 40%,transparent); }
+.studio-shell .pa-subworkspace[data-workspace="style"] :is(.style-atelier-shell,.style-evidence-field,.style-version-evidence,.style-source-table) { border-color: var(--pa-line); border-radius: 9px; background: color-mix(in srgb,var(--pa-surface) 72%,transparent); }
+.studio-shell .pa-subworkspace[data-workspace="style"] :is(.style-atelier-instrument,.style-journey,.style-source-rail,.style-version-rack) { background: color-mix(in srgb,var(--pa-raised) 60%,transparent); }
+.studio-shell .pa-subworkspace[data-workspace="archaeology"] :is(.archaeology-shell,.archaeology-evidence-stage,.archaeology-right-rail) { background: color-mix(in srgb,var(--pa-surface) 74%,transparent); border-radius: 9px; border-color: var(--pa-line); }
+.studio-shell .pa-subworkspace[data-workspace="archaeology"] :is(.archaeology-instrument,.archaeology-import-rail) { background: color-mix(in srgb,var(--pa-raised) 65%,transparent); }
+.studio-shell :is(.style-heading-actions,.archaeology-heading-actions) button { min-height: 36px; border-radius: 7px; font-size: 12px; }
+
+/* Live and rehearsal windows remain fully resizable, minimizable instruments. */
+.studio-shell :is(.pa-live-window,.pa-rehearsal-window) { border: 1px solid var(--pa-line-strong); border-radius: 14px; box-shadow: 0 28px 90px rgba(19,46,35,.25); backdrop-filter: blur(22px); }
+.studio-shell :is(.pa-live-window,.pa-rehearsal-window) .spatial-window-header { min-height: 36px; background: color-mix(in srgb,var(--pa-raised) 90%,transparent); border-bottom-color: var(--pa-line); }
+.studio-shell .pa-live-window .creative-live-dock { --live-panel: color-mix(in srgb,var(--pa-surface) 91%,transparent); --live-panel-deep: var(--pa-surface); }
+.studio-shell .pa-rehearsal-window .scene-rehearsal { background: color-mix(in srgb,var(--pa-surface) 94%,transparent); }
+.studio-shell .pa-rehearsal-window .scene-rehearsal :is(p,small) { font-size: 12px; line-height: 1.8; }
+.studio-shell .pa-live-window .creative-live-dock :is(p,small) { font-size: 12px; line-height: 1.8; }
+.studio-shell .pa-live-window .creative-live-dock button { font-size: 12px; }
+.studio-shell .pa-dialog-backdrop { background: rgba(20,42,33,.24); backdrop-filter: blur(8px); }
+.studio-shell .pa-new-conversation-dialog { border: 1px solid var(--studio-edge); border-radius: 16px; background: color-mix(in srgb,var(--pa-surface) 95%,transparent); box-shadow: 0 25px 90px rgba(20,42,33,.22); }
+.studio-shell .pa-new-conversation-dialog h2 { font: 600 27px/1.5 var(--pa-serif); }
+.studio-shell .pa-dialog-projects > button { min-height: 78px; border-radius: 8px; }
+.studio-shell .pa-connection-prompt { background: color-mix(in srgb,var(--pa-ochre) 8%,var(--studio-glass)); padding: 14px 20px; }
+@media(max-width:760px) {
+  .studio-shell .stylo-body { grid-template-columns: minmax(0,1fr); gap: 16px; padding-top: 16px; }
+  .studio-shell .stylo-library { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; padding: 0 0 14px; }
+  .studio-shell .stylo-library h3 { margin: 0; }
+  .studio-shell .stylo-library p { margin: 0; }
+  .studio-shell .stylo-import-bar { flex-wrap: wrap; gap: 8px; }
+  .studio-shell .stylo-import-bar small { flex-basis: 100%; }
+  .studio-shell .stylo-tabs { flex-wrap: nowrap; overflow-x: auto; }
+  .studio-shell .stylo-tabs button { min-width: 0; padding: 8px; font-size: 11px; }
+  .studio-shell .stylo-heading { gap: 8px; }
+  .studio-shell .stylo-heading .stylo-actions { width: 100%; justify-content: space-between; }
+  .studio-shell :is(.pa-live-window,.pa-rehearsal-window) { max-width: calc(100vw - 16px); }
+}
+
+.studio-shell .stylo-desk .stylo-presets { padding: 14px 18px; margin: 6px 0 14px; border: 1px solid var(--pa-line); border-radius: 8px; background: color-mix(in srgb,var(--pa-raised) 38%,transparent); }
+.studio-shell .stylo-presets > summary { color: var(--pa-green); font-size: 12px; }

@@ -5,7 +5,13 @@ from hashlib import sha256
 from copy import deepcopy
 
 
-def authored_record(answer, key):
+class AuthoredRecordError(ValueError):
+    def __init__(self, message, record):
+        super().__init__(message)
+        self.record = deepcopy(record)
+
+
+def authored_record(answer, key, *, strict=False):
     objects = json_objects(answer)
     records = [(index, obj[key]) for index, obj in enumerate(objects) if isinstance(obj.get(key), dict)]
     if len(records) != 1:
@@ -14,12 +20,18 @@ def authored_record(answer, key):
     if key not in {'creator_record', 'review_record'}:
         return value
     try:
-        record = _creator_record_layout(deepcopy(value)) if key == 'creator_record' else deepcopy(value)
+        record = deepcopy(value)
+        if key == 'creator_record':
+            _seed_disposition_alias(record)
         for obj in objects[index+1:]:
             if 'patches' in obj:
                 _replay_record_patches(record, obj['patches'])
-        return record
-    except (KeyError, IndexError, TypeError, ValueError):
+                if key == 'creator_record':
+                    _patched_disposition_alias(record, obj['patches'])
+        return _creator_record_layout(record) if key == 'creator_record' else record
+    except (KeyError, IndexError, TypeError, ValueError) as error:
+        if strict:
+            raise AuthoredRecordError(str(error), record) from error
         return None
 
 
@@ -104,6 +116,29 @@ def _creator_record_layout(record):
         raise ValueError('conflicting author prior-Delta disposition layouts')
     record['consistency_record'] = {**consistency, 'prior_delta_dispositions': deepcopy(prior)}
     return record
+
+
+def _seed_disposition_alias(record):
+    consistency = record.get('consistency_record')
+    if isinstance(consistency, dict) and 'prior_delta_dispositions' not in consistency:
+        prior = record.get('prior_delta_dispositions')
+        if isinstance(prior, list):
+            consistency['prior_delta_dispositions'] = deepcopy(prior)
+
+
+def _patched_disposition_alias(record, patches):
+    authority = None
+    for patch in patches:
+        path = patch['path']
+        if path == '/prior_delta_dispositions' or path.startswith('/prior_delta_dispositions/'):
+            authority = 'outer'
+        elif path in {'/consistency_record', '/consistency_record/prior_delta_dispositions'} or path.startswith('/consistency_record/prior_delta_dispositions/'):
+            authority = 'inner'
+    if authority == 'inner':
+        record.pop('prior_delta_dispositions', None)
+    elif authority == 'outer' and isinstance(record.get('consistency_record'), dict):
+        record['consistency_record'].pop('prior_delta_dispositions', None)
+        _seed_disposition_alias(record)
 
 
 def _replay_record_patches(record, patches):

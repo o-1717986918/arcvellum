@@ -1,5 +1,7 @@
 import { createRouter, createWebHashHistory } from "vue-router";
 
+const studioWorkspace = () => import("@/workspaces/StudioWorkspaceShell.vue");
+
 function agentWorkspace(workspace: string) {
   return { name: "project-agent", query: { workspace } };
 }
@@ -9,9 +11,10 @@ export const router = createRouter({
   routes: [
     { path: "/", redirect: { name: "project-agent" } },
     { path: "/projects", name: "projects", redirect: { name: "project-agent", query: { new: "1" } }, meta: { label: "作品" } },
-    { path: "/agent", name: "project-agent", component: () => import("@/features/project-agent/AgentWorkspaceView.vue"), meta: { label: "项目 Agent" } },
-    { path: "/overview", name: "overview", component: () => import("@/features/workflow/OverviewView.vue"), meta: { label: "创作总控" } },
-    { path: "/character-chat", name: "character-chat", component: () => import("@/features/character-chat/CharacterChatView.vue"), meta: { label: "与角色交谈" } },
+    { path: "/agent", name: "project-agent", component: studioWorkspace, meta: { label: "项目 Agent" } },
+    { path: "/overview", name: "overview", component: studioWorkspace, meta: { label: "创作总控" } },
+    { path: "/character-chat", name: "character-chat", redirect: (to) => ({ name: "project-agent",
+      query: { ...to.query, workspace: "character-chat", characterReturn: "archive" } }), meta: { label: "与角色交谈" } },
     { path: "/reader", name: "reader", redirect: () => agentWorkspace("reader"), meta: { label: "阅读" } },
     { path: "/library", name: "library", redirect: () => agentWorkspace("archive"), meta: { label: "作品档案" } },
     { path: "/archive", name: "archive", redirect: () => agentWorkspace("archive"), meta: { label: "档案管理" } },

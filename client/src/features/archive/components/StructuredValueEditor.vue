@@ -118,10 +118,11 @@ function updatePrimitive(event: Event): void {
     <span>{{ modelValue ? "是" : "否" }}</span>
   </label>
   <input
-    v-else
+    v-else-if="typeof modelValue === 'number'"
     class="archive-value-input"
-    :type="typeof modelValue === 'number' ? 'number' : 'text'"
-    :value="modelValue == null ? '' : String(modelValue)"
+    type="number"
+    :value="modelValue"
     @input="updatePrimitive"
   />
+  <textarea v-else class="archive-value-input" rows="1" :value="modelValue == null ? '' : String(modelValue)" @input="updatePrimitive" />
 </template>

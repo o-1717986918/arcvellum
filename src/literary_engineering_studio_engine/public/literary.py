@@ -60,6 +60,7 @@ from ..literary.planning.lean_plan import (
     render_outline,
 )
 from ..literary.planning.service import calculate_word_budget
+from ..literary.planning.narrative_design import normalize_narrative_design
 from ..literary.planning.length_repair import target_length_repair_pending
 from ..literary.planning.chapter_inventory import (
     formal_chapter_ids,

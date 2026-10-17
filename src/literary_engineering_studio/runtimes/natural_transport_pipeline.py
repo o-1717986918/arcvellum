@@ -16,7 +16,7 @@ from .natural_transport_task import extraction_task
 from .natural_actor_transport import seed_actor_response, finish_actor_fields
 from .source_repair_budget import SourceRepairBudget
 
-PROCESSOR_VERSION = 'cost-recovery-v4.40'
+PROCESSOR_VERSION = 'cost-recovery-v4.41'
 
 class NaturalTransportPipeline:
     def __init__(self, root, system, invoke, prepare, contracts):

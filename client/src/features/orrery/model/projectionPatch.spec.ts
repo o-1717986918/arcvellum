@@ -7,6 +7,16 @@ import type {
 } from "@/types/spatial";
 
 describe("applySpatialProjectionPatch", () => {
+  it("retains unchanged collections so a status event does not invalidate relationship geometry", () => {
+    const previous = projection("revision-one");
+    const patch = transition();
+    patch.nodes = { upsert: [], remove: [], order: previous.nodes.map((n) => n.node_id) };
+    const next = applySpatialProjectionPatch(previous, patch);
+    expect(next.nodes).toBe(previous.nodes);
+    expect(next.edges).toBe(previous.edges);
+    patch.nodes.order.reverse();
+    expect(applySpatialProjectionPatch(previous, patch).nodes.map((n) => n.node_id)).toEqual(["scene:2", "scene:1"]);
+  });
   it("applies one digest-bound transition without losing projection metadata", () => {
     const previous = projection("revision-one");
     const patch = transition();

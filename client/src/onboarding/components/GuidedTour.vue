@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from "vue";
 import { ArrowLeft, ArrowRight, Check, Compass, X } from "lucide-vue-next";
 import type { GuidedTourStep } from "../types";
 
@@ -13,6 +13,8 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{ complete: []; dismiss: [] }>();
 
 const index = ref(0);
+const suspended = ref(false);
+const ownerHidden = ref(false);
 const targetStyle = ref<Record<string, string>>({ opacity: "0" });
 const cardStyle = ref<Record<string, string>>({
   left: "50%",
@@ -25,10 +27,12 @@ const step = computed(() => props.steps[Math.min(index.value, props.steps.length
 const last = computed(() => index.value >= props.steps.length - 1);
 
 function updatePosition(): void {
-  if (!props.active || !step.value || typeof document === "undefined" || typeof window === "undefined") return;
+  if (suspended.value || !props.active || !step.value || typeof document === "undefined" || typeof window === "undefined") return;
   const element = document.querySelector<HTMLElement>(
     `[data-tour-id="${step.value.targetId}"]`,
   );
+  ownerHidden.value = Boolean(element?.closest("[inert]"));
+  if (ownerHidden.value) return;
   if (!element) {
     targetStyle.value = { opacity: "0" };
     cardStyle.value = {
@@ -88,12 +92,15 @@ onBeforeUnmount(() => {
   window.removeEventListener("resize", updatePosition);
   observer?.disconnect();
 });
+// A cached workspace is not an active surface; its teleported guide must follow it.
+onDeactivated(() => { suspended.value = true; });
+onActivated(async () => { suspended.value = false; await nextTick(); updatePosition(); });
 </script>
 
 <template>
   <Teleport to="body">
     <div
-      v-if="active && step"
+      v-if="active && step && !suspended && !ownerHidden"
       class="onboarding-tour"
       role="dialog"
       aria-modal="true"

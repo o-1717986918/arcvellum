@@ -20,6 +20,43 @@ def review():
 
 
 class SceneConsistencyContractTests(unittest.TestCase):
+    def test_classification_facts_and_prior_delta_failures_are_reported_together(self):
+        row = creator()
+        prior = {'continuity_changes': [{'target_ref': 'scenes/s1.yaml', 'summary': '门已关好'}]}
+        row['consistency_record'].update(no_canon_change_reason='', facts=[{
+            'subject': '门', 'predicate': '状态', 'value': '关好', 'evidence': '不存在的引句',
+            'source_state': 'unchanged', 'durable': True}], prior_delta_dispositions=[])
+        original = deepcopy(row)
+        with self.assertRaises(SceneConsistencyError) as caught:
+            validate_creator_consistency(row, prior)
+        self.assertEqual(row, original)
+        self.assertIn('无Canon变化须说明理由', str(caught.exception))
+        self.assertIn('事实引句须来自当前稿', str(caught.exception))
+        self.assertIn('门已关好', str(caught.exception))
+        self.assertIn('/consistency_record/facts/0/evidence', caught.exception.fields)
+        self.assertIn('/consistency_record/prior_delta_dispositions', caught.exception.fields)
+
+    def test_retention_diagnostic_explains_all_changed_proposal_identities(self):
+        prior = {'continuity_changes': [{'target_ref': 'scenes/s1.yaml', 'summary': '门已关好', 'operation': 'create'},
+                                        {'target_ref': 'scenes/s1.yaml', 'summary': '窗已打开', 'operation': 'create'}]}
+        row = creator()
+        row['scene_delta'] = deepcopy(prior)
+        for proposal in row['scene_delta']['continuity_changes']:
+            proposal['operation'] = 'update'
+        row['consistency_record']['prior_delta_dispositions'] = [
+            {'proposal_id': item['proposal_id'], 'action': 'retain', 'reason': '仍然成立'}
+            for item in delta_inventory(prior)]
+        with self.assertRaises(SceneConsistencyError) as caught:
+            validate_creator_consistency(row, prior)
+        for item in delta_inventory(prior):
+            self.assertIn(item['proposal_id'], str(caught.exception))
+        self.assertIn('operation', str(caught.exception))
+        for disposition, current in zip(row['consistency_record']['prior_delta_dispositions'],
+                                        row['scene_delta']['continuity_changes']):
+            disposition.update(action='replace', replacement={
+                'group': 'continuity_changes', 'target_ref': current['target_ref'], 'summary': current['summary']})
+        validate_creator_consistency(row, prior)
+
     def test_unstructured_scene_delta_is_a_repairable_author_error(self):
         row=creator();row['scene_delta']=[{'target_ref':'canon/facts.json','summary':'新事实'}]
         with self.assertRaises(SceneConsistencyError) as caught:

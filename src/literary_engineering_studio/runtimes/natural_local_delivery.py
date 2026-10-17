@@ -5,7 +5,7 @@ from literary_engineering_studio_engine.public.literary import ACTOR_CARD_SCHEMA
 from .natural_card_source import _labelled_cards, _CARD_SETS
 from .natural_material_response import whole_material_response
 from .natural_choice_labels import local_choice_labels
-from .natural_authored_records import authored_record
+from .natural_authored_records import authored_record, AuthoredRecordError, json_objects
 from .evidence_patch_source import resolve_review_record_evidence
 from .natural_transport_repair import NaturalExtractionError, NaturalSourceClarificationError
 
@@ -13,9 +13,9 @@ from .natural_transport_repair import NaturalExtractionError, NaturalSourceClari
 def local_delivery(answer, kind, context):
     if kind == 'review' and context.get('creation_integrity_contract'):
         return _local_review(answer,context)
-    if kind == 'creator' and context.get('creation_integrity_contract') and authored_record(answer, 'creator_record'):
+    if kind == 'creator' and context.get('creation_integrity_contract'):
         fields = local_creator_fields(answer, kind, context)
-        if fields.get('prose') or fields.get('material_requests'):
+        if authored_record(answer, 'creator_record') and (fields.get('prose') or fields.get('material_requests')):
             return fields
     if kind == 'material':
         return _local_material(answer, context)
@@ -126,7 +126,16 @@ def local_creator_fields(answer, kind, context=None):
 def _creator_authored_fields(answer, context):
     if not (context or {}).get('creation_integrity_contract'):
         return {}
-    record = authored_record(answer, 'creator_record') or {}
+    try:
+        record = authored_record(answer, 'creator_record', strict=True) or {}
+    except AuthoredRecordError as error:
+        if str(error) != 'conflicting author prior-Delta disposition layouts':
+            raise NaturalExtractionError('invalid source-author patch sequence: ' + str(error)) from error
+        payload = {**error.record, 'prose': _headed_creator_body(answer) or ''}
+        clarified = NaturalSourceClarificationError('原作者记录的处置布局存在冲突或补交路径无效：' + str(error),
+            fields=('/consistency_record',), payload=payload)
+        clarified.source_text = answer
+        raise clarified from error
     return {key: value for key, value in record.items() if key != 'prose'}
 
 
@@ -183,10 +192,8 @@ def _headed_creator_body(answer):
 
 
 def _creator_record_start(answer):
-    if authored_record(answer, 'creator_record') is None:
-        return None
     blocks=[match for match in re.finditer(r'(?ms)^```json[ \t]*\r?\n.*?\r?\n```[ \t]*$',answer)
-            if authored_record(match[0], 'creator_record') is not None]
+            if any(isinstance(obj.get('creator_record'), dict) for obj in json_objects(match[0]))]
     return blocks[0].start() if len(blocks)==1 else None
 
 

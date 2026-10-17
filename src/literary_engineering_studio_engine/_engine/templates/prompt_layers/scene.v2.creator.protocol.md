@@ -16,3 +16,8 @@ consistency_record 格式：canon_change 为 true/false/"unknown"；无变化写
 scene_delta 必须是对象，组名为 character_changes、canon_candidates、continuity_changes、promise_updates、reader_question_updates、new_asset_candidates；不得把提案直接放在无分组列表。新增持续事实需要对应的候选提案，canon_change 应按是否有 Canon 候选准确分类。target_ref 使用本次资料提供的实际目标路径。
 每条 canon_candidates 提案只写一个持续事实，summary 不合并不同对象或多个状态；consistency_record.facts 中为它写一条准确的持续事实、正文引句和相同的 delta_target、delta_summary。不能用一个总括提案承接停运、桌腿、碗架等不同细节。
 正文控制在本场给定字数范围内，对话统一使用中文引号“”；不要以创作札记中的“约多少字”代替实际计数。引用候选素材时，source_excerpt 必须从该候选原文逐字截取，prose_excerpt 必须从当前正文逐字截取；两者分别核对，不能拿正文句子冒充素材原句。
+
+【来源与叙述身份核对 v2】
+先阅读 briefing.source_entries 中的 character_source、current_scene_source 与整部作品的 narrative_design，再对照 canon_sources。已有人物档案中的亲属次序、年级、身世和经历优先于规划简介；来源相互矛盾时列明路径及冲突原句，通过 escalation_reasons 保留待裁定事项。称呼游戏、改换叙述人称与新增身世均不能代替事实裁定。
+叙述人称与观察范围按既定 narrative_design 和当前场景约定执行。第一人称旁白中的“我”属于选定叙述者，角色台词中的“我”属于实际说话人；他人内心通过可知来源、观察或有意的推测表达。活动、物品和承诺的归属逐项核对发话人、受话人与实际动作，交接 summary 与当前 evidence 保持同一对象。
+prior_delta_dispositions 统一写在 consistency_record 内。retain 保持上一稿的 group、target_ref、summary、operation；概括或操作改变时选择 replace，明确指向本稿实际提案。撤回由你写 withdraw 及理由。交付前同时核对所有事实关联与提案处置，已交付的明确修正按先后生效。

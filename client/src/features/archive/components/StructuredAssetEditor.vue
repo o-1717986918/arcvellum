@@ -102,12 +102,9 @@ function cloneValue<T>(value: T): T {
 <template>
   <div class="archive-structured-editor">
     <header class="archive-structured-toolbar">
-      <div>
-        <strong>结构化校勘</strong>
-        <span>{{ document.document_format.toUpperCase() }} · 仅修改 Registry 允许的字段</span>
-      </div>
-      <button class="primary" :disabled="!hasChanges || busy" @click="applyChanges">
-        <Check :size="13" />应用 {{ Object.keys(changedFields).length || "" }} 项到草稿
+      <span>修改后先应用到草稿</span>
+      <button class="primary" title="更新当前草稿，再检查并保存版本" :disabled="!hasChanges || busy" @click="applyChanges">
+        <Check :size="13" />应用{{ Object.keys(changedFields).length || "" }}{{ hasChanges ? "项" : "" }}到草稿
       </button>
     </header>
 
@@ -155,7 +152,7 @@ function cloneValue<T>(value: T): T {
             />
             <div v-else-if="field.kind === 'string-list'" class="archive-string-list">
               <div v-for="(item, index) in asStringList(values[field.name])" :key="index">
-                <input :value="item" @input="updateStringList(field.name, index, ($event.target as HTMLInputElement).value)" />
+                <textarea rows="1" :value="item" @input="updateStringList(field.name, index, ($event.target as HTMLTextAreaElement).value)" />
                 <button type="button" title="删除" @click="removeStringList(field.name, index)"><Trash2 :size="12" /></button>
               </div>
               <button type="button" @click="update(field.name, [...asStringList(values[field.name]), ''])"><Plus :size="12" />新增一项</button>

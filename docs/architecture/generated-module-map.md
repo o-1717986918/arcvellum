@@ -10,7 +10,7 @@
 | `src/literary_engineering_studio_engine/tasking` | 30 | Formal task contracts | `tasking/__init__.py` | Engine foundation | Agent execution |
 | `src/literary_engineering_studio_engine/routes` | 54 | Formal route catalog | `routes/catalog.py` | tasking and literary services | Studio lifecycle |
 | `src/literary_engineering_studio_engine/workflow` | 37 | Workflow projections | `workflow_state facade` | tasking and routes | Runtime adapters |
-| `src/literary_engineering_studio_engine/literary` | 198 | Literary domain | `domain package exports` | foundation and task contracts | FastAPI or Provider SDKs |
+| `src/literary_engineering_studio_engine/literary` | 199 | Literary domain | `domain package exports` | foundation and task contracts | FastAPI or Provider SDKs |
 | `src/literary_engineering_studio_engine/prompting` | 12 | Prompt programs | `prompt registry/compiler` | literary contracts | Provider transport |
 | `src/literary_engineering_studio_engine/orchestration` | 6 | Read-only orchestration catalog | `orchestration/__init__.py` | task and Gate catalogs | Planner execution |
 | `src/literary_engineering_studio_engine/projections` | 17 | Engine read projections | `projection facades` | formal project facts | promotion/writeback |
@@ -41,7 +41,7 @@
 | `delivery` | 5 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `details` | 2 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `help` | 1 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
-| `orrery` | 78 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
+| `orrery` | 89 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `project-agent` | 16 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `projects` | 4 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `quality` | 6 | 只通过 feature client、共享只读合同或命令总线跨域协作 |

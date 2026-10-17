@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import StudioGlyph from "@/components/StudioGlyph.vue";
 import { Activity, ArrowUpRight, BookOpenText, Radio } from "lucide-vue-next";
 import type { AgentObservability } from "@/types/api";
 import type { ProjectAgentWorkspaceId } from "@/workspaces/projectAgentWorkspaceRegistry";
@@ -37,6 +38,7 @@ function runStatus(value: string): string {
   <aside class="pa-inspector">
     <section class="pa-inspect-focus">
       <header><span>当前作品</span><button title="打开作品档案" @click="emit('workspace', 'archive')"><ArrowUpRight :size="14" /></button></header>
+      <StudioGlyph class="pa-work-seal" kind="orbit" :progress="progress" />
       <h2>{{ title }}</h2>
       <p>{{ premise || '作品方向会随着创作逐步变得清晰。' }}</p>
       <div class="pa-progress"><i :style="{ width: `${Math.max(0, Math.min(100, progress || 0))}%` }"></i></div>
@@ -46,7 +48,7 @@ function runStatus(value: string): string {
     <section class="pa-observer-section">
       <header><span><Activity :size="14" /> Agent 工作</span><strong :class="{ active: observability?.status === 'active' }">{{ agentStatus }}</strong></header>
       <p class="pa-observer-current">{{ observability?.activity?.label || currentTask || '当前没有运行中的任务' }}</p>
-      <small class="pa-observer-stage">{{ currentStage || nextAction || '下一步会出现在这里' }}</small>
+      <small v-if="(currentStage || nextAction) !== (observability?.activity?.label || currentTask)" class="pa-observer-stage">{{ currentStage || nextAction || '下一步会出现在这里' }}</small>
       <div class="pa-observer-sessions">
         <div v-for="item in sessions" :key="item.session_id" class="pa-observer-session">
           <i :class="item.status"></i><span><strong>{{ roleName(item.role) }}</strong><small>{{ item.last_message || item.task_id || '正在等待任务' }}</small></span><em>{{ runStatus(item.status) }}</em>

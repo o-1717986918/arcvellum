@@ -1,0 +1,12 @@
+/* Auto/efficient quality keeps exact geometry during camera movement, while
+   deferring expensive blur/glow and decorative animation until the camera rests.
+   The high preset retains those effects throughout interaction. */
+.narrative-parallax-stage[data-interacting="true"] ~ :is(.narrative-spine-layer, .orrery-v3-node-overlay, .creative-progression-layer) *,
+.narrative-parallax-stage[data-interacting="true"] ~ .orrery-v3-node-overlay *::before,
+.narrative-parallax-stage[data-interacting="true"] ~ .orrery-v3-node-overlay *::after {
+  filter: none !important;
+  backdrop-filter: none !important;
+  text-shadow: none !important;
+  box-shadow: none !important;
+  animation-play-state: paused !important;
+}

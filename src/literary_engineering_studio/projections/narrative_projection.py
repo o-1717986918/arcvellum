@@ -28,12 +28,13 @@ def build_narrative_projection(
     focus: str = "",
     dashboard_payload: dict[str, Any] | None = None,
     library_payload: dict[str, Any] | None = None,
+    reader_payload: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     root = project_root.resolve()
     selected_level = level if level in LEVELS else "book"
     library = library_payload if isinstance(library_payload, dict) else build_library(config, root)
     dashboard = dashboard_payload if isinstance(dashboard_payload, dict) else build_dashboard(config, root)
-    reader = build_reader_manifest(root)
+    reader = reader_payload if reader_payload is not None else build_reader_manifest(root)
     inventory = ProjectionInventory.from_library(library)
     focus_id = resolve_focus(selected_level, focus, inventory.scenes, dashboard)
     nodes, edges = _graph_for_level(selected_level, inventory, reader, dashboard, focus_id)

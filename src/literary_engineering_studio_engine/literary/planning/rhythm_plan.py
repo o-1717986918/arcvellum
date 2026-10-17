@@ -9,7 +9,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from ..scene.facts import SceneFacts, load_scene_facts
+from ..scene.facts import SceneFacts, load_scene_facts, parse_scene_mapping, scene_facts_from_mapping
 from .narrative_rhythm import analyze_narrative_rhythm_sequence, narrative_rhythm_contract, normalize_tension_curve, literary_rhythm_strategy
 
 
@@ -84,10 +84,11 @@ def _load_scene_entries(root: Path, stored: dict[str, Any]) -> list[dict[str, An
     stored_scenes = stored.get("scenes") if isinstance(stored.get("scenes"), dict) else {}
     entries: list[dict[str, Any]] = []
     for path in _rhythm_scene_paths(root):
-        scene_text = path.read_text(encoding="utf-8", errors="ignore")
-        facts = load_scene_facts(path)
+        scene_text = path.read_text(encoding="utf-8")
+        scene_payload = parse_scene_mapping(scene_text, source=path)
+        facts = scene_facts_from_mapping(path, scene_payload)
         scene_id = facts.scene_id
-        contract = narrative_rhythm_contract(root, path, plan_payload=stored, scene_text=scene_text)
+        contract = narrative_rhythm_contract(root, path, plan_payload=stored, scene_text=scene_text, scene_payload=scene_payload)
         rhythm = contract.get("narrative_rhythm") if isinstance(contract.get("narrative_rhythm"), dict) else {}
         curve = rhythm["tension_curve"] if literary_rhythm_strategy(rhythm.get("tension_curve")) else normalize_tension_curve(rhythm.get("tension_curve")) or {"entry": 2, "peak": 3, "exit": 2}
         stored_entry = stored_scenes.get(scene_id) if isinstance(stored_scenes.get(scene_id), dict) else {}

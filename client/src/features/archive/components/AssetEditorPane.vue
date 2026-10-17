@@ -22,10 +22,10 @@ const emit = defineEmits<{
 <template>
   <section class="archive-editor-pane">
     <header>
-      <div>
+      <div class="archive-document-identity">
         <span>{{ archiveAssetLabel(asset.asset_type) }} · 正式资产</span>
         <h2>{{ asset.title }}</h2>
-        <p>{{ asset.source_path }} · {{ asset.revision.slice(0, 18) }}…</p>
+        <p :title="`${asset.source_path || ''} · ${asset.revision}`">{{ asset.source_path }} · {{ asset.revision.slice(0, 18) }}…</p>
       </div>
       <div class="archive-mode-switch" role="group" aria-label="编辑模式">
         <button :class="{ active: mode === 'structure' }" @click="emit('update:mode', 'structure')">

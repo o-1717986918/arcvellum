@@ -41,17 +41,20 @@ describe("AgentThreadRail", () => {
 
     const projectButtons = wrapper.findAll(".pa-workspace-links:not(.pa-application-links) button");
     const appButtons = wrapper.findAll(".pa-application-links button");
-    expect(projectButtons).toHaveLength(8);
+    expect(projectButtons).toHaveLength(9);
     expect(appButtons).toHaveLength(4);
 
     await projectButtons[0].trigger("click");
     expect(wrapper.emitted("workspace")?.[0]).toEqual(["reader"]);
 
     await projectButtons[1].trigger("click");
-    expect(wrapper.emitted("workspace")?.[1]).toEqual(["live"]);
+    expect(wrapper.emitted("workspace")?.[1]).toEqual(["character-chat"]);
+
+    await projectButtons[2].trigger("click");
+    expect(wrapper.emitted("workspace")?.[2]).toEqual(["live"]);
 
     await appButtons[0].trigger("click");
-    expect(wrapper.emitted("workspace")?.[2]).toEqual(["settings"]);
+    expect(wrapper.emitted("workspace")?.[3]).toEqual(["settings"]);
   });
 
   it("keeps application settings available before a project is selected", () => {

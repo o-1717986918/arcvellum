@@ -16,7 +16,7 @@ onMounted(async () => {
 
 <template>
   <div class="view legal-view">
-    <header><span class="eyebrow">说明与约定</span><h1>创作保持开放，责任保持清楚</h1><p>这里说明 ArcVellum、本地数据、Agent、模型服务与公开发布之间的边界。</p></header>
+    <header><span class="eyebrow">说明与约定</span><h1>协议与隐私</h1><p>这里说明 ArcVellum、本地数据、Agent、模型服务与公开发布之间的边界。</p></header>
     <div class="legal-layout">
       <nav aria-label="协议目录">
         <button v-for="document in documents" :key="document.id" :class="{ active: active === document.id }" @click="active = document.id">

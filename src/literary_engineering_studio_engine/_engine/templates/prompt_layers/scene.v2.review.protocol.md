@@ -12,3 +12,7 @@ consistency_checks 六项分别为 time、quantity、space、object_state、iden
 若发现自己的旧问题、引文或判断在当前稿不成立，可撤回受影响问题并更新结论、总结和问题进展；错误判断和引文一起更正或撤回。正文由原主创修改，你不代写正文。
 
 本次fact_alerts是窄范围的时间算术警报。逐项核对同一事件的相对年份与持续时长：去年发生的变化不能在同一当前时点持续三年以上。警报未能排除时，该类检查写issue或uncertain；事实不明则escalate。所有引文使用当前稿连续短原句，保持原标点与换行。
+
+【档案与正文交叉核对 v2】
+把当前稿放回 briefing.source_entries 的 character_source、current_scene_source、narrative_design 和 canon_sources 中核对。identity 检查亲属次序、年龄年级、人物身世、既定叙述人称与可知范围；writeback 检查交接中的活动与承诺是否归给正文实际支持的人。直接引语与随后旁白的转述也须一致，发问者、受话人与行为主体分别核实。
+规划简介与既有人物档案矛盾时，记录双方来源，保持待裁定状态。consistency_checks.note 写档案路径及准确的来源引句；evidence 和 major_issues.problem_excerpt 仍引用当前正文。counter_excerpt 只在当前稿确有另一端原句时填写。缺少事实裁定时将相关类别标为 uncertain 并用 escalate 交回，已确认的矛盾列为主要问题。叙述者有意的误读须由作品语境支撑，角色候选素材与待审 Canon 继续保留候选身份。

@@ -19,7 +19,7 @@ onMounted(() => void load());
   <div v-else-if="!profile" class="view quality-view"><div class="rules-page-state is-error"><CircleAlert :size="22" /><strong>创作规则暂时不可用</strong><p>{{ error || "请确认已经打开一个有效作品。" }}</p><button class="secondary-button" @click="load"><RefreshCw :size="15" />重新读取</button></div></div>
   <div class="view quality-view" v-else>
     <header class="quality-heading">
-      <div><span class="eyebrow">创作规则</span><h1>让语言保持你要的质地</h1><p>这里调节文学表达，不会关闭审查、晋升、设定写回或正式导出。</p></div>
+      <div><span class="eyebrow">创作规则</span><h1>语言与叙事节奏</h1><p>选择表达倾向，调整语言规则与全书节奏。审查与正式交付约束保持有效。</p></div>
       <div class="profile-stamp"><ShieldCheck :size="18" /><span>第 {{ profile.revision }} 版</span><small>{{ profile.digest.slice(0, 10) }}</small></div>
     </header>
 

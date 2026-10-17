@@ -1,18 +1,20 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
-import { RouterLink } from "vue-router";
+import { computed, onMounted, ref, useId } from "vue";
+import { RouterLink, useRoute } from "vue-router";
 import {
   Archive,
-  BookOpenText,
   CheckCheck,
   Compass,
+  ChevronDown,
   Database,
   FilePlus2,
+  PanelLeft,
   RefreshCw,
   RotateCcw,
   Save,
   SearchCheck,
   ShieldAlert,
+  SlidersHorizontal,
   Sparkles,
   Trash2,
 } from "lucide-vue-next";
@@ -39,6 +41,7 @@ import { fetchArchiveWorkerJob } from "./services/archiveClient";
 import "./archive.css";
 
 const app = useAppStore();
+const route = useRoute();
 const archive = useArchiveStore();
 const choices = useHumanChoicesStore();
 const mode = ref<"formal" | "candidate" | "recycle">("formal");
@@ -50,6 +53,9 @@ const archiveReason = ref("");
 const restoreReason = ref("");
 const showCreation = ref(false);
 const showTour = ref(false);
+const indexOpen = ref(false);
+const reviewOpen = ref(false);
+const panelId = useId();
 const ARCHIVE_TOUR_VERSION = 1;
 
 const activeId = computed(() =>
@@ -111,10 +117,10 @@ onMounted(async () => {
   try {
     await archive.loadWorkspace();
     const first = archive.assetGroups.flatMap((group) => group.items)[0];
-    if (first) {
+    if (first && !archive.selectedAsset && !archive.selectedCandidate) {
       await archive.openAsset(first.asset_id);
-      if (!archive.structuredDocument) editorMode.value = "source";
     }
+    if (archive.selectedAsset && !archive.structuredDocument) editorMode.value = "source";
     showTour.value = !hasCompletedTour("archive", ARCHIVE_TOUR_VERSION);
   } catch {
     // The Archive store already exposes a user-facing failure message.
@@ -149,6 +155,7 @@ async function selectTab(id: string, kind: "asset" | "candidate"): Promise<void>
 
 async function openAsset(assetId: string): Promise<void> {
   mode.value = "formal";
+  indexOpen.value = false;
   try {
     await archive.openAsset(assetId);
     await ensureStructuredEditor();
@@ -159,6 +166,7 @@ async function openAsset(assetId: string): Promise<void> {
 }
 
 async function openCandidate(candidateId: string): Promise<void> {
+  indexOpen.value = false;
   mode.value = "candidate";
   try {
     await archive.openCandidate(candidateId);
@@ -318,13 +326,12 @@ function actionMessage(cause: unknown, fallback: string): string {
   <div class="archive-ide-view">
     <header class="archive-ide-header">
       <div>
-        <span>作品资产工作面</span>
-        <h1>Narrative Archive</h1>
-        <p>作者修改、候选晋升与版本证据在同一条受控链路中完成。</p>
+        <span>作品档案</span>
+        <h1>人物与世界</h1>
+        <p>管理人物、场景与世界设定。</p>
       </div>
       <div class="archive-header-actions">
-        <RouterLink :to="{ path: '/character-chat', query: { target: archive.selectedAsset?.asset_type === 'character' ? archive.selectedAsset.title : '' } }">与角色交谈</RouterLink>
-        <RouterLink to="/library"><BookOpenText :size="15" />回到亲用户浏览</RouterLink>
+        <RouterLink :to="{ name: 'project-agent', query: { ...route.query, workspace: 'character-chat', characterReturn: 'archive', target: archive.selectedAsset?.asset_type === 'character' ? archive.selectedAsset.title : '' } }">与角色交谈</RouterLink>
         <button title="查看本页引导" @click="replayTour"><Compass :size="15" /></button>
         <button :disabled="archive.busy" title="重新读取作品资产" @click="reloadWorkspace"><RefreshCw :size="15" /></button>
       </div>
@@ -332,10 +339,10 @@ function actionMessage(cause: unknown, fallback: string): string {
 
     <nav class="archive-mode-bar" data-tour-id="archive-modes" aria-label="档案工作区">
       <button :class="{ active: mode === 'formal' }" @click="mode = 'formal'"><Database :size="15" />正式资产<span>{{ archive.assetGroups.reduce((sum, group) => sum + group.items.length, 0) }}</span></button>
-      <button data-tour-id="archive-candidates" :class="{ active: mode === 'candidate' }" @click="mode = 'candidate'"><Sparkles :size="15" />候选与晋升<span>{{ archive.candidates.length }}</span></button>
+      <button data-tour-id="archive-candidates" :class="{ active: mode === 'candidate' }" @click="mode = 'candidate'; indexOpen = archive.candidates.length > 0"><Sparkles :size="15" />候选与晋升<span>{{ archive.candidates.length }}</span></button>
       <button :class="{ active: mode === 'recycle' }" @click="mode = 'recycle'"><Archive :size="15" />回收站<span>{{ archive.recycleEntries.length }}</span></button>
       <i></i>
-      <button class="archive-create-trigger" @click="showCreation = true"><FilePlus2 :size="15" />新建资料</button>
+      <button class="archive-create-trigger" title="新建资料" @click="showCreation = true"><FilePlus2 :size="15" /><span class="archive-create-label">新建资料</span></button>
       <small v-if="archive.busy">正在核对项目文件…</small>
       <small v-else>所有正式写入都有版本与回执</small>
     </nav>
@@ -347,8 +354,17 @@ function actionMessage(cause: unknown, fallback: string): string {
       <button @click="archive.clearMessages">关闭</button>
     </div>
 
-    <main class="archive-ide-grid">
+    <main class="archive-ide-grid" :class="{ 'archive-index-open': indexOpen || showTour, 'archive-review-open': reviewOpen || showTour }">
+      <div class="archive-compact-tools">
+        <button type="button" :aria-expanded="indexOpen || showTour" :aria-controls="`${panelId}-index`" @click="indexOpen = !indexOpen">
+          <PanelLeft :size="15" /><span>资料索引</span><ChevronDown :size="13" :class="{ expanded: indexOpen }" />
+        </button>
+        <button v-if="mode === 'formal'" type="button" :aria-expanded="reviewOpen || showTour" :aria-controls="`${panelId}-review`" @click="reviewOpen = !reviewOpen">
+          <SlidersHorizontal :size="15" /><span>修改与版本</span><i v-if="archive.dirty" title="有未保存的修改"></i><ChevronDown :size="13" :class="{ expanded: reviewOpen }" />
+        </button>
+      </div>
       <AssetTree
+        :id="`${panelId}-index`"
         data-tour-id="archive-tree"
         :groups="archive.assetGroups"
         :candidates="archive.candidates"
@@ -384,7 +400,7 @@ function actionMessage(cause: unknown, fallback: string): string {
         <div v-else class="archive-workspace-empty"><Database :size="28" /><strong>选择一份正式资料</strong><p>人物、场景和世界规则会在这里以作者版本打开。</p></div>
       </section>
 
-      <aside v-if="mode === 'formal'" class="archive-revision-spine" data-tour-id="archive-author-transaction">
+      <aside v-if="mode === 'formal'" :id="`${panelId}-review`" class="archive-revision-spine" data-tour-id="archive-author-transaction">
         <section class="archive-save-panel">
           <header><Save :size="15" /><strong>作者事务</strong></header>
           <label><span>修改原因</span><textarea v-model="editReason" placeholder="说明这次修改要解决什么问题"></textarea></label>

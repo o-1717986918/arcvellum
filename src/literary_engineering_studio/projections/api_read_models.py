@@ -11,11 +11,12 @@ from pathlib import Path
 from typing import Any, Callable
 
 from ..observability.agent_observability import build_agent_observability
-from .core_read_models import build_dashboard, build_library, build_narrative_evidence
+from .core_read_models import ENGINE_ACCESS_LOCK, build_dashboard, build_library, build_narrative_evidence
 from .delivery import build_delivery
 from ..application.project_progress import build_project_progress
 from .reader import build_reader_manifest, public_reader_manifest
 from .workspace_revision import build_workspace_revisions
+from .narrative_projection_v3 import build_rhythm_hints
 
 
 class ProjectReadModels:
@@ -34,8 +35,9 @@ class ProjectReadModels:
         self._autopilot = autopilot
         self._dashboard_builder = dashboard_builder or (lambda root: build_dashboard(self._config, root))
 
-    def cached(self, key: str, root: Path, builder: Callable[[], dict[str, Any]]) -> dict[str, Any]:
-        return self._lifecycle.read_models.get(key, root, builder)
+    def cached(self, key: str, root: Path, builder: Callable[[], dict[str, Any]], *,
+               selector: Callable[[Any], Any] | None = None) -> Any:
+        return self._lifecycle.read_models.get(key, root, builder, selector=selector)
 
     def invalidate(self, root: Path, reason: str) -> int:
         return self._lifecycle.read_models.invalidate(root, reason=reason)
@@ -52,6 +54,11 @@ class ProjectReadModels:
             root,
             lambda: build_narrative_evidence(self._config, root),
         )
+
+    def narrative_sources(self, root: Path) -> dict[str, Any]:
+        """Share source parsing across focus/grammar views within the same project revision."""
+        return self.cached(f"narrative-sources:{root}", root,
+                           lambda: _narrative_sources(root))
 
     def reader(self, root: Path) -> dict[str, Any]:
         return self.cached(f"reader:{root}", root, lambda: public_reader_manifest(build_reader_manifest(root)))
@@ -105,3 +112,10 @@ class ProjectReadModels:
             "source_revisions": source_revisions,
             **sections,
         }
+
+
+def _narrative_sources(root: Path) -> dict[str, Any]:
+    # The Engine parser remains serialized with the existing Engine read adapters;
+    # the cache's metadata lock no longer holds unrelated readers behind this I/O.
+    with ENGINE_ACCESS_LOCK:
+        return {"reader": build_reader_manifest(root), "rhythm": build_rhythm_hints(root)}

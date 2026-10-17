@@ -22,7 +22,7 @@ from literary_engineering_studio_engine.public.literary import (
 from literary_engineering_studio_engine.public.projects import atomic_write_text
 
 from .project_manager import read_directions
-from .lean_source_context import imported_source_context
+from .lean_source_context import imported_source_context, current_story_context
 from ..runtime.role_conversation import RoleConversationGateway
 
 
@@ -54,7 +54,8 @@ class LeanLongformPlanningService:
         if plan:
             _check_plan(plan, digest)
         else:
-            prompt = _initial_prompt(root, budget)
+            story_context = current_story_context(root)
+            prompt = _initial_prompt(root, budget, story_context=story_context)
             answer = self._ask(root, prompt, phase="initial")
             try:
                 budget = rebalance_lean_budget(base_budget, answer)
@@ -64,12 +65,13 @@ class LeanLongformPlanningService:
                 self._emit_validation_failure("initial", exc)
                 answer = self._ask(
                     root,
-                    _initial_repair_prompt(answer, budget, exc),
+                    _initial_repair_prompt(answer, budget, exc, story_context=story_context),
                     phase="initial-repair",
                 )
                 budget = rebalance_lean_budget(base_budget, answer)
                 plan = normalize_initial_plan(answer, budget, project_digest=digest)
                 _check_existing_first_window(root, plan)
+            _check_story_sources(root, story_context)
             _write_json(plan_path, plan)
         if not budget_path.is_file() or _read_json(budget_path) != budget:
             _write_json(budget_path, budget)
@@ -93,7 +95,8 @@ class LeanLongformPlanningService:
             item for item in plan["chapters"]
             if item["chapter_id"] == next_row["chapter_id"]
         )
-        prompt = _window_prompt(root, plan, chapter, next_row)
+        story_context = current_story_context(root)
+        prompt = _window_prompt(root, plan, chapter, next_row, story_context=story_context)
         answer = self._ask(root, prompt, phase="chapter-window")
         try:
             scenes = normalize_scene_window(
@@ -103,12 +106,13 @@ class LeanLongformPlanningService:
             self._emit_validation_failure("chapter-window", exc)
             answer = self._ask(
                 root,
-                _window_repair_prompt(answer, next_row, exc),
+                _window_repair_prompt(answer, next_row, exc, story_context=story_context),
                 phase="chapter-window-repair",
             )
             scenes = normalize_scene_window(
                 answer.get("scenes"), next_row, start_index=len(plan["scenes"]) + 1
             )
+        _check_story_sources(root, story_context)
         updated_events = [
             {
                 **item,
@@ -163,7 +167,7 @@ class LeanLongformPlanningService:
             )
 
 
-def _initial_prompt(root: Path, budget: dict[str, Any]) -> str:
+def _initial_prompt(root: Path, budget: dict[str, Any], *, story_context: str) -> str:
     directions = list(dict.fromkeys(
         f"[{row.get('source_kind', '')}] {row.get('message', '')}" for row in read_directions(root, limit=200) if row.get("status") == "active"
     ))
@@ -183,6 +187,7 @@ def _initial_prompt(root: Path, budget: dict[str, Any]) -> str:
         "你是作品主创。先理解作者希望读者进入怎样的世界、听见怎样的讲述声音、经历怎样的阅读旅程，再设计各阶段与章节的文学任务。世界的展开、人物相遇、时间流逝、风俗与群体生活、事件概述、情感与关系、发现与高潮都可以承担章节价值。选择与作品相称的叙事模式、叙述者声音、视角、时间和详略，让它们随章节任务变化。高自由度或开放式作品可用 ending_choice 记录条件性的收束可能，让后来创作发展其形状。开篇可以由世界、讲述者、时间概述或人物相遇引入，选择最能建立本作审美期待的方式。",
         "用自然文字交付完整规划，按卷、章和正文单元展开创作札记，列明文学任务、阅读经验、叙述策略与篇幅权重。",
         "chapters 与下列章节容量顺序相同；first_window 只写第一章场景，数量匹配预算。用户指定的章序、终局位置与最终画面优先。",
+        f"首章 first_window 必须逐项展开 {chapter_rows[0]['scene_count']} 个独立正文单元；每个单元单独列明任务，一个条目不能代替整章多个单元。",
         "scenes 是按阅读顺序安排的正文单元，可以是现场、概述、世界介绍、插叙、风俗叙述或自由组合。字段：name, function, obligation；participants 写实际参与的人名数组，叙述者讲述的单元可填 []。按需要填写 conflict, information_release, consequence, setup_payoff_role；consequence 也可以记录读者理解或作品尺度的变化。narrative_strategy 自由写本段的叙述声音、时间跨度、详略与主要表达方式；story_time 与 length_weight 表达时间和篇幅选择。rhythm_role 取 setup、escalation、climax、payoff、aftermath、bridge、transition 之一。",
         "已有场景档案是作者已定的场面事实；first_window 保持其场次、章节、参与人物与目标容量，围绕其中尚未决定的情节展开。",
         "返回字段：premise, central_question, ending_choice, narrative_design, volume_obligations, volume_length_weights, chapters, first_window, characters, world_facts。narrative_design 可写 narrative_mode、temporal_structure、viewpoint_design、pacing_design、structural_signature、narrator_voice、world_presentation。每章写 title、dramatic_turn、obligation、reader_question、literary_task，并可写 length_weight。literary_task 写该章在全书中的文学意义；dramatic_turn 可以是人物局面、世界认识或阅读经验的转向。volume_length_weights 是按卷排列的相对篇幅权重；长度权重表达详略，内核按全书目标核算。",
@@ -190,6 +195,7 @@ def _initial_prompt(root: Path, budget: dict[str, Any]) -> str:
         "安排值得展开的核心经验与适合概述的过程，让世界尺度与人物距离各有伸缩。叙述者可以直接讲述世界、连接时段、观察群体、发表有本作声音的评论；人物互动可以承载自主反应与关系变化。选择信息进入作品的最佳位置和讲述方式。单元的篇幅由文学任务支撑，细节的密度随阅读兴趣和整体节奏变化。人物在场说出的话和具体举动留给推演与正文发展。相邻单元承接已发生的事实，既定时间和数值事实保持一致，后续章节按实际创作滚动展开。",
         "\n## 作品约束\n" + (root / "project.yaml").read_text(encoding="utf-8")[:5000],
         "\n## 用户方向\n" + ("\n".join(directions)[-5000:] or "无额外方向"),
+        "\n" + story_context,
         "\n## 已有大纲\n" + (
             existing_outline.read_text(encoding="utf-8")[:5000]
             if existing_outline.is_file() else "无"
@@ -205,7 +211,7 @@ def _initial_prompt(root: Path, budget: dict[str, Any]) -> str:
 
 
 def _window_prompt(
-    root: Path, plan: dict[str, Any], chapter: dict[str, str], budget_row: dict[str, Any]
+    root: Path, plan: dict[str, Any], chapter: dict[str, str], budget_row: dict[str, Any], *, story_context: str
 ) -> str:
     directions = [f"[{row.get('source_kind', '')}] {row.get('message', '')}" for row in read_directions(root, limit=200) if row.get("status") == "active"]
     _, source_context = imported_source_context(root, max_chars=5000)
@@ -253,13 +259,14 @@ def _window_prompt(
         "有专名的 participants 必须逐字复用 registered_characters；不得用同义姓名替换已登记人物，临时角色保持无专名。严格遵守 chapter_spine 的章序与 ending_choice 位置，除非用户明确要求，不追加尾声或续集钩子。",
         "沿用已确认的人物、世界事实与时间口径；用 scene.story_time 标清倒叙或交错叙事中的位置。单元详略按世界认识、风俗趣味、思想、情感、时间和人物经验分配。used_events 是已使用事件的摘要，用于安排新的后果与读者认识。",
         "## 最近的用户方向\n" + ("\n".join(directions)[-5000:] or "无额外方向"),
+        story_context,
         "## 导入来源片段\n" + (source_context or "无导入来源"),
         json.dumps(context, ensure_ascii=False, separators=(",", ":")),
     ])
 
 
 def _initial_repair_prompt(
-    answer: dict[str, Any], budget: dict[str, Any], error: ValueError
+    answer: dict[str, Any], budget: dict[str, Any], error: ValueError, *, story_context: str
 ) -> str:
     chapter_rows = budget.get("chapter_budgets")
     chapter_rows = chapter_rows if isinstance(chapter_rows, list) else []
@@ -269,25 +276,28 @@ def _initial_repair_prompt(
     contract = {
         "chapters": len(chapter_rows),
         "volume_obligations": len(volume_rows),
-        "first_window_scenes": first_scene_count,
+        "first_window": first_scene_count,
     }
     return "\n".join([
         "# 长篇规划结构返修",
         "依据校验反馈，以自然文字重新交付完整规划，使卷、章和正文单元的对应关系清楚。",
         "保留有效的创作决策；若场景数量超出契约，请由你合并或重排其戏剧功能，不要简单截断内容。",
+        "同时修复下列全部数量错误。数量不足时，由你按既定章节任务补齐独立单元，保留已有合格单元；不要复制同一场景或用一项梗概代替多项。",
+        "下列数字是同名数组的实际条目数，尤其 first_window 必须逐项达到要求；卷级任务修好后仍须核对首章单元数量。",
         "所有原字段仍必须存在，场景和人物字段要求与上一轮相同。",
         "返修保持用户指定的章序、结局章节、最终画面、已登记人物姓名和时间口径。world_facts 只写虚构世界内部的事实与机制；场景与人物范围由既有规划和用户方向承载。",
         "## 精确数量契约",
         json.dumps(contract, ensure_ascii=False, separators=(",", ":")),
         "## 校验错误",
         str(error),
+        story_context,
         "## 上一份回答",
         json.dumps(answer, ensure_ascii=False, separators=(",", ":")),
     ])
 
 
 def _window_repair_prompt(
-    answer: dict[str, Any], budget_row: dict[str, Any], error: ValueError
+    answer: dict[str, Any], budget_row: dict[str, Any], error: ValueError, *, story_context: str
 ) -> str:
     contract = {
         "chapter_id": str(budget_row["chapter_id"]),
@@ -298,12 +308,14 @@ def _window_repair_prompt(
         "# 章节场景窗口结构返修",
         "依据校验反馈，以自然文字重新交付本章完整单元规划，清楚列明各单元的文学任务与组织。",
         "保留有效的创作决策；若场景数量超出契约，请由你合并或重排其戏剧功能，不要简单截断内容。",
+        "数量不足时，由你按本章任务补齐独立单元，保留已有合格单元；不要复制同一场景，也不要用一项梗概代替多项。",
         "每场仍须包含 name, function, participants, conflict, information_release, consequence, setup_payoff_role, rhythm_role, obligation。",
         "返修只解决契约错误，不改动既定章序、结局位置、已登记人物姓名或时间口径，也不新增尾声与续集钩子。",
         "## 精确数量契约",
         json.dumps(contract, ensure_ascii=False, separators=(",", ":")),
         "## 校验错误",
         str(error),
+        story_context,
         "## 上一份回答",
         json.dumps(answer, ensure_ascii=False, separators=(",", ":")),
     ])
@@ -314,6 +326,11 @@ def _paths(root: Path) -> tuple[Path, Path]:
         root / "plot" / "lean_project_plan.json",
         root / "plot" / "word_budget" / "word_budget.json",
     )
+
+
+def _check_story_sources(root: Path, expected: str) -> None:
+    if current_story_context(root) != expected:
+        raise ValueError('planning story sources changed during the author turn; preserve the answer and reconcile before saving')
 
 
 def _event_budget_rows(plan: dict[str, Any]) -> list[dict[str, Any]]:

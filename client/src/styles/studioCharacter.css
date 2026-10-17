@@ -1,0 +1,45 @@
+/* Character conversations use the same ink, paper and orbital vocabulary. */
+body .character-chat-overlay { --pa-green: #28715d; --pa-green-soft: #dfede4; --pa-blue: #53658a; --pa-ochre: #977232; --pa-surface: #f7faf7; background: linear-gradient(125deg,rgba(217,232,222,.95),rgba(240,245,239,.94),rgba(224,232,238,.95)); backdrop-filter: blur(12px); }
+body .character-chat-overlay .character-chat-panel { color: #203b33; background: rgba(247,250,247,.88); border: 1px solid #bed1c4; border-radius: 16px; box-shadow: 0 28px 80px -20px rgba(25,62,53,.3); backdrop-filter: blur(20px); }
+body .character-chat-panel > header { position: relative; isolation: isolate; padding: 22px 28px; align-items: flex-start; border-color: #d1dfd5; background: rgba(230,240,233,.55); }
+body .character-chat-panel > header::after { content: ""; position: absolute; z-index: -1; right: 90px; top: -30px; width: 250px; height: 165px; background: url("../assets/studio/vellum-orbits.webp") center/contain no-repeat; opacity: .22; pointer-events: none; }
+body .character-chat-panel > header > button { flex: none; min-width: 62px; height: 36px; white-space: nowrap; }
+body .character-chat-panel h2 { font: 600 27px/1.5 Georgia,"Noto Serif SC","STZhongsong",SimSun,serif; }
+body .character-chat-panel > header p { font-size: 13px; line-height: 1.8; margin: 4px 0 0; }
+body .character-chat-panel small { color: #627a6c; font-size: 11px; line-height: 1.7; }
+body .character-chat-body { grid-template-columns: 300px minmax(0,1fr); }
+body .character-chat-body aside { padding: 22px; border-color: #d1dfd5; background: rgba(227,237,230,.6); }
+body .character-chat-body aside h3 { margin: 24px 0 12px; padding-top: 18px; border-top: 1px solid #cbdcd0; font-size: 14px; }
+body .character-chat-body aside h3:first-child { border: 0; margin-top: 0; padding-top: 0; }
+body .character-chat-body main { padding: 26px 34px; }
+body .character-chat-panel label { font-size: 12px; line-height: 1.6; margin: 14px 0; }
+body .character-chat-panel :is(input,select,textarea) { background: rgba(251,253,249,.9); border-color: #b7cec0; border-radius: 6px; font-size: 13px; }
+body .character-chat-panel button { background: rgba(247,250,247,.84); border-color: #bdd0c3; min-height: 34px; font-size: 12px; border-radius: 6px; }
+body .character-chat-panel button:hover:not(:disabled) { border-color: #28715d; background: #e3eee7; }
+body .character-chat-panel .character-chat-primary { color: #f7faf7; background: #28715d; border-color: #28715d; }
+body .character-chat-panel .character-chat-primary:hover:not(:disabled) { background: #205e4d; }
+body .character-chat-panel details { background: rgba(222,235,226,.5); border-radius: 6px; }
+body .character-chat-empty { max-width: 380px; margin: auto; }
+body .character-chat-empty .studio-glyph { width: 86px; height: 86px; margin: 0 0 22px; }
+body .character-chat-empty h3 { font: 600 26px/1.6 Georgia,"Noto Serif SC","STZhongsong",SimSun,serif; }
+body .character-chat-empty p { font-size: 14px; color: #627a6c; line-height: 1.9; }
+body .character-chat-transcript p { font-size: 15px; padding: 18px 0; border-radius: 0; }
+body .character-chat-user { background: transparent; border-bottom: 1px solid #d1dfd5; }
+body .character-chat-answer { background: transparent; border: 0; }
+body .character-chat-transcript b { color: #28715d; font-size: 12px; }
+body .character-chat-body main > form { padding: 14px; background: rgba(247,250,247,.9); border: 1px solid #b7cec0; border-radius: 10px; box-shadow: 0 8px 24px -20px #193e35; }
+body .character-chat-body main > form label { margin-top: 0; }
+body .character-chat-body main > form textarea { background: transparent; border: 0; padding: 8px 0; }
+@media(max-width:700px) {
+  body .character-chat-overlay { padding: 6px; }
+  body .character-chat-overlay .character-chat-panel { width: 100%; height: calc(100dvh - 12px); border-radius: 12px; }
+  body .character-chat-panel > header { padding: 18px; gap: 14px; }
+  body .character-chat-panel h2 { font-size: 23px; }
+  body .character-chat-panel > header p { font-size: 12px; }
+  body .character-chat-body { grid-template-columns: minmax(0,1fr); }
+  body .character-chat-body aside { padding: 20px; }
+  body .character-chat-body main { padding: 22px; }
+  body .character-chat-body.character-has-session main { order: -1; }
+  body .character-chat-panel > header::after { right: 16px; opacity: .1; }
+}
+@media(prefers-reduced-transparency:reduce) { body .character-chat-overlay .character-chat-panel { background: #f7faf7; backdrop-filter: none; } }

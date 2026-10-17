@@ -20,15 +20,24 @@ export interface StageSceneryOptions {
   primaryGroups(groupSize: number): NarrativeFrame[];
 }
 
-export function drawStageScenery(options: StageSceneryOptions): void {
-  drawGrammarScenery(options);
+export interface SceneryGraphics { silhouette: Graphics; shadow: Graphics; foreground: Graphics }
+
+export function drawStageScenery(options: StageSceneryOptions, retained?: SceneryGraphics): SceneryGraphics {
+  const graphics = retained || { silhouette: new Graphics(), shadow: new Graphics(), foreground: new Graphics() };
+  if (!retained) {
+    options.layers.far.addChild(graphics.shadow);
+    options.layers.mid.addChild(graphics.silhouette);
+    options.layers.near.addChild(graphics.foreground);
+  }
+  Object.values(graphics).forEach((item) => item.clear());
+  drawGrammarScenery(options, graphics);
+  return graphics;
 }
 
-function drawGrammarScenery(options: StageSceneryOptions): void {
-  const { layers, layout, projection, palette, experience, frame, primaryGroups } = options;
+function drawGrammarScenery(options: StageSceneryOptions, graphics: SceneryGraphics): void {
+  const { layout, projection, palette, experience, frame, primaryGroups } = options;
   const grammar = layout.grammar;
-  const silhouette = new Graphics();
-  const shadow = new Graphics();
+  const { silhouette, shadow, foreground } = graphics;
   const center = { x: frame.centerX, y: frame.centerY };
   if (grammar === "loop") {
     const width = Math.max(620, frame.width * 0.48);
@@ -56,9 +65,7 @@ function drawGrammarScenery(options: StageSceneryOptions): void {
       .stroke({ color: palette.shadow, width: 50, alpha: 0.3 });
     silhouette.poly(route).stroke({ color: palette.canon, width: 10, alpha: 0.43 });
   }
-  layers.far.addChild(shadow);
-  layers.mid.addChild(silhouette);
-  drawForegroundOccluders(layers.near, grammar, center, palette, experience);
+  drawForegroundOccluders(foreground, grammar, center, palette, experience);
 }
 
 function drawConstellations(
@@ -247,14 +254,13 @@ function drawStageWings(
 }
 
 function drawForegroundOccluders(
-  target: Container,
+  foreground: Graphics,
   grammar: SpatialNarrativeProjection["spatial_grammar"],
   center: { x: number; y: number },
   palette: ScenePalette,
   experience: StageExperience,
 ): void {
   if (experience.depth === "flat") return;
-  const foreground = new Graphics();
   const left = center.x - 1480;
   const right = center.x + 1480;
   const opacity = experience.depth === "deep" ? 1 : 0.6;
@@ -265,5 +271,4 @@ function drawForegroundOccluders(
     foreground.poly([left, center.y + 480, center.x - 420, center.y + 255, center.x + 160, center.y + 860, left, center.y + 1040]).fill({ color: palette.deep, alpha: 0.25 * opacity });
     foreground.poly([right, center.y + 480, center.x + 420, center.y + 255, center.x - 160, center.y + 860, right, center.y + 1040]).fill({ color: palette.deep, alpha: 0.22 * opacity });
   }
-  target.addChild(foreground);
 }

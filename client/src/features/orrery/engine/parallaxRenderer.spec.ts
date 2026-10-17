@@ -6,9 +6,23 @@ import {
   orientWorldPoint,
   parallaxViewFromDrag,
   scenePoint,
+  createParallaxProjector,
+  depthScale,
 } from "@/features/orrery/engine/parallaxProjection";
 
 describe("parallax camera orientation", () => {
+  it("compiled projection preserves exact anchors and depth through unrestricted rotations", () => {
+    for (const depth of ["flat", "balanced", "deep"] as const) for (const drag of [0, 200, 730, 1600]) {
+      const view = parallaxViewFromDrag(DEFAULT_PARALLAX_VIEW, drag, -drag / 2);
+      const compiled = createParallaxProjector(depth, view);
+      for (const point of [{ x: 2, y: 3, z: 4 }, { x: -860, y: 100, z: -85 }]) {
+        const actual = compiled.project(point), expected = scenePoint(point, depth, view);
+        expect(actual.x).toBeCloseTo(expected.x, 8);
+        expect(actual.y).toBeCloseTo(expected.y, 8);
+        expect(compiled.depthScale(point)).toBeCloseTo(depthScale(point, depth, view), 10);
+      }
+    }
+  });
   it("fits a complete chapter cluster inside the available camera frame", () => {
     const frame = fittedCameraFrame(
       [{ x: 100, y: 40 }, { x: 1500, y: 260 }, { x: 720, y: 120 }],

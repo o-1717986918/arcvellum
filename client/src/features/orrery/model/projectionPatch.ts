@@ -40,6 +40,9 @@ function applyCollection<T>(
   patch: SpatialProjectionCollectionPatch<T>,
   identity: (item: T) => string,
 ): T[] {
+  if (!patch.upsert.length && !patch.remove.length
+    && (!patch.order.length || (patch.order.length === previous.length
+      && patch.order.every((id, index) => id === identity(previous[index]))))) return previous;
   const items = new Map(previous.map((item) => [identity(item), item]));
   patch.remove.forEach((id) => items.delete(id));
   patch.upsert.forEach((item) => items.set(identity(item), item));

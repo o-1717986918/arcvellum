@@ -41,7 +41,7 @@ test("a new conversation stays bound to the work selected in the client", async 
   await chooser.getByRole("button", { name: /视觉样本 100/ }).click();
   await expect(chooser).toBeHidden();
   await expect(page.locator(".pa-conversation-title")).toContainText("视觉样本 100");
-  await expect(page.locator(".pa-orrery-entry")).toContainText("视觉样本 100");
+  await expect(page.locator(".pa-orrery-entry")).toHaveAttribute("aria-label", "进入 视觉样本 100 的星仪");
   const firstSession = new URL(page.url()).hash.match(/session=([^&]+)/)?.[1];
   expect(firstSession).toBeTruthy();
   const first = await request.get(`http://127.0.0.1:8791/project-agent/sessions/${firstSession}`);
@@ -54,7 +54,7 @@ test("a new conversation stays bound to the work selected in the client", async 
   await expect(chooser).toBeVisible();
   await chooser.getByRole("button", { name: /视觉样本 300/ }).click();
   await expect(page.locator(".pa-conversation-title")).toContainText("视觉样本 300");
-  await expect(page.locator(".pa-orrery-entry")).toContainText("视觉样本 300");
+  await expect(page.locator(".pa-orrery-entry")).toHaveAttribute("aria-label", "进入 视觉样本 300 的星仪");
   const secondSession = new URL(page.url()).hash.match(/session=([^&]+)/)?.[1];
   expect(secondSession).toBeTruthy();
   expect(secondSession).not.toBe(firstSession);
@@ -62,9 +62,9 @@ test("a new conversation stays bound to the work selected in the client", async 
   expect((await second.json()).project_root).toBe(secondRoot);
 
   await page.locator(".pa-orrery-entry").click();
-  await expect(page.getByRole("button", { name: "返回对话" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "返回工作台" })).toBeVisible();
   await expect(page.locator(".orrery-v3-instrument-dock")).toHaveCount(0);
-  await page.getByRole("button", { name: "返回对话" }).click();
+  await page.getByRole("button", { name: "返回工作台" }).click();
   await expect(page.locator(".pa-conversation-title")).toContainText("视觉样本 300");
   expect(new URL(page.url()).hash).toContain(`session=${secondSession}`);
 });

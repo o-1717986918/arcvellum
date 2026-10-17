@@ -19,6 +19,51 @@ def append_patch(text, patch, fenced=False):
 
 
 class NaturalAuthoredRecordReplayTests(unittest.TestCase):
+    def test_explicit_later_consistency_patch_resolves_an_earlier_layout_conflict(self):
+        row = {'prior_delta_dispositions': [], 'consistency_record': {
+            'facts': [], 'prior_delta_dispositions': [{'proposal_id': 'old', 'action': 'retain'}]}}
+        original = source(row)
+        current = {'facts': [], 'prior_delta_dispositions': [
+            {'proposal_id': 'old', 'action': 'withdraw', 'reason': '原作者明确撤回'}]}
+        text = append_patch(original, [{'path': '/consistency_record', 'value': current}])
+        record = authored_record(text, 'creator_record')
+        self.assertEqual(record['consistency_record'], current)
+        self.assertNotIn('prior_delta_dispositions', record)
+        self.assertTrue(author_field_present(text, 'consistency_record', current))
+        unrelated = append_patch(original, [{'path': '/consistency_record/facts', 'value': []}])
+        self.assertIsNone(authored_record(unrelated, 'creator_record'))
+
+    def test_nested_and_outer_disposition_patches_follow_explicit_author_order(self):
+        old = [{'proposal_id': 'p', 'action': 'retain', 'reason': '保留'}]
+        latest = [{'proposal_id': 'p', 'action': 'withdraw', 'reason': '撤回'}]
+        original = source({'prior_delta_dispositions': old, 'consistency_record': {'facts': []}})
+        text = append_patch(original, [{'path': '/consistency_record/prior_delta_dispositions', 'value': latest}])
+        self.assertEqual(authored_record(text, 'creator_record')['consistency_record']['prior_delta_dispositions'], latest)
+        text = append_patch(text, [{'path': '/prior_delta_dispositions', 'value': old}])
+        self.assertEqual(authored_record(text, 'creator_record')['consistency_record']['prior_delta_dispositions'], old)
+
+    def test_layout_conflict_returns_to_author_without_formatter_and_later_patch_replays_locally(self):
+        from literary_engineering_studio.runtimes.scene_natural_output import NaturalOutputProcessor
+        from literary_engineering_studio.runtimes.natural_transport_repair import NaturalSourceClarificationError
+        row = {'material_requests': [], 'material_decisions': [], 'decision_summary': '原作者判断',
+            'scene_delta': {}, 'prior_delta_dispositions': [{'proposal_id': 'old', 'action': 'retain'}],
+            'consistency_record': {'canon_change': False, 'no_canon_change_reason': '没有新增Canon',
+                'facts': [], 'no_persistent_facts_reason': '没有新增持续事实', 'prior_delta_dispositions': []}}
+        original = source(row)
+        context = {'creation_integrity_contract': 'scene-consistency/v1', 'available_material_ids': []}
+        with TemporaryDirectory() as temporary:
+            processor = NaturalOutputProcessor(Path(temporary), 'extractor',
+                lambda *_: self.fail('explicit layout conflict must not invoke a formatter'))
+            with self.assertRaises(NaturalSourceClarificationError) as caught:
+                processor.process(original, kind='creator', context=context)
+            self.assertEqual(caught.exception.payload['prose'], '原作者正文。')
+            self.assertEqual(caught.exception.fields, ('/consistency_record',))
+            reply = json.dumps({'patches': [{'path': '/consistency_record', 'value': row['consistency_record']}]}, ensure_ascii=False)
+            result = processor.process_field_repair(original, reply, kind='creator', context=context,
+                payload=caught.exception.payload, fields=caught.exception.fields)
+            self.assertEqual(result['prose'], '原作者正文。')
+            self.assertEqual(result['__transport']['model_calls'], 0)
+
     def test_single_patch_wrapper_is_structural_and_cannot_replace_another_record(self):
         from literary_engineering_studio.runtimes.natural_authored_records import replay_authored_patch
         original = source({'consistency_record': {'facts': [{'source_state': 'attributed'}]}})

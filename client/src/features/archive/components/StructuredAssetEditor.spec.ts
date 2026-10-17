@@ -14,7 +14,7 @@ describe("StructuredAssetEditor", () => {
     await wrapper.find(".archive-structured-toolbar button").trigger("click");
 
     expect(wrapper.emitted("apply")?.[0]).toEqual([{ name: "林汐" }]);
-    expect(wrapper.text()).toContain("仅修改 Registry 允许的字段");
+    expect(wrapper.text()).toContain("修改后先应用到草稿");
   });
 
   it("provides safe Markdown preview and stable table row controls", async () => {
@@ -51,6 +51,12 @@ describe("StructuredAssetEditor", () => {
     expect(wrapper.find(".archive-markdown-preview strong").text()).toBe("揭开");
     expect(wrapper.text()).toContain("条目 1");
     expect(wrapper.text()).toContain("新增条目");
+
+    await wrapper.find(".archive-value-object textarea").setValue("灯是谁点亮的？\n为什么只有这间屋子有光？");
+    await wrapper.find(".archive-structured-toolbar button").trigger("click");
+    expect(wrapper.emitted("apply")?.[0]).toEqual([
+      { reader_experience: [{ question: "灯是谁点亮的？\n为什么只有这间屋子有光？" }] },
+    ]);
   });
 });
 

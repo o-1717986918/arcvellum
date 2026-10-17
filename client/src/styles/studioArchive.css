@@ -1,0 +1,184 @@
+/* An editable dossier: a quiet index, readable fields, then revision evidence. */
+.studio-shell .pa-subworkspace[data-workspace="archive"] .pa-subworkspace-scroll { background: transparent; }
+.studio-shell .pa-subworkspace[data-workspace="archive"] .archive-ide-view {
+  --archive-void: var(--pa-surface); --archive-panel: var(--pa-raised); --archive-panel-raised: var(--pa-green-soft);
+  --archive-line: var(--pa-line); --archive-line-strong: var(--pa-line-strong);
+  --archive-text: var(--pa-ink); --archive-muted: var(--pa-muted);
+  --archive-green: var(--pa-green); --archive-brass: var(--pa-ochre); --archive-red: var(--pa-red);
+  height: 100%; min-height: 100%; overflow: hidden; font-size: 13px; line-height: 1.65;
+  grid-template-rows: max-content max-content auto minmax(0,1fr);
+  background: color-mix(in srgb,var(--pa-surface) 82%,transparent); color-scheme: light;
+  scrollbar-color: var(--pa-line-strong) transparent;
+}
+.studio-shell :is(.pa-theme-dark,.pa-theme-contrast) .pa-subworkspace[data-workspace="archive"] .archive-ide-view { color-scheme: dark; }
+.studio-shell .archive-ide-header { align-items: center; min-height: 76px; gap: 12px; padding: 12px 24px; background: transparent; }
+.studio-shell .archive-ide-header > div:first-child { min-width: 0; }
+.studio-shell .archive-ide-header > div:first-child > span { display: none; }
+.studio-shell .archive-ide-header h1 { margin: 0; color: var(--pa-ink); font: 600 24px/1.4 var(--pa-serif); }
+.studio-shell .archive-ide-header p { margin: 3px 0 0; color: var(--pa-muted); font-size: 12px; line-height: 1.5; }
+.studio-shell .archive-header-actions { align-items: center; flex: none; gap: 6px; }
+.studio-shell .pa-subworkspace .archive-header-actions > a { display: inline-flex; font-size: 12px; }
+.studio-shell .archive-header-actions :is(a,button) { min-height: 32px; border-color: var(--pa-line); background: transparent; }
+.studio-shell .archive-header-actions a { color: var(--pa-green); }
+.studio-shell .archive-mode-bar { min-height: 44px; padding: 0 18px; gap: 4px; overflow: hidden; background: color-mix(in srgb,var(--pa-raised) 38%,transparent); }
+.studio-shell .archive-mode-bar button { padding: 0 10px; font-size: 12px; white-space: nowrap; }
+.studio-shell .archive-mode-bar button.active { color: var(--pa-green); border-bottom-color: var(--pa-green); }
+.studio-shell .archive-mode-bar button span { color: var(--pa-muted); background: transparent; font-size: 11px; }
+.studio-shell .archive-mode-bar > small { font-size: 11px; }
+.studio-shell .archive-mode-bar .archive-create-trigger { min-height: 30px; margin: 6px 0 6px 8px; color: var(--pa-green); background: var(--pa-green-soft); border: 1px solid var(--pa-line); }
+.studio-shell .archive-mode-bar .archive-create-label { padding: 0; color: inherit; font-size: 12px; }
+.studio-shell .archive-feedback { grid-row: 3; }
+.studio-shell .archive-ide-grid { grid-row: 4; min-height: 0; grid-template-columns: 182px minmax(0,1fr) 230px; }
+.studio-shell .archive-compact-tools { display: none; }
+
+/* Index and open tabs are navigation, not competing document headings. */
+.studio-shell .archive-tree { background: color-mix(in srgb,var(--pa-raised) 42%,transparent); }
+.studio-shell .archive-tree-search { min-height: 34px; margin: 14px 12px 8px; background: color-mix(in srgb,var(--pa-surface) 70%,transparent); }
+.studio-shell .archive-tree-scroll { padding: 0 8px 16px; }
+.studio-shell .archive-tree-scroll section > header { padding: 16px 8px 7px; font-size: 11px; letter-spacing: .03em; }
+.studio-shell .archive-tree-scroll button { min-height: 52px; padding: 8px; gap: 7px; border-radius: 5px; }
+.studio-shell .archive-tree-scroll strong { font-size: 13px; line-height: 1.5; font-weight: 500; }
+.studio-shell .archive-tree-scroll small { margin-top: 3px; font: 10px/1.5 var(--pa-sans); opacity: .8; }
+.studio-shell .archive-tree-scroll button.active { background: var(--pa-green-soft); color: var(--pa-green); box-shadow: inset 2px 0 var(--pa-green); }
+.studio-shell .archive-tree > footer { min-height: 34px; padding: 0 12px; font-size: 10px; }
+.studio-shell .archive-workspace { grid-template-rows: 36px minmax(0,1fr); background: color-mix(in srgb,var(--pa-surface) 93%,transparent); }
+.studio-shell .archive-tabs { height: 36px; min-height: 36px; overflow-y: hidden; background: transparent; }
+.studio-shell .archive-tabs > div { min-height: 0; height: 35px; min-width: 116px; background: transparent; }
+.studio-shell .archive-tabs > div.active { background: color-mix(in srgb,var(--pa-green-soft) 35%,transparent); box-shadow: inset 0 2px 0 var(--pa-green); }
+.studio-shell .archive-tab-select { gap: 7px; grid-template-columns: auto auto auto; font-size: 12px; }
+.studio-shell .archive-tab-select small { font-size: 10px; opacity: .7; }
+.studio-shell .archive-editor-pane > header { align-items: center; min-height: 84px; gap: 16px; padding: 14px 24px; }
+.studio-shell .archive-document-identity { min-width: 0; flex: 1; }
+.studio-shell .archive-document-identity > span { font-size: 11px; }
+.studio-shell .archive-editor-pane h2 { margin: 2px 0 3px; font: 600 24px/1.4 var(--pa-serif); }
+.studio-shell .archive-document-identity p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; line-height: 1.5; opacity: .8; }
+.studio-shell .archive-mode-switch { padding: 2px; background: transparent; border-color: var(--pa-line); }
+.studio-shell .archive-mode-switch button { min-height: 30px; padding: 0 9px; font-size: 11px; white-space: nowrap; }
+.studio-shell .archive-mode-switch button.active { color: var(--pa-green); background: var(--pa-green-soft); }
+
+/* Content density follows the field's meaning; long nested text can wrap. */
+.studio-shell .archive-structured-editor { grid-template-rows: 44px minmax(0,1fr); background: transparent; }
+.studio-shell .archive-structured-toolbar { gap: 12px; padding: 6px 24px; background: color-mix(in srgb,var(--pa-raised) 25%,transparent); }
+.studio-shell .archive-structured-toolbar > span { margin: 0; font-size: 12px; }
+.studio-shell .archive-structured-toolbar button { flex: none; min-height: 30px; font-size: 12px; }
+.studio-shell .archive-structured-toolbar button:disabled { opacity: 1; color: var(--pa-muted); background: transparent; border-color: var(--pa-line); }
+.studio-shell .archive-form-section { padding: 20px 24px 24px; border-bottom: 1px solid var(--pa-line); }
+.studio-shell .archive-form-section > header { min-height: 0; margin-bottom: 16px; padding: 0 0 0 10px; background: transparent; border-left: 2px solid var(--pa-line-strong); font-size: 14px; line-height: 1.4; color: var(--pa-ink); }
+.studio-shell .archive-form-section > header small { font-size: 10px; font-weight: 400; }
+.studio-shell .archive-form-fields { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 18px 20px; }
+.studio-shell .archive-form-field { padding: 0; gap: 7px; border: 0; }
+.studio-shell .archive-form-field > header span { color: var(--pa-muted); font-size: 12px; font-weight: 500; }
+.studio-shell .archive-form-field > header i { margin-left: 7px; padding: 0; border: 0; background: transparent; font-size: 9px; }
+.studio-shell .archive-form-field > small { font-size: 11px; line-height: 1.7; }
+.studio-shell .archive-ide-view :is(input,textarea,select) { color: var(--pa-ink); background: color-mix(in srgb,var(--pa-surface) 88%,transparent); border-color: var(--pa-line); border-radius: 5px; font-size: 14px; line-height: 1.7; }
+.studio-shell .archive-form-field > :is(input,select) { min-height: 38px; padding: 7px 10px; }
+.studio-shell .archive-ide-view :is(.archive-value-input, .archive-string-list textarea) { field-sizing: content; min-height: 38px; max-height: 240px; padding: 8px 10px; resize: vertical; overflow-wrap: anywhere; }
+.studio-shell .archive-value-object > article { padding: 3px 0 4px 12px; border: 0; border-left: 1px solid var(--pa-line); border-radius: 0; background: transparent; }
+.studio-shell .archive-value-list > article { padding: 8px 0 12px; border: 0; border-bottom: 1px solid var(--pa-line); border-radius: 0; background: transparent; }
+.studio-shell :is(.archive-value-object,.archive-value-list) { gap: 12px; }
+.studio-shell :is(.archive-value-object,.archive-value-list) > article > header { min-height: 24px; margin-bottom: 7px; font-size: 11px; }
+.studio-shell :is(.archive-value-object,.archive-value-list,.archive-string-list) button { min-height: 28px; padding: 3px 7px; font-size: 11px; background: transparent; }
+.studio-shell .archive-object-add { margin-top: 4px; }
+.studio-shell .archive-object-add input { font-size: 12px; min-height: 32px; }
+.studio-shell .archive-markdown-editor { min-height: 120px; border-color: var(--pa-line); border-radius: 5px; }
+.studio-shell .archive-markdown-editor > nav { min-height: 32px; background: transparent; border-color: var(--pa-line); }
+.studio-shell .archive-markdown-editor > nav button { font-size: 11px; border-color: var(--pa-line); }
+.studio-shell .archive-markdown-editor textarea { field-sizing: content; min-height: 96px; max-height: 340px; padding: 12px; line-height: 1.85; }
+.studio-shell .archive-markdown-preview { padding: 14px; font-size: 14px; line-height: 1.85; }
+.studio-shell .archive-source-editor > span { padding: 7px 24px; min-height: 36px; background: color-mix(in srgb,var(--pa-raised) 25%,transparent); font-size: 11px; }
+.studio-shell .archive-source-editor { grid-template-rows: auto minmax(0,1fr); }
+.studio-shell .archive-source-editor textarea { padding: 20px 24px; font: 13px/1.9 "Cascadia Code",Consolas,monospace; }
+.studio-shell .archive-ide-view :is(input,textarea,select):focus { outline: 2px solid color-mix(in srgb,var(--pa-green) 24%,transparent); outline-offset: 1px; border-color: var(--pa-green); }
+.studio-shell .archive-ide-view button:focus-visible { outline: 2px solid var(--pa-green); outline-offset: 2px; }
+
+/* Revision controls stay useful without taking the visual weight of the document. */
+.studio-shell .archive-revision-spine { grid-column: 3; grid-row: 1; display: block; background: color-mix(in srgb,var(--pa-raised) 40%,transparent); }
+.studio-shell .archive-revision-spine > section { padding: 18px 16px; }
+.studio-shell .archive-revision-spine section > header { margin-bottom: 13px; font-size: 13px; }
+.studio-shell .archive-save-panel label > span { font-size: 12px; line-height: 1.75; }
+.studio-shell .archive-save-panel textarea { min-height: 76px; padding: 9px 10px; font-size: 13px; }
+.studio-shell .archive-owner-check input { margin-top: 5px; border-radius: 3px; }
+.studio-shell .archive-save-panel > div { grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 14px; }
+.studio-shell .archive-save-panel button,.studio-shell .archive-danger-panel button { min-height: 34px; font-size: 12px; }
+.studio-shell .archive-save-panel button.primary { grid-column: 1 / -1; }
+.studio-shell :is(.archive-save-panel button.primary,.archive-structured-toolbar button:not(:disabled),.candidate-promote,.archive-create-panel > footer button.primary) { color: var(--pa-surface); background: var(--pa-green); border-color: var(--pa-green); }
+.studio-shell .archive-save-panel button.primary:disabled { opacity: 1; color: var(--pa-muted); background: var(--pa-green-soft); border-color: var(--pa-line); }
+.studio-shell .archive-panel-empty { margin: 0; padding: 0; font-size: 12px; line-height: 1.85; }
+.studio-shell .archive-timeline li > div { min-width: 0; }
+.studio-shell .archive-timeline li strong { display: block; overflow: hidden; text-overflow: ellipsis; font-size: 11px; }
+.studio-shell .archive-timeline time { color: var(--pa-muted); font-size: 11px; line-height: 1.8; }
+.studio-shell .archive-workspace-empty { min-height: 240px; padding: 32px 24px; gap: 5px; }
+.studio-shell .archive-workspace-empty strong { font-size: 16px; }
+.studio-shell .archive-workspace-empty p { max-width: 30em; font-size: 13px; }
+.studio-shell .archive-ide-view *::-webkit-scrollbar-track { background: transparent; }
+.studio-shell .archive-ide-view *::-webkit-scrollbar-thumb { background: var(--pa-line-strong); border-color: transparent; }
+
+/* Creation uses the same readable sheet, with the label attached to its editor. */
+.studio-shell .archive-create-backdrop { background: rgba(24,52,42,.25); }
+.studio-shell .archive-create-panel { border-color: var(--pa-line-strong); border-radius: 10px; box-shadow: 0 24px 80px rgba(20,42,33,.22); }
+.studio-shell .archive-create-panel > header { padding: 18px 22px; }
+.studio-shell .archive-create-panel > header h2 { font: 600 23px/1.5 var(--pa-serif); }
+.studio-shell .archive-create-panel > header p { font-size: 12px; line-height: 1.7; }
+.studio-shell .archive-create-editor { grid-template-rows: auto minmax(220px,1fr) auto auto; gap: 14px; padding: 18px; }
+.studio-shell .archive-create-editor label > span { font-size: 12px; }
+.studio-shell .archive-create-source { grid-template-rows: max-content minmax(0,1fr); }
+.studio-shell .archive-create-source textarea { font: 13px/1.85 "Cascadia Code",Consolas,monospace; }
+.studio-shell .archive-create-types strong { font-size: 12px; }
+.studio-shell .archive-create-types > button { padding: 10px; }
+.studio-shell .archive-create-empty { padding: 30px 10px; }
+.studio-shell .archive-create-empty p { font-size: 12px; line-height: 1.75; }
+@container(max-width:1100px) {
+  .studio-shell .archive-ide-grid { grid-template-columns: 164px minmax(0,1fr) 218px; }
+  .studio-shell .archive-mode-bar > small { display: none; }
+  .studio-shell .archive-editor-pane > header { align-items: flex-start; flex-direction: column; gap: 10px; }
+}
+@container(max-width:980px) {
+  .studio-shell .archive-ide-grid { display: flex; flex-direction: column; overflow-y: auto; }
+  .studio-shell .archive-compact-tools { display: flex; position: sticky; top: 0; z-index: 3; flex: none; gap: 6px; padding: 7px 16px; background: var(--pa-raised); border-bottom: 1px solid var(--pa-line); }
+  .studio-shell .archive-compact-tools button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 32px; padding: 5px 10px; color: var(--pa-muted); background: transparent; border: 1px solid transparent; border-radius: 5px; font-size: 12px; }
+  .studio-shell .archive-compact-tools button[aria-expanded=true] { color: var(--pa-green); background: var(--pa-surface); border-color: var(--pa-line); }
+  .studio-shell .archive-compact-tools button i { width: 5px; height: 5px; border-radius: 50%; background: var(--pa-ochre); }
+  .studio-shell .archive-compact-tools svg.expanded { transform: rotate(180deg); }
+  .studio-shell .archive-tree { display: none; flex: none; order: 1; height: 280px; min-height: 0; max-height: 42dvh; border-right: 0; border-bottom: 1px solid var(--pa-line); }
+  .studio-shell .archive-index-open > .archive-tree { display: grid; }
+  .studio-shell .archive-revision-spine { display: none; flex: none; order: 2; overflow: visible; border-bottom: 1px solid var(--pa-line); }
+  .studio-shell .archive-review-open > .archive-revision-spine { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .studio-shell .archive-workspace,.studio-shell .archive-wide-stage { flex: none; order: 3; min-height: 0; }
+  .studio-shell .archive-workspace { display: block; border-right: 0; }
+  .studio-shell .archive-editor-pane { display: block; }
+  .studio-shell .archive-editor-pane > header { flex-direction: row; align-items: center; }
+  .studio-shell .archive-structured-editor { display: block; }
+  .studio-shell .archive-structured-toolbar { min-height: 44px; }
+  .studio-shell .archive-structured-scroll { overflow: visible; }
+  .studio-shell .archive-source-editor { height: 65dvh; min-height: 360px; }
+  .studio-shell .candidate-columns { grid-template-columns: minmax(0,1fr); }
+}
+@container(max-width:620px) {
+  .studio-shell .archive-ide-header { padding: 12px 16px; min-height: 70px; }
+  .studio-shell .archive-ide-header h1 { font-size: 22px; }
+  .studio-shell .archive-header-actions { gap: 4px; }
+  .studio-shell .archive-header-actions :is(a,button) { padding: 0 8px; }
+  .studio-shell .archive-mode-bar { padding: 0 10px; gap: 0; }
+  .studio-shell .archive-mode-bar button { padding: 0 8px; gap: 5px; }
+  .studio-shell .archive-compact-tools { padding: 5px 10px; }
+  .studio-shell .archive-editor-pane > header { padding: 16px 20px; flex-direction: column; align-items: stretch; gap: 10px; }
+  .studio-shell .archive-editor-pane h2 { font-size: 23px; }
+  .studio-shell .archive-mode-switch { width: fit-content; max-width: 100%; }
+  .studio-shell .archive-mode-switch button { flex: none; }
+  .studio-shell .archive-structured-toolbar { flex-direction: row; align-items: center; padding: 7px 20px; }
+  .studio-shell .archive-form-section { padding: 20px; }
+  .studio-shell .archive-form-fields { gap: 16px; }
+}
+@container(max-width:460px) {
+  .studio-shell .archive-ide-header p { display: none; }
+  .studio-shell .archive-ide-header { min-height: 64px; }
+  .studio-shell .archive-mode-bar { display: grid; grid-template-columns: 1fr 1.25fr .9fr 34px; padding: 0 6px; }
+  .studio-shell .archive-mode-bar > i { display: none; }
+  .studio-shell .archive-mode-bar button { justify-content: center; padding: 0 3px; font-size: 11px; gap: 4px; }
+  .studio-shell .archive-mode-bar .archive-create-trigger { margin: 6px 0; padding: 0; }
+  .studio-shell .archive-mode-bar .archive-create-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .studio-shell .archive-form-fields { grid-template-columns: minmax(0,1fr); }
+  .studio-shell .archive-review-open > .archive-revision-spine { grid-template-columns: minmax(0,1fr); }
+  .studio-shell .archive-structured-toolbar > span { font-size: 11px; }
+  .studio-shell .archive-structured-toolbar { padding: 7px 16px; }
+}

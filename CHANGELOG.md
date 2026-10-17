@@ -2,6 +2,26 @@
 
 All notable ArcVellum changes are documented in this file. Detailed release evidence remains under `docs/releases/`.
 
+## [0.99.14] - 2026-10-17
+
+### Changed
+
+- Rebuilt the studio around the Agent conversation, translucent paper surfaces, shared artwork and motion; entering the persistent orrery folds away the interface and preserves the conversation draft.
+- Improved archive typography, long-form field wrapping, nested structures, revision timestamps and responsive access to the index and revision controls.
+- Refined the reading, settings, style, quality and delivery workspaces while preserving their existing actions.
+- Reused orrery layout, labels, retained render objects and narrative projection snapshots to reduce unnecessary rebuild work.
+
+### Added
+
+- Added a persistent character-dialogue entry and archive-aware return navigation that keeps the main Agent draft intact.
+
+### Fixed
+
+- Removed dark scrollbar tracks and nested archive form backgrounds from the light theme, and corrected excess empty space in asset creation.
+- Preserved narrative design through planning updates and strengthened saved-delivery repair progress and budget handling.
+
+[0.99.14]: https://github.com/o-1717986918/arcvellum/releases/tag/v0.99.14
+
 ## [0.99.13] - 2026-10-14
 
 ### Changed

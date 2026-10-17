@@ -86,6 +86,7 @@ void main() {
   // Three sparse star layers give the background depth without adding scene nodes.
   vec3 stars = vec3(0.0);
   for (int layer = 0; layer < 3; layer++) {
+    if (uQuality < 1.5 && layer == 2) break;
     float parallax = layer == 0 ? 0.1 : (layer == 1 ? 0.3 : 0.6);
     vec3 ray = normalize(direction + vec3(uPan.x * parallax * 0.00022, -uPan.y * parallax * 0.00022, 0.0));
     float cells = layer == 0 ? 16.0 : (layer == 1 ? 26.0 : 40.0);
@@ -120,7 +121,7 @@ void main() {
 
   float bandY = 0.14 * sin(spherical.x * 2.0 + 0.7) + 0.04 * sin(spherical.x * 5.0);
   float band = exp(-pow((spherical.y - bandY) * 8.0, 2.0));
-  float dust = fbm(vec2(spherical.x * 4.0 + uTime * 0.008, spherical.y * 22.0), 3);
+  float dust = fbm(vec2(spherical.x * 4.0 + uTime * 0.008, spherical.y * 22.0), uQuality > 1.5 ? 3 : 2);
   sky = mix(sky, vec3(0.72, 0.77, 0.72), band * dust * 0.075);
 
   // ArcVellum's two persistent sky signatures. They are directional light
@@ -129,13 +130,13 @@ void main() {
   vec2 jadeDelta = spherical - vec2(-1.18, 0.22);
   jadeDelta.x = sin(jadeDelta.x * 0.5) * 2.0;
   float jadeField = exp(-(jadeDelta.x * jadeDelta.x * 1.15 + jadeDelta.y * jadeDelta.y * 8.4));
-  float jadeVeil = fbm(spherical * vec2(3.1, 10.0) + vec2(uTime * 0.003, 7.3), 4);
+  float jadeVeil = fbm(spherical * vec2(3.1, 10.0) + vec2(uTime * 0.003, 7.3), uQuality > 1.5 ? 4 : 2);
   sky = mix(sky, vec3(0.6, 0.78, 0.72), jadeField * jadeVeil * 0.13);
 
   vec2 irisDelta = spherical - vec2(1.72, -0.1);
   irisDelta.x = sin(irisDelta.x * 0.5) * 2.0;
   float irisField = exp(-(irisDelta.x * irisDelta.x * 1.5 + irisDelta.y * irisDelta.y * 10.5));
-  float irisVeil = fbm(spherical * vec2(4.6, 13.0) + vec2(19.0, -uTime * 0.002), 4);
+  float irisVeil = fbm(spherical * vec2(4.6, 13.0) + vec2(19.0, -uTime * 0.002), uQuality > 1.5 ? 4 : 2);
   sky = mix(sky, vec3(0.76, 0.7, 0.82), irisField * irisVeil * 0.1);
 
   float emberRift = exp(-pow((spherical.y + 0.28 - 0.06 * sin(spherical.x * 2.6)) * 14.0, 2.0));

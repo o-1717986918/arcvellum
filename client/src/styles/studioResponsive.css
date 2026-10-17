@@ -1,0 +1,71 @@
+/* Responsive compositions retain the same controls, with conversation taking priority. */
+@media(min-width:1800px) {
+  .studio-interface-layer .pa-shell { inset: 26px; grid-template-columns: 236px minmax(0,1fr) 280px; gap: 24px; }
+  .studio-shell .pa-conversation { padding-top: 48px; }
+}
+@media(max-width:1300px) {
+  .studio-interface-layer .pa-shell { inset: 12px; grid-template-columns: 208px minmax(0,1fr) 232px; gap: 12px; }
+  .studio-shell .pa-brand { padding: 8px 13px; gap: 7px; }
+  .studio-shell .pa-brand strong { font-size: 23px; }
+  .studio-shell .pa-workbench-head { padding: 0 16px; gap: 7px; }
+  .studio-shell .pa-inspector > section { padding: 18px 16px; }
+  .studio-shell .pa-conversation { padding: 30px 26px; }
+  .studio-shell .pa-composer-shell { padding-left: 26px; padding-right: 26px; }
+}
+@media(max-width:1180px) {
+  .studio-interface-layer .pa-shell { grid-template-columns: 208px minmax(0,1fr); }
+  .studio-shell .pa-shell:not(.pa-workspace-fullscreen):not(.pa-utility-workspace):not(.pa-no-project) { display: grid; grid-template-columns: 208px minmax(0,1fr); }
+  .studio-shell .pa-inspector { display: none; }
+  .studio-shell .pa-inspector-toggle { display: inline-grid; }
+  .studio-shell .pa-inspector-open .pa-inspector { display: block; position: fixed; z-index: 31; top: 12px; bottom: 12px; right: 12px; width: 280px; padding: 8px; background: color-mix(in srgb,var(--pa-surface) 92%,transparent); border-radius: 14px; box-shadow: var(--studio-shadow); }
+  .studio-shell :is(.pa-rail-open,.pa-inspector-open) .pa-panel-backdrop { display: block; z-index: 30; background: rgba(26,45,37,.2); backdrop-filter: blur(4px); }
+}
+@media(min-width:761px) and (max-width:920px) {
+  .studio-shell .pa-thread-rail { position: relative; width: auto; height: 100%; transform: none; }
+  .studio-shell .pa-rail-toggle { display: none; }
+  .studio-shell .pa-conversation-title small { max-width: 180px; }
+}
+@media(max-width:760px) {
+  .studio-interface-layer .pa-shell { inset: 8px; display: grid; grid-template-columns: minmax(0,1fr); gap: 0; }
+  .studio-shell .pa-shell:not(.pa-workspace-fullscreen):not(.pa-utility-workspace):not(.pa-no-project) { grid-template-columns: minmax(0,1fr); }
+  .studio-shell .pa-shell .pa-workbench { grid-column: 1; }
+  .studio-shell .pa-shell .pa-thread-rail { display: none; }
+  .studio-shell .pa-rail-open .pa-thread-rail { display: flex; position: fixed; z-index: 32; inset: 8px auto 8px 8px; width: min(290px,calc(100vw - 40px)); background: color-mix(in srgb,var(--pa-surface) 94%,transparent); }
+  .studio-shell .pa-inspector-open .pa-inspector { inset: 8px 8px 8px auto; width: min(280px,calc(100vw - 36px)); }
+  .studio-shell .pa-rail-toggle { display: inline-grid; }
+  .studio-shell .pa-workbench { grid-template-rows: 60px minmax(0,1fr) auto; border-radius: 12px; }
+  .studio-shell .pa-workbench-head { gap: 4px; padding: 0 9px; min-width: 0; }
+  .studio-shell .pa-agent-avatar { display: none; }
+  .studio-shell .pa-conversation-title { flex: 1; }
+  .studio-shell .pa-conversation-title strong { font-size: 12px; }
+  .studio-shell .pa-conversation-title small { font-size: 10px; max-width: 140px; }
+  .studio-shell .pa-orrery-entry { min-height: 32px; width: 32px; padding: 0; justify-content: center; margin-left: 0; }
+  .studio-shell .pa-orrery-entry span { display: none; }
+  .studio-shell .pa-appearance-select { width: 28px; }
+  .studio-shell .pa-appearance-select > svg { width: 15px; }
+  .studio-shell .pa-workbench-head .pa-icon-button { width: 28px; height: 32px; }
+  .studio-shell .pa-conversation { padding: 26px 16px; }
+  .studio-shell .pa-conversation-inner { padding-left: 22px; }
+  .studio-shell .pa-manuscript-spine { left: 3px; }
+  .studio-shell .pa-turn::before { left: -22px; }
+  .studio-shell .pa-turn-user > p,.studio-shell .pa-turn-agent .safe-markdown { font-size: 14px; line-height: 1.9; }
+  .studio-shell .pa-turn-agent .safe-markdown :is(h1,h2,h3) { font-size: 19px; }
+  .studio-shell .pa-composer-shell { padding: 8px 10px 10px; }
+  .studio-shell .pa-composer textarea { font-size: 13px; min-height: 48px; }
+  .studio-shell .pa-composer-foot > span { font-size: 9px; }
+  .studio-shell .pa-composer-shell > small { font-size: 9px; }
+  .studio-shell .pa-welcome { padding-top: 12px; }
+  .studio-shell .pa-welcome h1 { font-size: 26px; margin-top: 22px; }
+  .studio-shell .pa-welcome > p { font-size: 13px; }
+  .studio-shell .pa-welcome-signature i { font-size: 10px; letter-spacing: .5px; }
+  .studio-shell .pa-starters { margin-top: 24px; }
+  .studio-shell .pa-starters button { min-height: 66px; }
+  .studio-shell .pa-starters small { font-size: 11px; }
+}
+@media(max-height:800px) and (min-width:761px) {
+  .studio-shell .pa-brand { height: 67px; }
+  .studio-shell .pa-thread-list { flex-basis: 106px; }
+  .studio-shell .pa-workspace-links { margin-top: 7px; padding-top: 8px; }
+  .studio-shell .pa-workspace-links .pa-nav-subgroup { margin-top: 8px; }
+  .studio-shell .pa-workspace-links button { min-height: 32px; }
+}

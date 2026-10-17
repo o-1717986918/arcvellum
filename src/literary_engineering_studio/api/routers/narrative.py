@@ -21,6 +21,7 @@ class NarrativeRouterDependencies:
     dashboard_snapshot: Callable[[Path], dict[str, Any]]
     narrative_evidence_snapshot: Callable[[Path], dict[str, Any]]
     library_snapshot: Callable[[Path], dict[str, Any]]
+    narrative_sources_snapshot: Callable[[Path], dict[str, Any]]
     build_projection: Callable[..., dict[str, Any]]
     projection_delta: Callable[[dict[str, Any] | None, dict[str, Any]], dict[str, Any]]
     projection_motion_events: Callable[..., list[dict[str, Any]]]
@@ -69,19 +70,18 @@ def _projection_v3(deps: NarrativeRouterDependencies, root: Path, level: str, fo
     )
 
 
-def _projection_v4(deps: NarrativeRouterDependencies, root: Path, level: str, focus: str, grammar: str) -> dict[str, Any]:
+def _projection_v4(deps: NarrativeRouterDependencies, root: Path, level: str, focus: str, grammar: str,
+                   *, selector: Callable[[dict[str, Any]], Any] | None = None) -> Any:
+    def build():
+        sources = deps.narrative_sources_snapshot(root)
+        return deps.build_projection_v4(
+            deps.config, root, level=level, focus=focus, grammar=grammar,
+            dashboard_payload=deps.dashboard_snapshot(root), library_payload=deps.library_snapshot(root),
+            reader_payload=sources["reader"], rhythm_hints_payload=sources["rhythm"],
+        )
     return deps.cached_read_model(
         f"narrative-v4:{root}:{level}:{focus}:{grammar}",
-        root,
-        lambda: deps.build_projection_v4(
-            deps.config,
-            root,
-            level=level,
-            focus=focus,
-            grammar=grammar,
-            dashboard_payload=deps.dashboard_snapshot(root),
-            library_payload=deps.library_snapshot(root),
-        ),
+        root, build, selector=selector,
     )
 
 
@@ -178,10 +178,18 @@ def _spatial_streaming_response(
 
     def stream():
         sent = 0
+        known_revision = ""
         stream_key = f"{root}|{level}|{focus}|{grammar}"
         while True:
-            projection = projection_builder(deps, root, level, focus, grammar)
+            projection = (_projection_v4(deps, root, level, focus, grammar,
+                          selector=lambda value: None if value.get("revision") == known_revision else value)
+                          if version == 4 else projection_builder(deps, root, level, focus, grammar))
+            if projection is None:
+                yield f": narrative v{version} heartbeat\n\n"
+                time.sleep(interval)
+                continue
             revision = str(projection.get("revision") or "")
+            known_revision = revision
             event_name = ""
             event_payload: dict[str, Any] | None = None
             with deps.stream_lock:
@@ -312,16 +320,9 @@ def _register_v4_routes(router: APIRouter, deps: NarrativeRouterDependencies) ->
         root = resolve_project_root(project_root)
         try:
             return call_handler(
-                lambda: deps.build_node_detail_v4(
-                    deps.config,
-                    root,
-                    node_id,
-                    level=level,
-                    focus=focus,
-                    grammar=grammar,
-                    dashboard_payload=deps.dashboard_snapshot(root),
-                    library_payload=deps.library_snapshot(root),
-                )
+                lambda: _projection_v4(deps, root, level, focus, grammar,
+                    selector=lambda projection: deps.build_node_detail_v4(
+                        deps.config, root, node_id, projection_payload=projection)),
             )
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="未找到这个创作节点。") from exc

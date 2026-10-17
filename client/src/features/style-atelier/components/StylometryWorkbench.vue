@@ -32,7 +32,7 @@ function exportVersion() {
 </script>
 <template>
   <section class="stylo-desk" aria-label="计量文风工作台">
-    <header class="stylo-heading"><div><span class="eyebrow">Stylometric Prompt Lab · 实验</span><h2>计量文风工作台</h2><p>统计语料，调整语言目标，再把你认可的文风片段交给场景主创。</p></div>
+    <header class="stylo-heading"><div><span class="eyebrow">计量文风 · 实验</span><h2>语言画像</h2><p>语料统计、参数调整与主创挂载。</p></div>
       <div class="stylo-actions"><span class="stylo-mount-state">{{ workbench?.mount.enabled ? '已挂载 · ' + (workbench.mount.usage === 'guide' ? '参与创作' : '仅观测') : '单画像未挂载' }}</span><button :disabled="busy || !projectRoot" @click="desk.load">刷新</button></div>
     </header>
     <StylePresetPanel :can-recalculate="workbench?.capabilities.preset_reference_recalculation" :project-root="projectRoot" :versions="workbench?.versions || []" :refresh-key="(selectedVersion?.version_id || '') + ':' + (workbench?.mount.revision || 0)" @select="selectPreset" @refresh="desk.load" />

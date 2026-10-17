@@ -1,5 +1,6 @@
 import type { SpatialGrammar, SpatialLayout, SpatialNarrativeNode, WorldPoint } from "@/types/spatial";
 import { applyValidatedLayoutHints } from "@/features/orrery/layout/layoutHints";
+import { relaxLocalCollisions } from "./localCollisions";
 import {
   buildSceneClusters,
   chapterIdentity,
@@ -7,7 +8,6 @@ import {
 } from "@/features/orrery/layout/narrativeTiming";
 
 const PRIMARY = new Set(["chapter", "scene"]);
-const NARRATIVE_TYPES = new Set(["project", "chapter", "scene"]);
 // A primary node needs enough room for both its physical glyph and a short
 // label at the opening camera scale.  This is deliberately larger than the
 // global-map cadence: the overview can zoom out, while a working segment must
@@ -219,46 +219,6 @@ function relatedAnchor(node: SpatialNarrativeNode, points: Map<string, WorldPoin
   };
 }
 
-function relaxLocalCollisions(points: Map<string, WorldPoint>, nodes: SpatialNarrativeNode[], seed: number): void {
-  // A bounded, deterministic local relaxation. It deliberately moves only the
-  // lighter object in a close pair, so a newly added satellite cannot make the
-  // established narrative spine migrate across the entire stage.
-  const ordered = nodes
-    .filter((node) => points.has(node.node_id))
-    .sort((left, right) => visualWeight(right) - visualWeight(left) || left.node_id.localeCompare(right.node_id));
-  const cap = Math.min(620, ordered.length);
-  for (let pass = 0; pass < 4; pass += 1) {
-    for (let first = 0; first < cap; first += 1) {
-      const fixed = ordered[first];
-      const fixedPoint = points.get(fixed.node_id)!;
-      for (let second = first + 1; second < cap; second += 1) {
-        const moving = ordered[second];
-        const point = points.get(moving.node_id)!;
-        const dx = point.x - fixedPoint.x;
-        const dy = point.y - fixedPoint.y;
-        const dz = point.z - fixedPoint.z;
-        const projectedDistance = Math.hypot(dx + dz * 0.17, dy * 0.84 + dz * 0.38);
-        // The backbone stays on its designed spline. Only satellites may yield
-        // when space becomes tight; label LOD handles primary density.
-        if (NARRATIVE_TYPES.has(moving.type)) continue;
-        const minimum = 1.18;
-        if (projectedDistance >= minimum) continue;
-        const angle = projectedDistance > 0.02 ? Math.atan2(dy + dz * 0.38, dx + dz * 0.17) : pseudo(seed + hashNode(moving.node_id, pass + 61)) * Math.PI * 2;
-        const push = (minimum - projectedDistance) * 0.6;
-        point.x += Math.cos(angle) * push;
-        point.y += Math.sin(angle) * push * 0.72;
-        point.z += Math.sin(angle + 0.72) * push * 0.38;
-      }
-    }
-  }
-}
-
-function visualWeight(node: SpatialNarrativeNode): number {
-  const type = node.type === "project" ? 4 : node.type === "chapter" ? 3 : node.type === "scene" ? 2.7 : node.type === "canon" ? 2.3 : 1.2;
-  const status = node.status === "current" ? 0.9 : node.status === "blocked" ? 0.7 : node.status === "formal" ? 0.25 : 0;
-  return type + status + node.importance;
-}
-
 function compareNarrativeNodes(left: SpatialNarrativeNode, right: SpatialNarrativeNode): number {
   const order = stableTimelineIndex(left, 0) - stableTimelineIndex(right, 0);
   if (order) return order;
@@ -283,12 +243,4 @@ function seedFrom(value: string): number {
   let state = 2166136261;
   for (const character of value) state = Math.imul(state ^ character.charCodeAt(0), 16777619);
   return state >>> 0;
-}
-
-function pseudo(seed: number): number {
-  let value = seed >>> 0;
-  value ^= value << 13;
-  value ^= value >>> 17;
-  value ^= value << 5;
-  return (value >>> 0) / 4294967296;
 }

@@ -15,5 +15,12 @@ import "./styles/projectAgent.css";
 import "./styles/agentWorkspaces.css";
 import "./styles/conversationFirstFinish.css";
 import "./styles/sceneRehearsal.css";
+import "./styles/studioShell.css";
+import "./styles/studioSurfaces.css";
+import "./styles/studioInstruments.css";
+import "./styles/studioArchive.css";
+import "./styles/studioCharacter.css";
+import "./styles/studioResponsive.css";
+import "./styles/studioMotion.css";
 
 createApp(App).use(createPinia()).use(router).mount("#app");

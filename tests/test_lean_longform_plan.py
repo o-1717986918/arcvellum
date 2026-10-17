@@ -86,6 +86,23 @@ class LeanLongformPlanTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "exactly 2 scenes"):
             normalize_scene_window([_scene("summary")], self.budget["chapter_budgets"][0], start_index=1)
 
+    def test_initial_count_feedback_includes_volume_and_scene_failures_together(self):
+        budget = {"chapter_budgets": [{"scene_count": 3}] * 3, "volume_budgets": [{}]}
+        answer = {"chapters": [{}, {}, {}], "volume_obligations": ["甲", "乙", "丙", "丁"],
+                  "first_window": [_scene("已有单元")]}
+        with self.assertRaises(ValueError) as caught:
+            normalize_initial_plan(answer, budget, project_digest="abc")
+        message = str(caught.exception)
+        self.assertIn("volume_obligations: expected 1, received 4", message)
+        self.assertIn("first_window: expected 3, received 1", message)
+        self.assertEqual(len(answer["first_window"]), 1)
+
+    def test_count_feedback_distinguishes_missing_and_wrong_type_from_empty(self):
+        for value, received in ((None, "NoneType"), ({}, "dict"), ([], "0")):
+            with self.subTest(value=value), self.assertRaises(ValueError) as caught:
+                normalize_scene_window(value, {"scene_count": 3}, start_index=1)
+            self.assertIn(f"received {received}", str(caught.exception))
+
     def test_creative_rhythm_descriptions_are_normalized_before_materialization(self):
         self.assertEqual(
             normalize_rhythm_role("慢起，以劳作引入，结尾发现旧信", "建立人物日常"),

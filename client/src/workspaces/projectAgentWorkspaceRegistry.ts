@@ -4,6 +4,7 @@ import { creativeWorkspaceRegistry } from "@/workspaces/creativeWorkspaceRegistr
 export type ProjectAgentWorkspaceId =
   | "projects"
   | "reader"
+  | "character-chat"
   | "live"
   | "rehearsal"
   | "archive"
@@ -65,6 +66,15 @@ const workspaces: ProjectAgentWorkspaceDescriptor[] = [
     shortLabel: "正文",
     description: "连续阅读已经晋升的正式正文，创作推进时会自动接入新内容。",
     component: asyncWorkspace(() => import("@/features/reader/ReaderView.vue")),
+    scope: "project",
+    requiresProject: true,
+  },
+  {
+    id: "character-chat",
+    title: "与角色交谈",
+    shortLabel: "角色",
+    description: "加载人物的角色卡、已知资料与场景，展开独立保存的角色对话。",
+    component: asyncWorkspace(() => import("@/features/character-chat/CharacterChatView.vue")),
     scope: "project",
     requiresProject: true,
   },

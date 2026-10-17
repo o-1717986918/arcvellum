@@ -295,7 +295,7 @@ function pathValue(key: string): string {
 <template>
   <div class="view settings-view">
     <section class="overview-header settings-header">
-      <div><span class="eyebrow">设置</span><h1>让创作能力保持清楚、可控。</h1><p>模型负责思考与写作，ArcVellum 负责项目、门禁和交付。密钥不会写入作品。</p></div>
+      <div><span class="eyebrow">设置</span><h1>工作室设置</h1><p>管理模型连接、写作偏好与应用外观。密钥保存在本机凭证库。</p></div>
       <button class="secondary-button" :disabled="busy" @click="refresh"><RefreshCw :size="17" />刷新连接</button>
     </section>
 

@@ -124,6 +124,7 @@ def _narrative_dependencies(
     dashboard_snapshot: Callable[[Path], dict[str, Any]],
     narrative_evidence_snapshot: Callable[[Path], dict[str, Any]],
     library_snapshot: Callable[[Path], dict[str, Any]],
+    narrative_sources_snapshot: Callable[[Path], dict[str, Any]],
     v2_stream_state: dict[str, dict[str, Any]],
     v3_stream_state: dict[str, dict[str, Any]],
     v4_stream_state: dict[str, dict[str, Any]],
@@ -135,6 +136,7 @@ def _narrative_dependencies(
         dashboard_snapshot=dashboard_snapshot,
         narrative_evidence_snapshot=narrative_evidence_snapshot,
         library_snapshot=library_snapshot,
+        narrative_sources_snapshot=narrative_sources_snapshot,
         build_projection=build_narrative_projection,
         projection_delta=projection_delta,
         projection_motion_events=projection_motion_events,
@@ -394,21 +396,20 @@ def create_app(
         )
     )
 
-    app.include_router(
-        build_narrative_router(
+    app.include_router(build_narrative_router(
             _narrative_dependencies(
                 config,
                 cached_read_model,
                 dashboard_snapshot,
                 narrative_evidence_snapshot,
                 library_snapshot,
+                read_models.narrative_sources,
                 narrative_stream_state,
                 narrative_v3_stream_state,
                 narrative_v4_stream_state,
                 narrative_stream_lock,
             )
-        )
-    )
+    ))
 
     app.include_router(
         build_delivery_router(

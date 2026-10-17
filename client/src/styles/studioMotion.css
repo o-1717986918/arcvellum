@@ -1,0 +1,49 @@
+/* Motion expresses arrival, material depth and ongoing work. */
+.studio-shell :is(.pa-thread-rail,.pa-workbench,.pa-inspector) {
+  transition: transform var(--studio-duration) var(--studio-ease),opacity 320ms ease,box-shadow 220ms ease;
+  will-change: auto;
+}
+.studio-shell .pa-thread-rail { transition-delay: 35ms; }
+.studio-shell .pa-inspector { transition-delay: 65ms; }
+.studio-immersive .pa-thread-rail { opacity: 0; transform: translateX(-36px); }
+.studio-immersive .pa-inspector { opacity: 0; transform: translateX(36px); }
+.studio-immersive .pa-workbench { opacity: 0; transform: translateY(28px) scale(.988); }
+.studio-immersive :is(.pa-live-window,.pa-rehearsal-window,.pa-dialog-backdrop,.pa-panel-backdrop) { opacity: 0; pointer-events: none; }
+.studio-shell :is(button,a,input,textarea,select) { transition: color 160ms ease,background-color 160ms ease,border-color 180ms ease,box-shadow 180ms ease,transform 220ms var(--studio-ease); }
+.studio-shell button:active:not(:disabled) { transform: translateY(1px); }
+.studio-shell :is(.pa-new-thread,.pa-send):hover:not(:disabled) { filter: brightness(1.06); box-shadow: 0 6px 18px color-mix(in srgb,var(--pa-green) 17%,transparent); }
+.studio-shell .pa-orrery-entry svg { transition: transform 650ms var(--studio-ease); }
+.studio-shell .pa-orrery-entry:hover svg { transform: rotate(-35deg); }
+.studio-shell .pa-brand-mark i { transition: transform 450ms var(--studio-ease); }
+.studio-shell .pa-brand:hover .pa-brand-mark i:first-child { transform: skewY(-7deg) translate(-2px,1px); }
+.studio-shell .pa-brand:hover .pa-brand-mark i:last-child { transform: skewY(-7deg) translate(2px,-1px); }
+.studio-shell .pa-progress i { transition: width 700ms var(--studio-ease); }
+.studio-shell .pa-brand-glyph { transition: transform 450ms var(--studio-ease); }
+.studio-shell .pa-brand:hover .pa-brand-glyph { transform: translateY(-2px) rotate(-5deg); }
+.studio-shell .pa-composer { transition: border-color 180ms ease,box-shadow 240ms ease; }
+.studio-shell .pa-composer:focus-within { box-shadow: 0 12px 32px -22px var(--pa-green),0 0 0 3px color-mix(in srgb,var(--pa-green) 6%,transparent); }
+.studio-shell .pa-turn { animation: studio-message-arrive 280ms var(--studio-ease) both; }
+.studio-shell .pa-new-conversation-dialog { animation: studio-dialog-arrive 320ms var(--studio-ease) both; }
+.studio-shell .studio-vellum { animation: studio-material-drift 28s ease-in-out infinite alternate; transform-origin: 70% 40%; }
+.studio-shell .studio-light-a { animation: studio-light-drift 22s ease-in-out infinite alternate; }
+.studio-shell .studio-light-b { animation: studio-light-drift 30s ease-in-out infinite alternate-reverse; }
+.studio-shell :is(button,a,input,textarea,select,summary):focus-visible { outline: 2px solid var(--pa-blue,#315fa6); outline-offset: 3px; }
+.studio-shell .pa-composer textarea:focus-visible { outline: none; }
+.studio-shell :is(.pa-subworkspace-scroll,.pa-conversation,.pa-thread-rail,.pa-inspector) { overscroll-behavior: contain; }
+@keyframes studio-message-arrive { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes studio-dialog-arrive { from { opacity: 0; transform: translateY(12px) scale(.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes studio-material-drift { from { transform: translate3d(0,0,0) rotate(-1deg); } to { transform: translate3d(-12px,9px,0) rotate(1deg); } }
+@keyframes studio-light-drift { from { transform: translate3d(0,0,0); opacity: .4; } to { transform: translate3d(35px,-20px,0); opacity: .65; } }
+.studio-shell .pa-theme-contrast * { animation: none; transition: none; }
+@media(prefers-reduced-motion:reduce) {
+  .studio-shell *, .studio-shell *::before, .studio-shell *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+  .studio-immersive :is(.pa-thread-rail,.pa-inspector,.pa-workbench) { transform: none; }
+}
+@media(prefers-reduced-transparency:reduce) {
+  .studio-shell .pa-shell { --studio-glass: var(--pa-surface); --studio-reading-glass: var(--pa-surface); }
+  .studio-shell :is(.pa-thread-rail,.pa-workbench,.pa-inspector,.pa-inspector > section) { backdrop-filter: none; }
+  .studio-shell .pa-inspector > section { background: var(--pa-surface); }
+}
+@supports not (backdrop-filter:blur(1px)) {
+  .studio-shell .pa-shell { --studio-glass: color-mix(in srgb,var(--pa-surface) 96%,transparent); --studio-reading-glass: var(--pa-surface); }
+}

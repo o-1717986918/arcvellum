@@ -1,10 +1,13 @@
 <script setup lang="ts">
-import { computed, type Component } from "vue";
+import { computed, onMounted, onUpdated, ref, type Component } from "vue";
 import { BadgeCheck, BookMarked, BookOpenText, CircleHelp, Clapperboard, FilePenLine, Fingerprint, GitFork, Landmark, MapPinned, Orbit, Scale, Sparkles, UserRound, Waypoints } from "lucide-vue-next";
 import type { SpatialNarrativeNode, SpatialNarrativeProjection } from "@/types/spatial";
 import type { NarrativeFocusLevel } from "@/features/orrery/model/focusScope";
 import { observationWeight } from "@/features/orrery/layout/observationWindow";
 import { heatScore, type OrreryHeatLens } from "@/features/orrery/model/exploration";
+import { LabelOccupancy } from "@/features/orrery/layout/labelOccupancy";
+import OrreryNodeMarks from "./OrreryNodeMarks.vue";
+import { minimumReadableScale } from "./model/nodeSizing";
 
 const props = defineProps<{
   nodes: SpatialNarrativeNode[];
@@ -25,10 +28,14 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{ select: [node: SpatialNarrativeNode]; focus: [node: SpatialNarrativeNode] }>();
 
-const visible = computed(() => props.nodes
-  .filter((node) => Boolean(props.anchors[node.node_id]?.visible))
-  .sort((left, right) => nodePriority(right) - nodePriority(left)));
-const visibleSceneCount = computed(() => visible.value.filter((node) => (node.creative_kind || node.type) === "scene").length);
+const keyboardNodeId = ref("");
+const nodeElements = new Map<string, HTMLButtonElement>();
+const nodeTransforms = new WeakMap<HTMLButtonElement, string>();
+onMounted(positionNodes);
+onUpdated(positionNodes);
+const prioritized = computed(() => [...props.nodes].sort((left, right) => nodePriority(right) - nodePriority(left)));
+const visible = computed(() => prioritized.value.filter((node) => Boolean(props.anchors[node.node_id]?.visible)));
+const batchedMarks = computed(() => props.nodes.length > 150 && !props.heatLens);
 const motionByNode = computed(() => {
   const index = new Map<string, NonNullable<SpatialNarrativeProjection["motion_events"]>[number]>();
   for (const event of props.motionEvents || []) if (!index.has(event.node_id)) index.set(event.node_id, event);
@@ -51,7 +58,14 @@ const ICONS: Record<string, Component> = {
 
 const labeledNodeIds = computed(() => {
   const accepted = new Set<string>();
-  const occupied: Array<{ left: number; right: number; top: number; bottom: number }> = [];
+  const occupied = new LabelOccupancy();
+  // Reserve pinned labels first, including those later in the stable priority order.
+  for (const node of visible.value) {
+    if (!isPinned(node) && !props.showAllLabels) continue;
+    accepted.add(node.node_id);
+    occupied.add(labelRectangle(node, props.anchors[node.node_id]));
+  }
+  let ordinary = 0;
 
   for (const node of visible.value) {
     const anchor = props.anchors[node.node_id];
@@ -59,15 +73,11 @@ const labeledNodeIds = computed(() => {
     const rectangle = labelRectangle(node, anchor);
     // Every visible entity keeps a crisp celestial mark. This pass only
     // decides which marks have enough room for copy; it never removes nodes.
-    if (isPinned(node) || props.showAllLabels) {
-      accepted.add(node.node_id);
-      occupied.push(rectangle);
-      continue;
-    }
-    if (occupied.some((item) => rectanglesOverlap(item, rectangle))) continue;
+    if (accepted.has(node.node_id)) continue;
+    if (occupied.overlaps(rectangle)) continue;
     accepted.add(node.node_id);
-    occupied.push(rectangle);
-    if (accepted.size >= 72) break;
+    occupied.add(rectangle);
+    if (++ordinary >= 72) break;
   }
   return accepted;
 });
@@ -76,18 +86,22 @@ function nodePriority(node: SpatialNarrativeNode): number {
   const selected = node.node_id === props.selectedNodeId ? 10_000 : 0;
   const urgent = node.status === "current" ? 3_000 : node.status === "blocked" ? 2_000 : 0;
   const formal = node.status === "formal" ? 260 : 0;
-  return selected + urgent + formal + node.importance * 100 + (node.detail_level === "near" ? 30 : 0);
+  const structure = node.type === "chapter" || node.type === "project" ? 500 : 0;
+  return selected + urgent + formal + structure + node.importance * 100 + (node.detail_level === "near" ? 30 : 0);
 }
 
 function isPinned(node: SpatialNarrativeNode): boolean {
+  // Ordinary scenes, including small clusters, still need collision avoidance.
+  // Selection, keyboard focus and the explicit all-labels mode retain their copy.
   return node.node_id === props.selectedNodeId
+    || node.node_id === keyboardNodeId.value
     || node.node_id === props.focusNodeId
     || node.node_id === props.navigationNodeId
     || forcedNodeSet.value.has(node.node_id)
+    || comparedNodeSet.value.has(node.node_id)
+    || liveNodeSet.value.has(node.node_id)
     || node.status === "current"
-    || node.status === "blocked"
-    || node.type === "chapter"
-    || (node.type === "scene" && visibleSceneCount.value <= 28);
+    || node.status === "blocked";
 }
 
 function isTypographic(node: SpatialNarrativeNode): boolean {
@@ -128,17 +142,9 @@ function labelRectangle(node: SpatialNarrativeNode, anchor: { x: number; y: numb
   return { left: anchor.x - width / 2, right: anchor.x + width / 2, top: anchor.y - 10, bottom: anchor.y + height };
 }
 
-function rectanglesOverlap(left: { left: number; right: number; top: number; bottom: number }, right: { left: number; right: number; top: number; bottom: number }): boolean {
-  return !(left.right + 8 < right.left || right.right + 8 < left.left || left.bottom + 6 < right.top || right.bottom + 6 < left.top);
-}
-
 function styleFor(node: SpatialNarrativeNode): Record<string, string | number> {
-  const anchor = props.anchors[node.node_id] || { x: -2000, y: -2000, scale: 1 };
   const heat = heatScore(node, props.heatLens || "");
-  const renderScale = Math.max(anchor.scale, minimumReadableScale(node));
   return {
-    transform: `translate3d(${anchor.x}px, ${anchor.y}px, 0) translate(-50%, -50%) scale(${renderScale})`,
-    zIndex: Math.round(100 + renderScale * 160 + node.importance * 100),
     "--observation-weight": observationWeight(node, props.timeCursor || 0, props.timeWindow || 3).toFixed(3),
     "--heat-opacity": (0.54 + heat * 0.46).toFixed(3),
     "--heat-saturation": (0.72 + heat * 0.58).toFixed(3),
@@ -149,14 +155,39 @@ function styleFor(node: SpatialNarrativeNode): Record<string, string | number> {
   };
 }
 
-function minimumReadableScale(node: SpatialNarrativeNode): number {
-  const kind = node.creative_kind || node.type;
-  if (kind === "chapter") return 1.04;
-  if (kind === "scene") return 0.86;
-  if (kind === "project") return 1.08;
-  if (kind === "character") return 0.82;
-  if (["branch", "review", "promise", "reader-question", "human-decision"].includes(kind)) return 0.8;
-  return 0.84;
+function captureNode(nodeId: string, value: unknown): void {
+  if (value instanceof HTMLButtonElement) nodeElements.set(nodeId, value);
+  else nodeElements.delete(nodeId);
+}
+
+function positionNodes(): void {
+  // Camera movement owns just two style properties. Reapplying every heat CSS
+  // variable and rebuilding hidden text for each anchor dominated dense views.
+  for (const node of visible.value) {
+    const element = nodeElements.get(node.node_id), anchor = props.anchors[node.node_id];
+    if (!element || !anchor) continue;
+    if (batchedMarks.value && !labeledNodeIds.value.has(node.node_id)) continue;
+    const scale = Math.max(anchor.scale, minimumReadableScale(node));
+    const x = Math.round(anchor.x * 10) / 10, y = Math.round(anchor.y * 10) / 10;
+    const transform = `translate3d(${x}px, ${y}px, 0) translate(-50%, -50%) scale(${scale})`;
+    // CSSOM normalizes whitespace and zero units, so comparing its serialized
+    // string caused unchanged anchors to be written again on every ambient tick.
+    if (nodeTransforms.get(element) !== transform) {
+      element.style.transform = transform;
+      nodeTransforms.set(element, transform);
+    }
+    const z = String(Math.round(100 + scale * 160 + node.importance * 100));
+    if (element.style.zIndex !== z) element.style.zIndex = z;
+  }
+}
+
+function renderDependencies(node: SpatialNarrativeNode): unknown[] {
+  return [node, batchedMarks.value, labeledNodeIds.value.has(node.node_id), effectiveNodeScale(node, props.anchors[node.node_id]?.scale || 0),
+    props.selectedNodeId, props.focusNodeId, props.navigationNodeId, props.showAllLabels,
+    node.node_id === keyboardNodeId.value,
+    forcedNodeSet.value.has(node.node_id), comparedNodeSet.value.has(node.node_id), liveNodeSet.value.has(node.node_id),
+    motionByNode.value.get(node.node_id), activityByNode.value.get(node.source_id) || activityByNode.value.get(node.node_id),
+    props.heatLens, props.timeCursor, props.timeWindow];
 }
 
 function labelFor(node: SpatialNarrativeNode): string {
@@ -222,7 +253,8 @@ function overviewClass(node: SpatialNarrativeNode): Record<string, boolean> {
   // Nodes remain rendered and keyboard-accessible in the global overview.
   // Only text below the legibility threshold is suppressed; it returns as the
   // camera enters a readable local segment.
-  const forced = Boolean(props.showAllLabels || forcedNodeSet.value.has(node.node_id) || node.node_id === props.navigationNodeId);
+  const forced = Boolean(props.showAllLabels || forcedNodeSet.value.has(node.node_id)
+    || node.node_id === props.navigationNodeId || node.node_id === keyboardNodeId.value);
   return {
     overview: isOverview(node) && !forced,
     "forced-label": forced,
@@ -242,11 +274,17 @@ function focusClass(node: SpatialNarrativeNode): Record<string, boolean> {
 
 <template>
   <div class="orrery-v3-node-overlay" aria-label="可交互叙事节点">
+    <OrreryNodeMarks v-if="batchedMarks" :nodes="prioritized" :anchors="anchors" :labeled-node-ids="labeledNodeIds"
+      :focus-node-id="focusNodeId" :time-cursor="timeCursor" :time-window="timeWindow"
+      @select="emit('select', $event)" @focus="emit('focus', $event)" />
     <button
       v-for="node in visible"
       :key="node.node_id"
+      v-memo="renderDependencies(node)"
+      :ref="(value) => captureNode(node.node_id, value)"
       class="orrery-v3-node"
-      :class="[{ selected: selectedNodeId === node.node_id, navigating: navigationNodeId === node.node_id, compared: comparedNodeSet.has(node.node_id), 'heat-active': Boolean(heatLens), 'creative-live-active': liveNodeSet.has(node.node_id), typographic: isTypographic(node), symbolic: !isTypographic(node) }, focusClass(node), motionClass(node), activityClass(node), overviewClass(node)]"
+      :class="[{ selected: selectedNodeId === node.node_id, navigating: navigationNodeId === node.node_id, compared: comparedNodeSet.has(node.node_id), 'heat-active': Boolean(heatLens), 'creative-live-active': liveNodeSet.has(node.node_id), typographic: isTypographic(node), symbolic: !isTypographic(node), 'mark-only': !labeledNodeIds.has(node.node_id), 'batched-mark': batchedMarks && !labeledNodeIds.has(node.node_id) }, focusClass(node), motionClass(node), activityClass(node), overviewClass(node)]"
+      :data-node-id="node.node_id"
       :data-status="node.status"
       :data-lod="lodFor(node)"
       :data-completion="node.completion_state"
@@ -255,9 +293,13 @@ function focusClass(node: SpatialNarrativeNode): Record<string, boolean> {
       :data-lifecycle="node.lifecycle || node.completion_state"
       :style="styleFor(node)"
       :aria-label="`${labelFor(node)}：${node.label}`"
+      :title="node.label"
+      @focus="keyboardNodeId = node.node_id"
+      @blur="keyboardNodeId = ''"
       @click="emit('select', node)"
       @dblclick="emit('focus', node)"
     >
+      <template v-if="labeledNodeIds.has(node.node_id)">
       <span v-if="isTypographic(node)" class="node-luminary" aria-hidden="true"><i></i><b></b></span>
       <span v-else class="node-glyph"><component :is="iconFor(node)" :size="12" :stroke-width="1.85" /></span>
       <span class="node-copy">
@@ -265,6 +307,37 @@ function focusClass(node: SpatialNarrativeNode): Record<string, boolean> {
         <span class="node-title">{{ displayLabelFor(node) }}</span>
         <small class="node-meta">{{ nodeMetaFor(node) }}</small>
       </span>
+      </template>
     </button>
   </div>
 </template>
+
+<style scoped>
+.orrery-v3-node.mark-only {
+  display: block;
+  width: 22px;
+  min-width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.orrery-v3-node.mark-only::before {
+  position: absolute;
+  inset: 7px;
+  background: var(--type-star, var(--orrery-core));
+  border-radius: 50%;
+  box-shadow: 0 0 6px var(--type-star, var(--orrery-core));
+  content: "";
+}
+.orrery-v3-node.mark-only::after { display: none; }
+.orrery-v3-node.mark-only[data-type="chapter"]::before { inset: 5px; border: 1px solid var(--orrery-canon); }
+/* Keep the same native buttons in the tab order. Focusing one promotes its
+   glyph to the full DOM label before the next paint; no entity loses access. */
+.orrery-v3-node.batched-mark {
+  position: absolute; top: 0; left: 0; width: 1px; min-width: 1px; height: 1px;
+  padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%);
+  transform: none !important; pointer-events: none;
+}
+</style>

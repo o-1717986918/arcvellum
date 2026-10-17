@@ -22,6 +22,35 @@ def common_prefix(first, second):
 
 
 class CreationContextIntegrityTests(unittest.TestCase):
+    def test_complete_design_and_referenced_characters_reach_the_frozen_briefing(self):
+        from literary_engineering_studio.runtimes.scene_cache_layout import validate_frozen_sources
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            project = root / 'project'
+            init_work_project(InitOptions(project, title='叙事与人物来源回归'))
+            design = {'narrative_mode': '第一人称限知', 'narrator_voice': '叙述选择。' * 1200 + '末尾仍保留自嘲与距离。'}
+            plan = project / 'plot/lean_project_plan.json'
+            plan.write_text(json.dumps({'premise': '来信', 'narrative_design': design, 'chapters': []}, ensure_ascii=False), encoding='utf-8')
+            character = project / 'characters/lin.yaml'
+            character.write_text('name: 林昭\nbackground: 母亲离家，没有死亡记载。\n', encoding='utf-8')
+            (project / 'characters/other.yaml').write_text('name: 尚未授权的人物\n', encoding='utf-8')
+            current = replace(brief(), scene_id='scene_0001', source_refs=('characters/lin.yaml', 'scenes/scene_0001.yaml'))
+            (project / 'scenes/scene_0001.yaml').write_text('narrative_strategy: 第一人称现场\n', encoding='utf-8')
+            packet = build_scene_creator_briefing(current, SceneCreatorWorkspace(project, root / 'data'),
+                                                  CreatorPersonaStore(root / 'data'))
+            whole = next(row for row in packet['source_entries'] if row['name'] == 'whole_work_intent')
+            self.assertEqual(json.loads(whole['content'])['narrative_design'], design)
+            characters = [row for row in packet['source_entries'] if row['name'] == 'character_source']
+            self.assertEqual([row['path'] for row in characters], ['characters/lin.yaml'])
+            self.assertTrue(characters[0]['complete'])
+            self.assertIn('没有死亡记载', characters[0]['content'])
+            scene = next(row for row in packet['source_entries'] if row['name'] == 'current_scene_source')
+            self.assertIn('第一人称现场', scene['content'])
+            validate_frozen_sources(packet, project, current)
+            character.write_text('name: 林昭\nbackground: 用户已修正的经历。\n', encoding='utf-8')
+            with self.assertRaisesRegex(RuntimeError, 'character archives'):
+                validate_frozen_sources(packet, project, current)
+
     def test_full_previous_sources_preserve_early_facts_and_pending_status(self):
         with TemporaryDirectory() as directory:
             root = Path(directory); project = root / 'project'

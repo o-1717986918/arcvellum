@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { relationModeForLevel } from "@/features/orrery/model/relationLens";
 import { edgeCarriesLiveWork } from "@/features/orrery/live/liveEdgeState";
+import { batchPaths } from "@/features/orrery/model/pathBatches";
 import type { SpatialCompletionState, SpatialNarrativeEdge, SpatialNarrativeNode, SpatialNarrativeProjection } from "@/types/spatial";
 
 type Anchor = { x: number; y: number; visible: boolean; scale: number };
@@ -27,7 +28,9 @@ const relationDensityClass = computed(() => props.projection.edges.length > 900
   : props.projection.edges.length > 320
     ? "relation-density-dense"
     : "relation-density-open");
-const spineClusters = computed<SpineCluster[]>(() => chapterCentroids(props.projection.nodes, props.anchors));
+const chapterGroups = computed(() => groupChapters(props.projection.nodes));
+const completionByChapter = computed(() => new Map(chapterGroups.value.map((group) => [group[0].node_id, completionOf(group)])));
+const spineClusters = computed<SpineCluster[]>(() => chapterCentroids(chapterGroups.value, props.anchors));
 const spinePoints = computed<SpinePoint[]>(() => spineClusters.value.map((cluster) => ({ node: cluster.node, anchor: cluster.anchor })));
 const spinePath = computed(() => buildPath(spinePoints.value.map((item) => item.anchor)));
 const spineSegments = computed(() => spineClusters.value.slice(1).map((cluster, index) => {
@@ -91,6 +94,9 @@ const localFlowPaths = computed(() => {
 const sceneEvidencePaths = computed(() => {
   const evidenceTypes = new Set(["branch", "promise", "reader-question", "review", "canon", "task", "character"]);
   return props.projection.edges
+    // The character-thread pass already draws every character-scene edge.
+    // Painting it again as evidence doubled curve work in long-book overviews.
+    .filter((edge) => edge.relation_family !== "character-scene")
     .filter((edge) => visibleNodeIds.value.has(edge.source) && visibleNodeIds.value.has(edge.target))
     .map((edge) => {
       const sourceNode = nodesById.value.get(edge.source);
@@ -140,6 +146,13 @@ const characterPaths = computed(() => characterRelations.value
   .filter((item): item is { id: string; active: boolean; muted: boolean; path: string; color: string; mode: string; live: boolean } => Boolean(item))
   .sort((left, right) => Number(right.active) - Number(left.active)));
 
+const spokeBatches = computed(() => batchPaths(chapterSpokes.value.map((s) => ({ ...s,
+  path: `M ${screen(s.start.x)} ${screen(s.start.y)} L ${screen(s.end.x)} ${screen(s.end.y)}` })), (s) => [s.active, s.muted, s.live, s.completion]));
+const segmentBatches = computed(() => batchPaths(spineSegments.value, (s) => [s.active, s.muted, s.live, s.completion]));
+const localBatches = computed(() => batchPaths(localFlowPaths.value, (s) => [s.active, s.muted, s.live, s.type, s.family, s.mode]));
+const evidenceBatches = computed(() => batchPaths(sceneEvidencePaths.value, (s) => [s.active, s.muted, s.live, s.type, s.family, s.mode, s.nodeType]));
+const characterBatches = computed(() => batchPaths(characterPaths.value, (s) => [s.active, s.muted, s.live, s.color, s.mode]));
+
 onMounted(() => {
   if (!host.value) return;
   const update = () => {
@@ -152,7 +165,7 @@ onMounted(() => {
 });
 onBeforeUnmount(() => resizeObserver?.disconnect());
 
-function chapterCentroids(nodes: SpatialNarrativeNode[], anchors: Record<string, Anchor>): SpineCluster[] {
+function groupChapters(nodes: SpatialNarrativeNode[]): SpatialNarrativeNode[][] {
   const scenes = nodes.filter((node) => node.type === "scene").sort((left, right) => left.order - right.order);
   const clusters = new Map<string, SpatialNarrativeNode[]>();
   for (const scene of scenes) {
@@ -164,7 +177,12 @@ function chapterCentroids(nodes: SpatialNarrativeNode[], anchors: Record<string,
     bucket.push(scene);
     clusters.set(key, bucket);
   }
-  const centered = [...clusters.values()].map((cluster) => {
+  return clusters.size ? [...clusters.values()] : nodes.filter((node) => node.type === "chapter")
+    .sort((a, b) => a.order - b.order).map((node) => [node]);
+}
+
+function chapterCentroids(groups: SpatialNarrativeNode[][], anchors: Record<string, Anchor>): SpineCluster[] {
+  const centered = groups.map((cluster) => {
     const available = cluster.map((node) => ({ node, anchor: anchors[node.node_id] })).filter((item): item is SpinePoint => Boolean(item.anchor));
     if (!available.length) return null;
     const divisor = available.length;
@@ -176,13 +194,7 @@ function chapterCentroids(nodes: SpatialNarrativeNode[], anchors: Record<string,
     }), { x: 0, y: 0, scale: 0, visible: false });
     return { id: String(cluster[0].metrics.chapter_id || cluster[0].parent_id || cluster[0].node_id), node: cluster[0], anchor, members: available };
   }).filter((item): item is SpineCluster => Boolean(item));
-  if (centered.length) return centered.sort((left, right) => left.node.order - right.node.order);
-  return nodes
-    .filter((node) => node.type === "chapter")
-    .sort((left, right) => left.order - right.order)
-    .map((node) => ({ node, anchor: anchors[node.node_id] }))
-    .filter((item): item is SpinePoint => Boolean(item.anchor))
-    .map((item) => ({ id: item.node.node_id, node: item.node, anchor: item.anchor, members: [item] }));
+  return centered.sort((left, right) => left.node.order - right.node.order);
 }
 
 function chapterKey(value: unknown): string {
@@ -223,20 +235,24 @@ function chapterState(id: string): { active: boolean; muted: boolean } {
 }
 
 function chapterCompletion(cluster: SpineCluster): SpatialCompletionState {
-  const states = cluster.members.map((member) => member.node.completion_state);
+  return completionByChapter.value.get(cluster.node.node_id) || cluster.node.completion_state || "planned";
+}
+
+function completionOf(nodes: SpatialNarrativeNode[]): SpatialCompletionState {
+  const states = nodes.map((node) => node.completion_state);
   if (states.includes("active")) return "active";
   if (states.includes("blocked")) return "blocked";
   if (states.length && states.every((state) => state === "completed")) return "completed";
-  return cluster.node.completion_state || "planned";
+  return nodes[0].completion_state || "planned";
 }
 
 function buildPath(points: Anchor[]): string {
   if (!points.length) return "";
-  if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
+  if (points.length === 1) return `M ${screen(points[0].x)} ${screen(points[0].y)}`;
   // Chord-length weighted tangents are the practical, centripetal form of a
   // Catmull-Rom spline. They avoid the sharp corners and overshoot of a
   // uniform spline when chapters are deliberately spaced far apart.
-  let path = `M ${points[0].x} ${points[0].y}`;
+  let path = `M ${screen(points[0].x)} ${screen(points[0].y)}`;
   for (let index = 0; index < points.length - 1; index += 1) {
     const start = points[index];
     const end = points[index + 1];
@@ -244,7 +260,7 @@ function buildPath(points: Anchor[]): string {
     const tangentB = breathingTangent(points, index + 1);
     const controlA = { x: start.x + tangentA.x / 3, y: start.y + tangentA.y / 3 };
     const controlB = { x: end.x - tangentB.x / 3, y: end.y - tangentB.y / 3 };
-    path += ` C ${controlA.x} ${controlA.y}, ${controlB.x} ${controlB.y}, ${end.x} ${end.y}`;
+    path += ` C ${screen(controlA.x)} ${screen(controlA.y)}, ${screen(controlB.x)} ${screen(controlB.y)}, ${screen(end.x)} ${screen(end.y)}`;
   }
   return path;
 }
@@ -291,8 +307,12 @@ function relationshipPath(start: Anchor, end: Anchor, identity: string): string 
     x: end.x - deltaX * 0.34 + normalX * bend,
     y: end.y - deltaY * 0.34 + normalY * bend,
   };
-  return `M ${start.x} ${start.y} C ${controlA.x} ${controlA.y}, ${controlB.x} ${controlB.y}, ${end.x} ${end.y}`;
+  return `M ${screen(start.x)} ${screen(start.y)} C ${screen(controlA.x)} ${screen(controlA.y)}, ${screen(controlB.x)} ${screen(controlB.y)}, ${screen(end.x)} ${screen(end.y)}`;
 }
+
+// Display paths need subpixel precision, not full double strings for every curve.
+// Canonical anchors retain their precision; serialization differs by at most .05px.
+function screen(value: number): number { return Math.round(value * 10) / 10; }
 
 function curveDirection(value: string): number {
   let hash = 0;
@@ -337,15 +357,16 @@ function threadColor(value: string): string {
     aria-hidden="true"
   >
     <path
-      v-for="spoke in chapterSpokes"
+      v-for="spoke in spokeBatches"
       :key="spoke.id"
       class="narrative-chapter-spoke"
       :class="{ active: spoke.active, muted: spoke.muted, 'creative-live-edge': spoke.live }"
       :data-completion="spoke.completion"
-      :d="`M ${spoke.start.x} ${spoke.start.y} L ${spoke.end.x} ${spoke.end.y}`"
+      :data-edge-count="spoke.count"
+      :d="spoke.path"
     />
     <path v-if="spinePath" class="narrative-spine-foundation" :class="{ detail: isDetailView, 'chapter-muted': hasChapterFocus }" :d="spinePath" />
-    <g v-for="segment in spineSegments" :key="segment.id" class="narrative-spine-segment" :class="{ active: segment.active, muted: segment.muted, 'creative-live-edge': segment.live }" :data-completion="segment.completion">
+    <g v-for="segment in segmentBatches" :key="segment.id" class="narrative-spine-segment" :class="{ active: segment.active, muted: segment.muted, 'creative-live-edge': segment.live }" :data-completion="segment.completion" :data-edge-count="segment.count">
       <path class="narrative-spine-glow" :class="{ detail: isDetailView }" :d="segment.path" />
       <path class="narrative-spine-track" :class="{ detail: isDetailView }" :d="segment.path" />
       <path class="narrative-spine-signal" :class="{ detail: isDetailView }" :d="segment.path" />
@@ -356,7 +377,7 @@ function threadColor(value: string): string {
       <text v-if="cluster.anchor.visible && cluster.anchor.scale >= 0.5" class="narrative-chapter-anchor-label" :x="cluster.anchor.x + 10" :y="cluster.anchor.y - 10">{{ String(index + 1).padStart(2, "0") }}</text>
     </g>
     <path
-      v-for="connection in localFlowPaths"
+      v-for="connection in localBatches"
       :key="connection.id"
       class="narrative-local-flow"
       :class="{ active: connection.active, muted: connection.muted, 'creative-live-edge': connection.live }"
@@ -364,10 +385,11 @@ function threadColor(value: string): string {
       :data-type="connection.type"
       :data-family="connection.family"
       :data-lod="connection.mode"
+      :data-edge-count="connection.count"
       :d="connection.path"
     />
     <path
-      v-for="connection in sceneEvidencePaths"
+      v-for="connection in evidenceBatches"
       :key="connection.id"
       class="narrative-evidence-flow"
       :class="{ active: connection.active, muted: connection.muted, 'creative-live-edge': connection.live }"
@@ -375,15 +397,17 @@ function threadColor(value: string): string {
       :data-family="connection.family"
       :data-lod="connection.mode"
       :data-node-type="connection.nodeType"
+      :data-edge-count="connection.count"
       :d="connection.path"
     />
     <path
-      v-for="relation in characterPaths"
+      v-for="relation in characterBatches"
       :key="relation.id"
       class="narrative-character-thread"
       :class="{ active: relation.active, muted: relation.muted, 'creative-live-edge': relation.live }"
       data-family="character-scene"
       :data-lod="relation.mode"
+      :data-edge-count="relation.count"
       :stroke="relation.color"
       :d="relation.path"
     />

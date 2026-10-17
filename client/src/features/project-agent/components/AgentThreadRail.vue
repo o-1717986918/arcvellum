@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import StudioGlyph from "@/components/StudioGlyph.vue";
 import {
   Archive,
   BookOpenText,
@@ -9,6 +10,7 @@ import {
   Info,
   MessageSquarePlus,
   MessageCircleMore,
+  MessagesSquare,
   Palette,
   Radio,
   ScanSearch,
@@ -65,7 +67,7 @@ function relativeDate(value: string): string {
 
 <template>
   <aside class="pa-thread-rail">
-    <div class="pa-brand"><span class="pa-brand-mark"><i></i><i></i></span><div><strong>ArcVellum</strong><small>文学项目 Agent</small></div></div>
+    <div class="pa-brand"><StudioGlyph class="pa-brand-glyph" /><div><strong>ArcVellum</strong><small>文学创作工作室</small></div></div>
     <button class="pa-new-thread" data-tour-id="navigation" :disabled="disabled" @click="emit('create')"><MessageSquarePlus :size="16" />新对话</button>
     <label class="pa-thread-search"><Search :size="14" /><input v-model="query" placeholder="搜索会话" /></label>
 
@@ -80,10 +82,12 @@ function relativeDate(value: string): string {
     </div>
 
     <div class="pa-workspace-links">
-      <span>查看作品</span>
+      <span>阅读与创作</span>
       <button :disabled="!hasProject" :class="{ active: activeWorkspace === 'reader' }" @click="emit('workspace', 'reader')"><BookOpenText :size="14" />正文长卷</button>
+      <button :disabled="!hasProject" :class="{ active: activeWorkspace === 'character-chat' }" @click="emit('workspace', 'character-chat')"><MessagesSquare :size="14" />与角色交谈</button>
       <button :disabled="!hasProject" :class="{ active: activeWorkspace === 'live' }" @click="emit('workspace', 'live')"><Radio :size="14" />创作现场</button>
       <button :disabled="!hasProject" :class="{ active: activeWorkspace === 'rehearsal' }" @click="emit('workspace', 'rehearsal')"><MessageCircleMore :size="14" />推演观察</button>
+      <span class="pa-nav-subgroup">作品研究</span>
       <button :disabled="!hasProject" :class="{ active: activeWorkspace === 'archive' }" @click="emit('workspace', 'archive')"><Archive :size="14" />作品档案</button>
       <button :disabled="!hasProject" :class="{ active: activeWorkspace === 'style' }" @click="emit('workspace', 'style')"><Palette :size="14" /><span>文风成果<small class="pa-feature-note">开发中，不完善</small></span></button>
       <button :disabled="!hasProject" :class="{ active: activeWorkspace === 'quality' }" @click="emit('workspace', 'quality')"><Boxes :size="14" />质量与节奏</button>
@@ -99,8 +103,8 @@ function relativeDate(value: string): string {
       <button :class="{ active: activeWorkspace === 'legal' }" @click="emit('workspace', 'legal')"><Scale :size="14" />协议与隐私</button>
     </div>
 
-    <div class="pa-project-chip" data-tour-id="project">
-      <span>{{ hasProject ? projectTitle.slice(0, 1) : '＋' }}</span><div><strong>{{ hasProject ? projectTitle : '作品库总控' }}</strong><small>{{ hasProject ? (projectProgress == null ? '正在读取正文进度' : `正文 ${Math.round(projectProgress)}%`) : '可以让 Agent 建立作品' }}</small></div>
-    </div>
+    <button class="pa-project-chip" data-tour-id="project" title="打开作品库" @click="emit('workspace', 'projects')">
+      <span>{{ hasProject ? projectTitle.slice(0, 1) : '＋' }}</span><div><strong>{{ hasProject ? projectTitle : '作品库' }}</strong><small>{{ hasProject ? (projectProgress == null ? '正在读取正文进度' : `正文 ${Math.round(projectProgress)}% · 切换作品`) : '建立或打开一部作品' }}</small></div>
+    </button>
   </aside>
 </template>

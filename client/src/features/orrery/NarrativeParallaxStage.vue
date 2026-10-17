@@ -5,6 +5,7 @@ import { cameraPoseAt, cameraTransitionDuration, type CameraPose } from "@/featu
 import { copyParallaxView, DEFAULT_PARALLAX_VIEW, fittedCameraFrame, isSameParallaxView, orientWorldPoint, parallaxViewFromDrag, type ParallaxView } from "@/features/orrery/engine/parallaxProjection";
 import { resolveOrreryMotion } from "@/services/orreryPreferences";
 import type { SpatialLayout, SpatialNarrativeProjection, WorldPoint } from "@/types/spatial";
+import "./engine/interactionQuality.css";
 const props = defineProps<{
   projection: SpatialNarrativeProjection;
   layout: SpatialLayout;

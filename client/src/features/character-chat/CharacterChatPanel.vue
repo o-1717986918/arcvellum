@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { onMounted, ref, watch, nextTick } from "vue";
+import StudioGlyph from "@/components/StudioGlyph.vue";
+import { onBeforeUnmount, onMounted, ref, watch, nextTick } from "vue";
 import { characterChatClient as client } from "./services/characterChatClient";
 import type { CharacterCard, CharacterChatSession, CharacterChatSetup, KnownAttachment } from "./types";
 import "./characterChat.css";
@@ -28,7 +29,9 @@ const selectedCard = ref("");
 const showEditor = ref(false);
 const transcript = ref<HTMLElement | null>(null);
 const panel = ref<HTMLElement | null>(null);
+const body = ref<HTMLElement | null>(null);
 let generation = 0;
+let returnFocus: HTMLElement | null = null;
 const sourceLabels: Record<string,string> = { canon:'作品设定', character_archive:'人物档案', planning:'创作规划',
   scene_prose:'已提交正文', mixed_continuity:'连续性记录', user_direction:'作者方向', archive_reference:'参考资料' };
 const labels: Record<string, string> = {
@@ -141,7 +144,20 @@ watch(() => props.projectRoot, () => {
   startLine.value=null; endLine.value=null; preview.value=''; previewOffset.value=null; message.value='';
   void load();
 });
-onMounted(async () => { panel.value?.focus(); await load(); });
+watch(() => session.value?.session_id, async (id) => {
+  if (!id || !window.matchMedia?.("(max-width: 700px)")?.matches) return;
+  await nextTick();
+  if (body.value) body.value.scrollTop = 0;
+});
+onMounted(async () => {
+  returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  panel.value?.focus();
+  await load();
+});
+onBeforeUnmount(() => {
+  generation++;
+  void nextTick(() => { if (returnFocus?.isConnected && returnFocus.getClientRects().length) returnFocus.focus({ preventScroll: true }); });
+});
 </script>
 
 <template>
@@ -149,11 +165,11 @@ onMounted(async () => { panel.value?.focus(); await load(); });
     <div class="character-chat-overlay" @keydown.esc="emit('close')">
       <section ref="panel" tabindex="-1" class="character-chat-panel" role="dialog" aria-modal="true"
         aria-labelledby="character-chat-title" @keydown="trapFocus">
-        <header><div><small>PRIVATE CONVERSATION</small><h2 id="character-chat-title">与角色交谈</h2>
+        <header><div><small>独立人物对话</small><h2 id="character-chat-title">与角色交谈</h2>
           <p>为这段对话单独加载角色卡、已知资料和场景。记录独立保存。</p></div>
           <button aria-label="关闭角色对话" @click="emit('close')">关闭</button></header>
         <p v-if="error" class="character-chat-error" role="alert">{{ error }}</p>
-        <div class="character-chat-body">
+        <div ref="body" class="character-chat-body" :class="{ 'character-has-session': session }">
           <aside>
             <h3>加载人物</h3>
             <label>主创已填写的角色卡
@@ -222,7 +238,7 @@ onMounted(async () => { panel.value?.focus(); await load(); });
                   发送
                 </button></form>
             </template>
-            <div v-else class="character-chat-empty"><h3>给人物一个此刻</h3>
+            <div v-else class="character-chat-empty"><StudioGlyph kind="orbit" /><h3>给人物一个此刻</h3>
               <p>选择角色卡和他已知的资料，写下这段对话的场景，然后开始交谈。</p>
               <p v-if="setup && !setup.cards.length">主创生成的角色卡会显示在左侧。你也可以展开当前角色卡区块，填写自己的卡。</p>
             </div>

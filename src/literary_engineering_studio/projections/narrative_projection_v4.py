@@ -58,21 +58,25 @@ def build_narrative_projection_v4(
     grammar: str = "auto",
     dashboard_payload: dict[str, Any] | None = None,
     library_payload: dict[str, Any] | None = None,
+    reader_payload: dict[str, Any] | None = None,
+    rhythm_hints_payload: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build one graph; focus changes emphasis without changing graph membership."""
 
     root = project_root.resolve()
     dashboard = dashboard_payload if isinstance(dashboard_payload, dict) else narrative_projection_v2.build_dashboard(config, root)
     library = library_payload if isinstance(library_payload, dict) else narrative_projection_v2.build_library(config, root)
-    reader = narrative_projection_v2.build_reader_manifest(root)
+    reader = reader_payload if reader_payload is not None else narrative_projection_v2.build_reader_manifest(root)
     selected_level = NarrativeFocusLevel.parse(level)
-    graph = _build_creative_graph(root, config, dashboard, library, reader, selected_level, focus, grammar)
+    rhythm_hints = rhythm_hints_payload if rhythm_hints_payload is not None else build_rhythm_hints(root)
+    graph = _build_creative_graph(root, config, dashboard, library, reader, selected_level, focus, grammar, rhythm_hints)
     base = narrative_projection_v2.build_narrative_projection(
         config,
         root,
         level="book",
         dashboard_payload=dashboard,
         library_payload=library,
+        reader_payload=reader,
     )
     source_revisions = build_source_revisions(base, dashboard, library, reader, graph.rhythm_hints, _digest)
     revision = build_projection_revision(
@@ -99,6 +103,7 @@ def _build_creative_graph(
     level: NarrativeFocusLevel,
     focus: str,
     grammar: str,
+    rhythm_hints: dict[str, Any],
 ) -> _CreativeGraph:
     inventory = ProjectionInventory.from_library(library)
     focus_id = _resolve_focus(level, focus, inventory, dashboard)
@@ -116,7 +121,6 @@ def _build_creative_graph(
     raw_nodes, raw_edges = _normalize_graph(raw_nodes, raw_edges)
     grammar_base = {"nodes": raw_nodes, "edges": raw_edges, "summary": {"scene_count": len(inventory.scenes)}}
     selected_grammar = resolve_grammar(grammar, grammar_base)
-    rhythm_hints = build_rhythm_hints(root)
     nodes = decorate_spatial_nodes(
         raw_nodes,
         raw_edges,
@@ -197,9 +201,13 @@ def build_narrative_node_detail_v4(
     config: dict[str, Any],
     project_root: Path,
     node_id: str,
+    *,
+    projection_payload: dict[str, Any] | None = None,
     **kwargs: Any,
 ) -> dict[str, Any]:
-    projection = build_narrative_projection_v4(config, project_root, **kwargs)
+    projection = projection_payload if projection_payload is not None else build_narrative_projection_v4(config, project_root, **kwargs)
+    if projection_payload is not None and projection.get("project_root") != str(project_root.resolve()):
+        raise ValueError("node detail projection belongs to another project")
     selected = next((item for item in projection["nodes"] if item["node_id"] == node_id), None)
     if selected is None:
         raise KeyError(node_id)

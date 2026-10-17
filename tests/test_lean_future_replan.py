@@ -177,14 +177,16 @@ class LeanFutureReplanTests(unittest.TestCase):
                                  "consequence": f"第{index}章之后林昭获得不同的选择"}]}
                     for index in range(1, 4)
                 ]
-                answer = {"chapters": chapters, "narrative_design": {
-                    "narrative_mode": "三日倒叙", "temporal_structure": "阅读顺序与故事日期相反",
-                }}
+                answer = {"chapters": chapters, "narrative_design":
+                    "**narrative_mode**：三日倒叙\n\n**temporal_structure**：阅读顺序与故事日期相反"}
                 return type("Response", (), {"answer": json.dumps(answer, ensure_ascii=False)})()
 
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             plan_path, budget_path = self._project(root)
+            character = root / 'characters/lin.yaml'
+            character.parent.mkdir(exist_ok=True)
+            character.write_text('name: 林昭\nbackground: 母亲离家，姐姐留在渡口。\n', encoding='utf-8')
             for scene_id in ("scene_0001", "scene_0002"):
                 (root / "workflow" / "scene_commits" / f"{scene_id}.json").unlink()
                 (root / "drafts" / "scenes" / f"{scene_id}.md").unlink()
@@ -197,6 +199,8 @@ class LeanFutureReplanTests(unittest.TestCase):
             self.assertEqual(result["committed_prefix_count"], 0)
             self.assertEqual(result["future_scene_count"], 3)
             self.assertEqual(plan["narrative_design"]["narrative_mode"], "三日倒叙")
+            self.assertEqual(plan['narrative_design']['temporal_structure'], '阅读顺序与故事日期相反')
+            self.assertIn('母亲离家，姐姐留在渡口。', gateway.prompts[0])
             self.assertEqual([scene["story_time"] for scene in plan["scenes"]], ["第3日", "第2日", "第1日"])
             self.assertEqual(budget["totals"]["scene_count"], 3)
             self.assertIn("story_time: \"第3日\"", (root / "scenes" / "scene_0001.yaml").read_text(encoding="utf-8"))

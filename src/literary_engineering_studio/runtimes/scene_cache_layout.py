@@ -85,7 +85,7 @@ def validate_frozen_sources(briefing, root, brief):
             raise RuntimeError("frozen source escaped its work boundary")
         actual = sha256(path.read_bytes()).hexdigest() if path.is_file() else None
         if actual != row.get("file_sha256"):
-            raise RuntimeError("scene source revision changed: frozen Canon, continuity or user direction changed; create a new transaction")
+            raise RuntimeError("scene source revision changed: frozen Canon, character archives, continuity or user direction changed; create a new transaction")
 
 
 def review_layout(layers, briefing, context, snapshot):

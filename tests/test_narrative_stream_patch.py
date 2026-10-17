@@ -87,6 +87,7 @@ def _router_dependencies(projections) -> NarrativeRouterDependencies:
         dashboard_snapshot=lambda _root: {},
         narrative_evidence_snapshot=lambda _root: {},
         library_snapshot=lambda _root: {},
+        narrative_sources_snapshot=lambda _root: {"reader": {}, "rhythm": {}},
         build_projection=lambda *_args, **_kwargs: {},
         projection_delta=projection_delta,
         projection_motion_events=projection_motion_events,

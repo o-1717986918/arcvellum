@@ -103,8 +103,8 @@ function verdictLabel(value: unknown): string {
     <header class="style-atelier-heading">
       <div>
         <span class="eyebrow">文风工坊</span>
-        <h1>把作品语感变成可追溯的创作约束</h1>
-        <p>从合法来源中抽象写作规律，经隔离评测与独立审查形成版本，再明确挂载到当前作品。</p>
+        <h1>语料、文风与写作</h1>
+        <p>从合法语料提炼写作规律，检查版本与评测，再挂载到当前作品。</p>
       </div>
       <div class="style-heading-actions">
         <button class="style-refresh" :disabled="style.busy" title="重新读取文风工坊" @click="load">

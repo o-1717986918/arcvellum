@@ -8,14 +8,12 @@ import { attachOrbitInteraction } from "./orbitInteraction";
 import {
   DEFAULT_PARALLAX_VIEW,
   NARRATIVE_STAGE,
-  depthScale,
+  createParallaxProjector,
   fittedCameraFrame,
   isSameParallaxView,
-  planeBounds,
-  scenePoint,
   type ParallaxView,
 } from "./parallaxProjection";
-import { drawNarrativeRelations, syncRelationLod, type RelationLayers } from "./relationRenderer";
+import { RetainedScene, projectedNarrativeFrame } from "./retainedScene";
 import { fovForZoom, SkyMesh, skyAnglesFromView } from "./sky";
 import {
   DEFAULT_PALETTE,
@@ -26,8 +24,6 @@ import {
   type ScenePalette,
   type StageExperience,
 } from "./renderModel";
-import { drawStageScenery } from "./stageScenery";
-import { projectedPrimaryGroups } from "./primaryGroupFrames";
 const WORLD_WIDTH = NARRATIVE_STAGE.width;
 const WORLD_HEIGHT = NARRATIVE_STAGE.height;
 const ORIGIN = NARRATIVE_STAGE.origin;
@@ -69,14 +65,23 @@ export class NarrativeParallaxRenderer {
   private lastInteractionAt = 0;
   private palette: ScenePalette = DEFAULT_PALETTE;
   private elapsed = 0;
-  private relationLayers: RelationLayers | null = null;
+  private readonly scene: RetainedScene;
+  private geometryExperience: StageExperience;
+  private preferenceBinding = "";
   private focusedNodeId = "";
   private view: ParallaxView = { ...DEFAULT_PARALLAX_VIEW };
   private viewRefreshQueued = false;
+  private viewPivotPending: WorldPoint | null = null;
+  private disposed = false;
+  private projector = createParallaxProjector("balanced", this.view);
   private detachOrbitInteraction: () => void;
   private readonly wakeRenderer = () => {
     this.lastInteractionAt = performance.now();
-    if (document.visibilityState === "visible") this.app.ticker.start();
+    if (this.experience.quality !== "high" && this.host.dataset.interacting !== "true") this.host.dataset.interacting = "true";
+    if (document.visibilityState === "visible") {
+      this.app.ticker.maxFPS = this.denseScene ? 30 : 60;
+      this.app.ticker.start();
+    }
   };
   private readonly handleContextLost = (event: Event) => {
     event.preventDefault();
@@ -105,6 +110,8 @@ export class NarrativeParallaxRenderer {
     sky: SkyMesh,
   ) {
     this.sky = sky;
+    this.geometryExperience = experience;
+    this.scene = new RetainedScene({ far: this.far, mid: this.mid, near: this.near });
     this.detachOrbitInteraction = attachOrbitInteraction(app.canvas, {
       currentView: () => this.view,
       pivot: () => this.viewPivot(),
@@ -191,25 +198,16 @@ export class NarrativeParallaxRenderer {
     this.ambientMotionAvailable = hasAmbientNodeMotion(projection.nodes);
     this.layout = layout;
     this.experience = readStageExperience();
-    this.palette = readPalette(this.host);
-    this.sky.setQuality(!this.denseScene && this.experience.quality !== "efficient");
-    this.clearLayers();
-    drawStageScenery({
-      layers: { far: this.far, mid: this.mid, near: this.near },
-      layout,
-      projection,
-      palette: this.palette,
-      experience: this.experience,
-      frame: this.narrativeFrame(),
-      primaryGroups: (groupSize) => projectedPrimaryGroups(projection, layout, groupSize, (point) => this.projectPoint(point)),
-    });
-    this.relationLayers = drawNarrativeRelations({
-      projection,
-      layout,
-      palette: this.palette,
-      target: this.mid,
-      projectPoint: (point) => this.projectPoint(point),
-    });
+    const preferenceBinding = JSON.stringify([this.experience, document.documentElement.dataset.arcvellumTheme]);
+    if (preferenceBinding !== this.preferenceBinding) {
+      this.palette = readPalette(this.host);
+      this.preferenceBinding = preferenceBinding;
+    }
+    this.projector = createParallaxProjector(this.experience.depth, this.view);
+    this.geometryExperience = this.denseScene && this.experience.quality === "auto"
+      ? { ...this.experience, quality: "efficient" } : this.experience;
+    this.sky.setQuality(this.experience.quality === "high" || (!this.denseScene && this.experience.quality !== "efficient"));
+    this.scene.update(projection, layout, this.palette, this.geometryExperience, (point) => this.projectPoint(point));
     this.emitAnchors(true);
     if (!this.app.ticker.started && document.visibilityState === "visible") this.app.render();
   }
@@ -296,10 +294,12 @@ export class NarrativeParallaxRenderer {
     const pivot = this.viewPivot();
     this.view = { ...DEFAULT_PARALLAX_VIEW };
     this.animation = null;
-    this.updateViewAround(pivot);
+    this.queueViewRefresh(pivot);
   }
 
   dispose(): void {
+    this.disposed = true;
+    delete this.host.dataset.interacting;
     document.removeEventListener("visibilitychange", this.handleVisibilityChange);
     this.app.canvas.removeEventListener("webglcontextlost", this.handleContextLost);
     this.app.canvas.removeEventListener("webglcontextrestored", this.handleContextRestored);
@@ -315,6 +315,11 @@ export class NarrativeParallaxRenderer {
 
   private tick(deltaMs: number): void {
     this.elapsed += deltaMs;
+    const rotated = this.viewRefreshQueued;
+    if (rotated) {
+      this.viewRefreshQueued = false;
+      this.updateViewAround(this.viewPivotPending);
+    }
     if (this.animation) {
       const step = advanceCameraAnimation(this.animation, deltaMs);
       this.viewport.moveCenter(step.frame.x, step.frame.y);
@@ -330,24 +335,25 @@ export class NarrativeParallaxRenderer {
       fovForZoom(this.viewport.scale.x),
       (center.x - ORIGIN.x) * 0.0002,
       (center.y - ORIGIN.y) * 0.0002,
-      this.elapsed / 1000,
+      this.effectiveMotion() === "still" ? 0 : this.elapsed / 1000,
     );
-    syncRelationLod(this.relationLayers, this.viewport.scale.x, Boolean(this.focusedNodeId));
+    this.scene.syncLod(this.viewport.scale.x, Boolean(this.focusedNodeId));
     const revision = `${this.viewport.x.toFixed(1)}:${this.viewport.y.toFixed(1)}:${this.viewport.scale.x.toFixed(3)}`;
     const ambientDue = this.ambientMotionAvailable && this.effectiveMotion() === "full"
       && this.elapsed >= this.nextAmbientAt;
-    if (revision !== this.lastViewport || ambientDue) {
+    if (rotated || revision !== this.lastViewport || ambientDue) {
       if (ambientDue) this.nextAmbientAt = this.elapsed + 250;
       const cameraMoved = revision !== this.lastViewport;
       this.lastViewport = revision;
       if (cameraMoved) this.lastInteractionAt = performance.now();
-      this.emitAnchors();
+      this.emitAnchors(rotated);
     }
     const idleFor = performance.now() - this.lastInteractionAt;
+    if (idleFor >= 750 && !this.animation) delete this.host.dataset.interacting;
     this.app.ticker.maxFPS = this.animation || idleFor < 750
       ? (this.denseScene ? 30 : 60)
       : (this.denseScene ? 8 : this.experience.quality === "high" ? 24 : 12);
-    if (this.projection && this.projection.nodes.length > 250 && !this.animation && idleFor > 900
+    if (this.projection && !this.animation && idleFor > 900
       && this.effectiveMotion() !== "full") {
       this.app.ticker.stop();
       this.app.render();
@@ -372,28 +378,8 @@ export class NarrativeParallaxRenderer {
     };
   }
 
-  private clearLayers(): void {
-    this.relationLayers = null;
-    for (const layer of [this.far, this.mid, this.near]) {
-      const children = layer.removeChildren();
-      children.forEach((child) => child.destroy({ children: true }));
-    }
-  }
-
   private narrativeFrame(): NarrativeFrame {
-    const projected = (this.projection?.nodes || [])
-      .filter((node) => node.type === "chapter" || node.type === "scene")
-      .map((node) => this.layout?.points.get(node.node_id))
-      .filter((point): point is WorldPoint => Boolean(point))
-      .map((point) => this.projectPoint(point));
-    const bounds = planeBounds(projected);
-    if (!bounds) return { centerX: ORIGIN.x, centerY: ORIGIN.y, width: 1880, height: 900 };
-    return {
-      centerX: bounds.centerX,
-      centerY: bounds.centerY,
-      width: Math.max(1200, bounds.maxX - bounds.minX + 520),
-      height: Math.max(720, bounds.maxY - bounds.minY + 420),
-    };
+    return projectedNarrativeFrame(this.projection, this.layout, (point) => this.projectPoint(point));
   }
 
   private tideOffset(
@@ -421,10 +407,9 @@ export class NarrativeParallaxRenderer {
 
   private emitAnchors(force = false): void {
     if (!this.anchorListener || !this.layout) return;
-    const now = Date.now();
+    const now = performance.now();
     if (!force && now < this.nextAnchorAt) return;
-    this.nextAnchorAt = now + (this.denseScene ? 80 : 42);
-    const rect = this.host.getBoundingClientRect();
+    this.nextAnchorAt = now + (this.denseScene ? 32 : 16);
     const anchors: Record<string, StageAnchor> = {};
     const animateNodes = this.ambientMotionAvailable && this.effectiveMotion() === "full";
     for (const [nodeId, point] of this.layout.points) {
@@ -438,7 +423,7 @@ export class NarrativeParallaxRenderer {
       anchors[nodeId] = {
         x: screen.x,
         y: screen.y,
-        visible: screen.x >= -96 && screen.x <= rect.width + 96 && screen.y >= -96 && screen.y <= rect.height + 96,
+        visible: screen.x >= -96 && screen.x <= this.viewportWidth + 96 && screen.y >= -96 && screen.y <= this.viewportHeight + 96,
         scale: Math.max(0.54, Math.min(1.5, this.viewport.scale.x * this.projectDepthScale(point))),
       };
     }
@@ -446,30 +431,30 @@ export class NarrativeParallaxRenderer {
   }
 
   private projectPoint(point: WorldPoint): { x: number; y: number } {
-    return scenePoint(point, this.experience.depth, this.view);
+    return this.projector.project(point);
   }
 
   private projectDepthScale(point: WorldPoint): number {
-    return depthScale(point, this.experience.depth, this.view);
+    return this.projector.depthScale(point);
   }
 
   private queueViewRefresh(pivot: WorldPoint | null): void {
-    if (this.viewRefreshQueued) return;
+    if (this.disposed) return;
+    this.viewPivotPending = pivot;
     this.viewRefreshQueued = true;
-    window.requestAnimationFrame(() => {
-      this.viewRefreshQueued = false;
-      this.updateViewAround(pivot);
-    });
+    // Use the existing Pixi frame. A second rAF delivered anchors twice in one
+    // browser frame, causing two Vue flushes before the same screen repaint.
+    this.wakeRenderer();
   }
 
   private updateViewAround(pivot: WorldPoint | null): void {
-    if (!this.projection || !this.layout) return;
+    if (this.disposed || !this.projection || !this.layout) return;
     this.wakeRenderer();
-    this.update(this.projection, this.layout);
+    this.projector = createParallaxProjector(this.experience.depth, this.view);
+    this.scene.update(this.projection, this.layout, this.palette, this.geometryExperience, (point) => this.projectPoint(point), true);
     if (pivot) {
       const projected = this.projectPoint(pivot);
       this.viewport.moveCenter(projected.x, projected.y);
-      this.emitAnchors(true);
     }
   }
 

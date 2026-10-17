@@ -40,6 +40,10 @@ class SourceRepairProgress:
         self._save()
         return signature
 
+    @staticmethod
+    def signature(error):
+        return _signature(error)
+
     def feedback_fields(self):
         return {'validation_feedback':self.feedback} if self.feedback else {}
 

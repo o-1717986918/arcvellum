@@ -45,6 +45,12 @@ def load_scene_facts(scene_path: Path) -> SceneFacts:
 
     path = scene_path.resolve()
     payload = load_scene_mapping(path) if path.is_file() else {}
+    return scene_facts_from_mapping(path, payload)
+
+
+def scene_facts_from_mapping(scene_path: Path, payload: dict[str, Any]) -> SceneFacts:
+    """Project canonical facts from the caller's already decoded scene snapshot."""
+    path = scene_path
 
     return SceneFacts(
         scene_id=_text(payload.get("scene_id")) or path.stem or "scene",

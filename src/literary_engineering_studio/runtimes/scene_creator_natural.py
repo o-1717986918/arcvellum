@@ -76,19 +76,24 @@ class NaturalCreatorMixin:
                 layers=self._v2_prompt_snapshot(transaction_id)['texts']
                 context={**context,'actor_system_template':layers['scene.v2.material.actor'],
                     'actor_card_design_guidance':layers['scene.v2.creator.actor-card']}
-            try:
-                signature=progress.register(error)
-            except NaturalSourceClarificationError as stopped:
-                stopped.source_text = answer
-                raise
+            signature=progress.signature(error)
             task = json.dumps({**field_repair_task(answer,error.payload,error.fields,context),
                               "failure":recovery_issue(error,answer),
+                              "repair_context_sha256":sha256(json.dumps([kind,context,processor.system_prompt],
+                                  ensure_ascii=False,sort_keys=True).encode()).hexdigest(),
                               **progress.feedback_fields()},ensure_ascii=False)
             key=sha256(task.encode()).hexdigest()
             if key in seen:
                 raise error
             seen.add(key)
-            reply = self._preserved_natural_answer(transaction_id,kind+"-field-repair",task,lambda:invoke(task))
+            def request():
+                try:
+                    progress.register(error)
+                except NaturalSourceClarificationError as stopped:
+                    stopped.source_text = answer
+                    raise
+                return invoke(task)
+            reply = self._preserved_natural_answer(transaction_id,kind+"-field-repair",task,request)
             try:
                 result=processor.process_field_repair(answer,reply,kind=kind,context=context,
                     payload=error.payload,fields=error.fields)

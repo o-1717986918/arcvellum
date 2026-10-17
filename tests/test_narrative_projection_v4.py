@@ -10,6 +10,20 @@ from literary_engineering_studio.projections.narrative_projection_v4 import (
 
 
 class NarrativeProjectionV4Tests(unittest.TestCase):
+    def test_reader_is_built_once_and_node_detail_accepts_the_exact_projection_snapshot(self):
+        with tempfile.TemporaryDirectory() as temporary, patch(
+            "literary_engineering_studio.projections.narrative_projection.build_reader_manifest", return_value=self.reader
+        ) as reader:
+            root = Path(temporary)
+            projection = build_narrative_projection_v4({}, root, library_payload=self.library, dashboard_payload=self.dashboard)
+            self.assertEqual(reader.call_count, 1)
+            with patch("literary_engineering_studio.projections.narrative_projection_v4.build_narrative_projection_v4",
+                       side_effect=AssertionError("detail must reuse the supplied snapshot")):
+                detail = build_narrative_node_detail_v4({}, root, "style:restrained", projection_payload=projection)
+            self.assertEqual(detail["projection_revision"], projection["revision"])
+            with self.assertRaises(ValueError):
+                build_narrative_node_detail_v4({}, root / "another", "style:restrained", projection_payload=projection)
+
     def setUp(self):
         self.library = {
             "sections": {

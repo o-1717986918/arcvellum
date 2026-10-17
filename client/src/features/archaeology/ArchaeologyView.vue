@@ -70,8 +70,8 @@ function closeMessage(kind: "error" | "notice"): void {
   <div class="archaeology-view">
     <header class="archaeology-heading">
       <div>
-        <span class="context-label">Project Archaeology</span>
-        <h1>从一部旧作，恢复可继续创作的项目</h1>
+        <span class="context-label">作品考古</span>
+        <h1>从原文重建作品</h1>
         <p>原文、推断和正式设定彼此分开；每项结论都保留证据、置信度与未决冲突。</p>
       </div>
       <div class="archaeology-heading-actions">

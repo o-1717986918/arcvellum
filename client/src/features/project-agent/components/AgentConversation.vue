@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { nextTick, ref, watch } from "vue";
-import { ArrowUpRight, Bot, BookOpenText, CircleDashed, Radio, Search, Waypoints } from "lucide-vue-next";
+import { computed, nextTick, ref, watch } from "vue";
+import { ArrowUpRight, BookOpenText, CircleDashed, Radio, Search, Waypoints } from "lucide-vue-next";
+import StudioGlyph from "@/components/StudioGlyph.vue";
 import SafeMarkdown from "@/components/SafeMarkdown.vue";
 import AgentActionGroup from "@/features/project-agent/components/AgentActionGroup.vue";
 import type { ProjectAgentMessage, ProjectAgentTurnActivity } from "@/features/project-agent/types";
@@ -17,6 +18,20 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{ starter: [message: string]; newConversation: []; openLive: [] }>();
 const scroller = ref<HTMLElement | null>(null);
+const activityMessageIndex = computed(() => {
+  const activity = props.activity;
+  if (!activity) return -1;
+  const matched = props.messages.findLastIndex((message) => message.role === "assistant" && (
+    (activity.turnId && message.payload.turn_id === activity.turnId)
+    || (activity.jobId && message.payload.job_id === activity.jobId)
+  ));
+  if (matched >= 0) return matched;
+  const lastAssistant = props.messages.findLastIndex((message) => message.role === "assistant");
+  const lastUser = props.messages.findLastIndex((message) => message.role === "user");
+  const message = props.messages[lastAssistant];
+  return lastAssistant > lastUser && message && !message.payload.turn_id && !message.payload.job_id
+    ? lastAssistant : -1;
+});
 
 watch(
   () => [props.messages.length, props.messages.at(-1)?.payload.text, props.activity?.tools.length],
@@ -37,7 +52,7 @@ function messageText(message: ProjectAgentMessage): string {
       <div class="pa-manuscript-spine" aria-hidden="true"></div>
       <p v-if="omittedCount" class="pa-history-note">较早的 {{ omittedCount }} 条消息已收起，完整记录仍保存在当前会话中。</p>
       <section v-if="!messages.length && !loading" class="pa-welcome">
-        <span class="pa-welcome-mark"><Bot :size="24" /></span>
+        <div class="pa-welcome-signature"><StudioGlyph class="pa-welcome-mark" /><span>ArcVellum <i>与你一起，让作品向前。</i></span></div>
         <h1>{{ hasSession ? '从这部作品继续。' : '选择一部作品，开始交谈。' }}</h1>
         <p>{{ hasSession ? '我可以查阅正文与资料，也能接下长期创作目标，在你离开当前对话后持续推进。' : '每段对话属于一部作品。你可以选择已有作品，也可以先建立一部新作品。' }}</p>
         <button v-if="!hasSession" class="pa-welcome-create" @click="emit('newConversation')">选择作品并新建对话 <ArrowUpRight :size="16" /></button>
@@ -57,10 +72,13 @@ function messageText(message: ProjectAgentMessage): string {
         </article>
         <article v-else-if="message.role === 'assistant'" class="pa-turn pa-turn-agent">
           <header><span class="pa-mini-mark"><BookOpenText :size="13" /></span><strong>ArcVellum</strong><time v-if="message.at">{{ new Date(message.at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) }}</time></header>
+          <AgentActionGroup v-if="activity && activityMessageIndex === index" :key="activity.jobId || activity.turnId || 'pending'" :activity="activity" />
           <SafeMarkdown v-if="messageText(message)" :source="messageText(message)" variant="chat" />
           <div v-else class="pa-thinking"><i></i><i></i><i></i><span>正在阅读作品并形成回答</span></div>
         </article>
       </template>
+
+      <AgentActionGroup v-if="activity && activityMessageIndex < 0" :key="activity.jobId || activity.turnId || 'pending'" :activity="activity" />
 
       <button v-if="hasSession && creativePhase" class="pa-creative-live-card" :class="creativePhase" @click="emit('openLive')">
         <span class="pa-live-indicator"><Radio :size="17" /></span>
@@ -68,7 +86,6 @@ function messageText(message: ProjectAgentMessage): string {
         <ArrowUpRight :size="16" />
       </button>
 
-      <AgentActionGroup v-if="activity" :activity="activity" />
     </div>
   </div>
 </template>

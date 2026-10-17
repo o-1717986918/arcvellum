@@ -15,30 +15,26 @@ export function drawNarrativeRelations(options: {
   palette: ScenePalette;
   target: Container;
   projectPoint(point: WorldPoint): { x: number; y: number };
+  retained?: RelationLayers;
 }): RelationLayers {
   const { projection, layout, palette, target, projectPoint } = options;
-  const primary = new Graphics();
-  const secondary = new Graphics();
+  const primary = options.retained?.primary || new Graphics();
+  const secondary = options.retained?.secondary || new Graphics();
+  primary.clear();
+  secondary.clear();
   const profiles = new Map(projection.relation_profiles.map((profile) => [profile.family, profile]));
   const detailProjection = projection.level !== "book";
   const globalBackboneGrammar = layout.grammar !== "loop" && layout.grammar !== "constellation";
   for (const edge of projection.edges) {
+    if (edge.type !== "sequence" && edge.type !== "bridge") continue;
     const source = layout.points.get(edge.source);
     const targetPoint = layout.points.get(edge.target);
     if (!source || !targetPoint) continue;
     const start = projectPoint(source);
     const end = projectPoint(targetPoint);
-    const color = edge.type === "branch" || edge.type === "raises" || edge.type === "promise"
-      ? palette.branch
-      : edge.type === "canon" || edge.type === "review"
-        ? palette.canon
-        : edge.type === "workflow"
-          ? palette.core
-          : mix(palette.core, palette.label, 0.46);
-    const backbone = edge.type === "sequence" || edge.type === "bridge";
+    const color = mix(palette.core, palette.label, 0.46);
     // Interactive evidence and character relations stay in the SVG overlay;
     // this GPU pass owns only the narrative backbone.
-    if (!backbone) continue;
     const relationMode = relationModeForLevel(profiles.get(edge.relation_family), projection.level);
     const emphasized = relationMode === "emphasized";
     const connection = globalBackboneGrammar || emphasized ? primary : secondary;
@@ -58,7 +54,7 @@ export function drawNarrativeRelations(options: {
       .bezierCurveTo(controlA.x, controlA.y, controlB.x, controlB.y, end.x, end.y)
       .stroke({ color, width, alpha });
   }
-  target.addChild(primary, secondary);
+  if (!options.retained) target.addChild(primary, secondary);
   return { primary, secondary };
 }
 

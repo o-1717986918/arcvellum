@@ -5,6 +5,7 @@ from __future__ import annotations
 from copy import deepcopy
 import math
 from typing import Any
+from .narrative_design import normalize_narrative_design
 
 
 PLAN_SCHEMA = "arcvellum/lean-project-plan/v1"
@@ -14,10 +15,6 @@ RHYTHM_ROLES = (
 _SCENE_FIELDS = (
     "name", "function", "conflict", "information_release", "consequence",
     "setup_payoff_role", "obligation",
-)
-_NARRATIVE_FIELDS = (
-    "narrative_mode", "temporal_structure", "viewpoint_design",
-    "pacing_design", "structural_signature", "narrator_voice", "world_presentation",
 )
 
 
@@ -107,14 +104,11 @@ def normalize_initial_plan(
     """Bind a creative chapter spine and first window to machine-owned IDs."""
     rows = budget.get("chapter_budgets")
     rows = rows if isinstance(rows, list) else []
+    errors = _initial_count_errors(answer, budget)
+    if errors:
+        raise ValueError("; ".join(errors))
     chapters = answer.get("chapters")
-    if not rows or not isinstance(chapters, list) or len(chapters) != len(rows):
-        raise ValueError(f"planning requires exactly {len(rows)} chapter turns")
-    volumes = budget.get("volume_budgets")
-    volumes = volumes if isinstance(volumes, list) else []
     obligations = answer.get("volume_obligations")
-    if not isinstance(obligations, list) or len(obligations) != len(volumes):
-        raise ValueError(f"planning requires exactly {len(volumes)} volume obligations")
     clean_volumes = [_text(item, "volume obligation") for item in obligations]
     clean_chapters = _chapters(rows, chapters)
     first_window = normalize_scene_window(
@@ -130,7 +124,7 @@ def normalize_initial_plan(
         "premise": _text(answer.get("premise"), "premise"),
         "central_question": _text(answer.get("central_question"), "central question"),
         "ending_choice": _text(answer.get("ending_choice"), "ending choice"),
-        "narrative_design": _narrative_design(answer.get("narrative_design")),
+        "narrative_design": normalize_narrative_design(answer.get("narrative_design")),
         "volume_obligations": clean_volumes,
         "chapters": clean_chapters,
         "event_budget": _event_budget(clean_chapters, first_window),
@@ -138,6 +132,35 @@ def normalize_initial_plan(
         "characters": clean_characters,
         "world_facts": [_text(item, "world fact") for item in world_facts or []],
     }
+
+
+def _initial_count_errors(answer: dict[str, Any], budget: dict[str, Any]) -> list[str]:
+    rows = budget.get("chapter_budgets")
+    rows = rows if isinstance(rows, list) else []
+    volumes = budget.get("volume_budgets")
+    volumes = volumes if isinstance(volumes, list) else []
+    checks = [
+        ("chapters", len(rows), f"planning requires exactly {len(rows)} chapter turns"),
+        ("volume_obligations", len(volumes), f"planning requires exactly {len(volumes)} volume obligations"),
+    ]
+    if rows:
+        count = int(rows[0]["scene_count"])
+        checks.append(("first_window", count, f"chapter window requires exactly {count} scenes"))
+    errors = []
+    for field, expected, message in checks:
+        error = _count_error(answer.get(field), expected, field, message)
+        if error:
+            errors.append(error)
+    if not rows and not errors:
+        errors.append("planning requires at least one budgeted chapter")
+    return errors
+
+
+def _count_error(value: object, expected: int, field: str, message: str) -> str:
+    if isinstance(value, list) and len(value) == expected:
+        return ""
+    actual = str(len(value)) if isinstance(value, list) else f"{type(value).__name__}, not a list"
+    return f"{message} ({field}: expected {expected}, received {actual})"
 
 
 def _event_budget(
@@ -178,15 +201,6 @@ def _chapters(rows: list[dict[str, Any]], chapters: list[object]) -> list[dict[s
     return clean
 
 
-def _narrative_design(value: object) -> dict[str, str]:
-    if not isinstance(value, dict):
-        return {}
-    design = {field: str(value.get(field) or "").strip() for field in _NARRATIVE_FIELDS if str(value.get(field) or "").strip()}
-    if any(len(text) > 8000 for text in design.values()) or sum(map(len, design.values())) > 32000:
-        raise ValueError('narrative design exceeds context capacity; shorten the plan explicitly')
-    return design
-
-
 def _characters(characters: object) -> list[dict[str, str]]:
     if characters is not None and not isinstance(characters, list):
         raise ValueError("planning characters must be a list")
@@ -217,8 +231,9 @@ def normalize_scene_window(
 ) -> list[dict[str, Any]]:
     """Assign IDs and exact character targets after creative scene selection."""
     expected = int(chapter_budget["scene_count"])
-    if expected < 1 or not isinstance(answer, list) or len(answer) != expected:
-        raise ValueError(f"chapter window requires exactly {expected} scenes")
+    error = _count_error(answer, expected, "scenes", f"chapter window requires exactly {expected} scenes")
+    if expected < 1 or error:
+        raise ValueError(error or "chapter window requires a positive scene count")
     target = int(chapter_budget["target_words"])
     weights = [item.get("length_weight", 1) if isinstance(item, dict) else 1 for item in answer]
     targets = _weighted_targets(target, weights)

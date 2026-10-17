@@ -79,8 +79,8 @@ async function createSnapshot(): Promise<void> {
     <section class="delivery-hero">
       <div>
         <span class="eyebrow">正式交付</span>
-        <h1>把作品交成可以阅读、保存和发布的文件。</h1>
-        <p>只有通过门禁的正式正文会进入交付包。审查记录、设定变更和工作流程会被留在项目中。</p>
+        <h1>作品交付</h1>
+        <p>下载当前稿，检查正式交付条件。审查记录与创作过程保留在项目中。</p>
         <div class="delivery-actions">
           <button class="primary-button" :disabled="preparing || !readiness.allowed" @click="prepareDelivery"><PackageOpen :size="17" />{{ preparing ? "正在准备……" : readiness.label }}</button>
           <button class="secondary-button" :disabled="snapshotting || !hasFormalProse" @click="createSnapshot"><FileText :size="17" />{{ snapshotting ? "正在生成……" : "导出当前稿 DOCX" }}</button>

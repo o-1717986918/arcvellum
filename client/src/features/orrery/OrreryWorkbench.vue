@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, ref, watch } from "vue";
+import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, ref, shallowRef, watch } from "vue";
 import { ArrowLeft, Clock3, Focus, Layers3, List, Maximize2, Network, RotateCcw } from "lucide-vue-next";
 import { useRoute, useRouter } from "vue-router";
 import ChapterRail from "@/features/orrery/ChapterRail.vue";
@@ -14,7 +14,7 @@ import OrreryNavigationLayer from "@/features/orrery/OrreryNavigationLayer.vue";
 import OrreryNodeOverlay from "@/features/orrery/OrreryNodeOverlay.vue";
 import RelationLensBar from "@/features/orrery/RelationLensBar.vue";
 import { chapterClusterFocusPoint, chapterRailFocusTarget } from "@/features/orrery/chapterFocus";
-import { buildSpatialLayout } from "@/features/orrery/layout/layoutEngine";
+import { createSpatialLayoutCache } from "@/features/orrery/layout/layoutCache";
 import { useOrreryCreativeLive } from "@/features/orrery/live/useOrreryCreativeLive";
 import { buildCreativeProgression } from "@/features/orrery/model/creativeProgression";
 import { grammarLabel } from "@/features/orrery/model/grammarPresentation";
@@ -48,7 +48,7 @@ const exploration = useOrreryExplorationStore();
 const readerNavigation = useReaderNavigationStore();
 const stage = ref<InstanceType<typeof NarrativeParallaxStage> | null>(null);
 const listMode = ref(false);
-const anchors = ref<Record<string, { x: number; y: number; visible: boolean; scale: number }>>({});
+const anchors = shallowRef<Record<string, { x: number; y: number; visible: boolean; scale: number }>>({});
 const choices = computed(() => humanChoices.choices);
 const healthExpanded = ref(false);
 const activeCharacterId = ref("");
@@ -71,8 +71,9 @@ const { liveNodeIds } = useOrreryCreativeLive({
 const displayProjection = computed(() => projection.value
   ? applyRelationLens(projection.value, { hidden: hiddenRelationFamilies.value, solo: soloRelationFamily.value })
   : null);
+const cachedLayout = createSpatialLayoutCache();
 const layout = computed(() => displayProjection.value
-  ? buildSpatialLayout(displayProjection.value.spatial_grammar, displayProjection.value.revision, displayProjection.value.nodes, displayProjection.value.layout_seed, displayProjection.value.layout_hints)
+  ? cachedLayout(displayProjection.value)
   : null);
 const viewBookmarks = computed(() => exploration.forProject(app.currentProjectPath));
 const prose = computed(() => manuscriptItems((app.library || null) as Record<string, unknown> | null));
@@ -220,7 +221,8 @@ async function goBack(): Promise<void> {
 
 function returnToConversation(): void {
   const session = Array.isArray(route.query.session) ? route.query.session[0] : route.query.session;
-  void router.push({ name: "project-agent", query: session ? { session } : {} });
+  const workspace = Array.isArray(route.query.workspaceReturn) ? route.query.workspaceReturn[0] : route.query.workspaceReturn;
+  void router.push({ name: "project-agent", query: { ...(session ? { session } : {}), ...(workspace ? { workspace } : {}) } });
 }
 
 function openAgentWorkspace(kind: string): void {
@@ -400,7 +402,7 @@ async function loadChoices(): Promise<void> {
     </header>
 
     <nav class="orrery-v3-controls" aria-label="叙事场域控制">
-      <button class="orrery-return-agent" type="button" @click="returnToConversation"><ArrowLeft :size="15" />返回对话</button>
+      <button class="orrery-return-agent" type="button" @click="returnToConversation"><ArrowLeft :size="15" />返回工作台</button>
       <button v-if="spatial.canGoBack" class="orrery-v3-icon" title="返回上一个叙事焦点" aria-label="返回上一个叙事焦点" @click="goBack"><ArrowLeft :size="15" /></button>
       <div class="orrery-v3-levels" role="tablist"><button :class="{ active: spatial.level === 'book' }" @click="setLevel('book')">全书</button><button :class="{ active: spatial.level === 'chapter' }" @click="setLevel('chapter')">章节</button><button :class="{ active: spatial.level === 'scene' }" @click="setLevel('scene')">场景</button></div>
       <div class="orrery-v3-levels orrery-signal-mode" role="group" aria-label="星仪信息密度"><button :class="{ active: signalMode === 'narrative' }" title="只显示作品主脉、主要人物和当前创作信号" @click="signalMode = 'narrative'">主脉</button><button :class="{ active: signalMode === 'all' }" title="显示项目中的全部工程事实" @click="signalMode = 'all'">全部</button></div>

@@ -1,6 +1,7 @@
 import { flushPromises, mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { routeLocationKey } from "vue-router";
 import ArchiveView from "./ArchiveView.vue";
 
 const { apiMock } = vi.hoisted(() => ({ apiMock: vi.fn() }));
@@ -91,6 +92,7 @@ describe("Narrative Archive view", () => {
 
     const wrapper = mount(ArchiveView, {
       global: {
+        provide: { [routeLocationKey as symbol]: { query: { workspace: "archive", session: "agent-1" } } },
         plugins: [pinia],
         stubs: {
           RouterLink: { template: "<a><slot /></a>" },

@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from literary_engineering_studio_engine.literary.planning.narrative_rhythm import (
     DEFAULT_RHYTHM,
@@ -12,6 +13,26 @@ from literary_engineering_studio_engine.literary.planning.rhythm_plan import loa
 
 
 class RhythmPlanTests(unittest.TestCase):
+    def test_one_decoded_scene_snapshot_supplies_facts_and_the_equivalent_contract(self):
+        from literary_engineering_studio_engine.literary.scene.facts import parse_scene_mapping
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            scene = root / "scenes" / "scene_0001.yaml"
+            scene.parent.mkdir()
+            text = "scene_id: scene_0001\nchapter_id: ch1\nword_count_target: 1800\nnarrative_rhythm:\n  pace: fast\n"
+            scene.write_text(text, encoding="utf-8")
+            expected = narrative_rhythm_contract(root, scene)
+            payload = parse_scene_mapping(text)
+            with patch("literary_engineering_studio_engine.literary.planning.narrative_rhythm.parse_scene_mapping") as decode:
+                actual = narrative_rhythm_contract(root, scene, scene_text=text, scene_payload=payload)
+                decode.assert_not_called()
+            self.assertEqual(actual, expected)
+            with patch("literary_engineering_studio_engine.literary.planning.rhythm_plan.parse_scene_mapping", wraps=parse_scene_mapping) as decode:
+                plan = load_rhythm_plan(root)
+                self.assertEqual(decode.call_count, 1)
+            self.assertEqual(plan["entries"][0]["word_count_target"], 1800)
+            self.assertEqual(plan["entries"][0]["pace"], "fast")
+
     def test_default_scene_rhythm_allows_psychology_and_environment_without_quota(self):
         self.assertEqual(DEFAULT_RHYTHM["density_mix"]["reflection"], "medium")
         self.assertEqual(DEFAULT_RHYTHM["density_mix"]["description"], "medium")

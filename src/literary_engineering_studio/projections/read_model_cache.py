@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 import threading
@@ -52,15 +53,30 @@ class ReadModelCache:
         self._entries: dict[str, _Entry] = {}
         self._generations: dict[str, int] = {}
         self._lock = threading.RLock()
+        self._key_locks: dict[tuple[str, str], tuple[Any, int]] = {}
+        self._epoch = 0
 
-    def get(self, key: str, project_root: Path, builder: Callable[[], Any]) -> Any:
+    def get(self, key: str, project_root: Path, builder: Callable[[], Any], *,
+            selector: Callable[[Any], Any] | None = None) -> Any:
+        """Return an isolated value; selectors are trusted read-only projection code."""
         root = project_root.expanduser().resolve()
+        with self._key_guard((str(root), key)):
+            for _attempt in range(3):
+                accepted, value = self._snapshot(key, root, builder)
+                if accepted:
+                    break
+            else:
+                raise RuntimeError("project changed while building read model; retry")
+        return deepcopy(selector(value) if selector is not None else value)
+
+    def _snapshot(self, key: str, root: Path, builder: Callable[[], Any]) -> tuple[bool, Any]:
         project_key = str(root)
         now = time.monotonic()
         quick_revision = project_quick_fingerprint(root)
         with self._lock:
             current = self._entries.get(key)
             generation = self._generations.get(project_key, 0)
+            epoch = self._epoch
             if (
                 current is not None
                 and current.project_key == project_key
@@ -68,29 +84,49 @@ class ReadModelCache:
                 and current.quick_revision == quick_revision
                 and now < current.next_fallback_scan_at
             ):
-                return deepcopy(current.value)
-
-            revision = project_revision_fingerprint(root)
-            if (
-                current is not None
-                and current.project_key == project_key
-                and current.generation == generation
-                and current.revision == revision
-            ):
+                return True, current.value
+        revision = project_revision_fingerprint(root)
+        if (current is not None and current.project_key == project_key
+                and current.generation == generation and current.revision == revision):
+            with self._lock:
+                if self._epoch != epoch or generation != self._generations.get(project_key, 0):
+                    return False, None
                 current.quick_revision = quick_revision
                 current.next_fallback_scan_at = now + self.fallback_scan_seconds
-                return deepcopy(current.value)
-
-            value = builder()
+            return True, current.value
+        value = builder()
+        final_revision = project_revision_fingerprint(root)
+        stored = deepcopy(value)
+        final_quick = project_quick_fingerprint(root)
+        with self._lock:
+            # A writer may invalidate while the slow builder is outside the metadata lock.
+            if self._epoch != epoch or generation != self._generations.get(project_key, 0) or revision != final_revision:
+                return False, None
             self._entries[key] = _Entry(
                 project_key=project_key,
                 generation=generation,
-                revision=project_revision_fingerprint(root),
-                quick_revision=project_quick_fingerprint(root),
-                next_fallback_scan_at=now + self.fallback_scan_seconds,
-                value=deepcopy(value),
+                revision=final_revision,
+                quick_revision=final_quick,
+                next_fallback_scan_at=time.monotonic() + self.fallback_scan_seconds,
+                value=stored,
             )
-            return value
+        return True, value
+
+    @contextmanager
+    def _key_guard(self, identity: tuple[str, str]):
+        with self._lock:
+            lock, users = self._key_locks.get(identity, (threading.RLock(), 0))
+            self._key_locks[identity] = (lock, users + 1)
+        try:
+            with lock:
+                yield
+        finally:
+            with self._lock:
+                lock, users = self._key_locks[identity]
+                if users == 1:
+                    del self._key_locks[identity]
+                else:
+                    self._key_locks[identity] = (lock, users - 1)
 
     def invalidate(self, project_root: Path, reason: str = "project-mutated") -> int:
         del reason
@@ -116,6 +152,7 @@ class ReadModelCache:
                 return
             self._entries.clear()
             self._generations.clear()
+            self._epoch += 1
 
 
 def project_revision_fingerprint(project_root: Path) -> str:

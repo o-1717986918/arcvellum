@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { Bot, KeyRound, Orbit, PanelLeft, PanelRight, Settings2, SunMoon } from "lucide-vue-next";
+import { KeyRound, Orbit, PanelLeft, PanelRight, Settings2, SunMoon } from "lucide-vue-next";
 import { useRoute, useRouter } from "vue-router";
+import StudioGlyph from "@/components/StudioGlyph.vue";
 import AgentComposer from "@/features/project-agent/components/AgentComposer.vue";
 import AgentContextInspector from "@/features/project-agent/components/AgentContextInspector.vue";
 import AgentConversation from "@/features/project-agent/components/AgentConversation.vue";
@@ -206,7 +207,10 @@ function openProjectChooser(): void {
 
 function openOrrery(): void {
   if (!sessionProject.value) return;
-  void router.push({ name: "overview", query: { session: agent.session.value?.session_id } });
+  void router.push({ name: "overview", query: {
+    session: agent.session.value?.session_id,
+    ...(activeWorkspace.value ? { workspaceReturn: activeWorkspace.value } : {}),
+  } });
 }
 
 function updateSystemAppearance(event: MediaQueryListEvent): void {
@@ -214,6 +218,7 @@ function updateSystemAppearance(event: MediaQueryListEvent): void {
 }
 
 function openWorkspaceFromQuery(value: unknown): void {
+  if (route.name !== "project-agent") return;
   const requested = Array.isArray(value) ? String(value[0] || "") : String(value || "");
   if (requested === "live") {
     if (openLiveWindow()) syncWorkspaceQuery(null);
@@ -229,8 +234,7 @@ function openWorkspaceFromQuery(value: unknown): void {
   }
   activeWorkspace.value = null;
   workspaceFullscreen.value = false;
-  railOpen.value = false;
-  inspectorOpen.value = false;
+  railOpen.value = inspectorOpen.value = false;
 }
 
 function openWorkspace(next: ProjectAgentWorkspaceId): void {
@@ -259,36 +263,33 @@ function openWorkspace(next: ProjectAgentWorkspaceId): void {
 
 function openLiveWindow(): boolean {
   if (!projectRoot.value) return false;
+  railOpen.value = inspectorOpen.value = false;
   activeWorkspace.value = null;
   workspaceFullscreen.value = false;
   syncWorkspaceQuery(null);
-  if (liveWindow.value) {
-    liveWindow.value.collapsed = false;
-    return true;
-  }
+  if (liveWindow.value) { liveWindow.value.collapsed = false; return true; }
   const size = { width: Math.min(980, Math.max(320, window.innerWidth - 36)), height: Math.min(690, Math.max(420, window.innerHeight - 36)) };
   liveWindow.value = {
     id: "agent:creative-live", kind: "observatory", title: "创作现场",
     position: { left: Math.max(12, Math.round((window.innerWidth - size.width) / 2)), top: Math.max(12, Math.round((window.innerHeight - size.height) / 2)) },
-    size, layer: 70, collapsed: false, workspace_mode: "float",
+    size, layer: 70, collapsed: false, workspace_mode: window.innerWidth <= 760 ? "fullscreen" : "float",
   };
   return true;
 }
 
 function openRehearsalWindow(): boolean {
   if (!projectRoot.value) return false;
+  railOpen.value = false;
+  inspectorOpen.value = false;
   activeWorkspace.value = null;
   workspaceFullscreen.value = false;
   syncWorkspaceQuery(null);
-  if (rehearsalWindow.value) {
-    rehearsalWindow.value.collapsed = false;
-    return true;
-  }
+  if (rehearsalWindow.value) { rehearsalWindow.value.collapsed = false; return true; }
   const size = { width: Math.min(900, Math.max(320, window.innerWidth - 36)), height: Math.min(700, Math.max(420, window.innerHeight - 36)) };
   rehearsalWindow.value = {
     id: "agent:scene-rehearsal", kind: "observatory", title: "推演观察",
     position: { left: Math.max(12, Math.round((window.innerWidth - size.width) / 2)), top: Math.max(12, Math.round((window.innerHeight - size.height) / 2)) },
-    size, layer: 72, collapsed: false, workspace_mode: "float",
+    size, layer: 72, collapsed: false, workspace_mode: window.innerWidth <= 760 ? "fullscreen" : "float",
   };
   return true;
 }
@@ -397,12 +398,12 @@ function recoverAgentOnForeground(): void {
     <main class="pa-workbench">
       <header class="pa-workbench-head">
         <button class="pa-icon-button pa-rail-toggle" title="打开会话" @click="railOpen = !railOpen"><PanelLeft :size="17" /></button>
-        <span class="pa-agent-avatar"><Bot :size="16" /></span>
+        <span class="pa-agent-avatar"><StudioGlyph /></span>
         <div class="pa-conversation-title">
-          <strong>{{ workspace?.title || agent.session.value?.title || '项目 Agent' }}</strong>
-          <small>{{ workspace ? workspace.description : (sessionProject?.title || '先选择作品，开始一段对话') }}</small>
+          <strong>{{ workspace ? (applicationWorkspace ? 'ArcVellum' : projectTitle) : (agent.session.value?.title || '与 ArcVellum 对话') }}</strong>
+          <small>{{ workspace ? (applicationWorkspace ? '工作室偏好与作品管理' : '围绕这部作品继续工作') : (sessionProject?.title || '先选择作品，开始一段对话') }}</small>
         </div>
-        <button v-if="sessionProject && !workspace" class="pa-orrery-entry" data-tour-id="orrery" @click="openOrrery"><Orbit :size="16" />进入 {{ sessionProject.title }} 的星仪</button>
+        <button v-if="sessionProject" class="pa-orrery-entry" data-tour-id="orrery" :title="`进入 ${sessionProject.title} 的星仪`" :aria-label="`进入 ${sessionProject.title} 的星仪`" @click="openOrrery"><Orbit :size="16" /><span>进入星仪</span></button>
         <span v-else class="pa-head-spacer"></span>
         <label class="pa-appearance-select" title="工作台外观">
           <SunMoon :size="16" />
@@ -414,7 +415,7 @@ function recoverAgentOnForeground(): void {
           </select>
         </label>
         <button class="pa-icon-button" title="设置" @click="openWorkspace('settings')"><Settings2 :size="17" /></button>
-        <button v-if="!workspaceFullscreen" class="pa-icon-button pa-inspector-toggle" title="查看作品上下文" @click="inspectorOpen = !inspectorOpen"><PanelRight :size="17" /></button>
+        <button v-if="!workspace && !workspaceFullscreen" class="pa-icon-button pa-inspector-toggle" title="查看作品上下文" @click="inspectorOpen = !inspectorOpen"><PanelRight :size="17" /></button>
       </header>
 
       <AgentSubworkspace
@@ -425,7 +426,7 @@ function recoverAgentOnForeground(): void {
         @fullscreen="workspaceFullscreen = !workspaceFullscreen"
         @navigate="openWorkspace"
       />
-      <template v-else>
+      <div v-show="!workspace" class="pa-conversation-surface" style="display: contents">
         <div v-if="needsModelConnection" class="pa-connection-prompt" role="status"><KeyRound :size="18" /><span><strong>先连接模型，再开始创作</strong><small>阅读演示作品无需密钥；发送消息与创作需要你自己的模型服务。</small></span><button @click="openWorkspace('settings')">配置 API Key</button></div>
         <div v-if="sessionOutsideCatalog" class="pa-connection-prompt" role="status"><Orbit :size="18" /><span><strong>这段对话未关联当前作品库中的单部作品</strong><small>会话会保留原有范围，不会自动转到当前选中的作品。若原作品已移走，可在作品库中重新导入。</small></span><button @click="openProjectChooser">查看作品库</button></div>
         <AgentConversation
@@ -448,7 +449,7 @@ function recoverAgentOnForeground(): void {
           @send="agent.ask"
           @stop="agent.stop"
         />
-      </template>
+      </div>
     </main>
     <AgentContextInspector
       v-if="sessionProject && !workspace"

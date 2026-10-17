@@ -1,24 +1,25 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, useId } from "vue";
 import { Check, ChevronDown, CircleAlert, CircleDashed, LoaderCircle } from "lucide-vue-next";
 import SafeMarkdown from "@/components/SafeMarkdown.vue";
 import type { ProjectAgentTurnActivity } from "@/features/project-agent/types";
 
 const props = defineProps<{ activity: ProjectAgentTurnActivity }>();
-const open = ref(true);
+const open = ref(false);
+const panelId = useId();
 const elapsed = computed(() => Math.max(0, Math.round((Date.now() - props.activity.startedAt) / 1000)));
 </script>
 
 <template>
   <section class="pa-action-group" :data-state="activity.status">
-    <button class="pa-action-head" type="button" :aria-expanded="open" @click="open = !open">
+    <button class="pa-action-head" type="button" :aria-expanded="open" :aria-controls="panelId" @click="open = !open">
       <LoaderCircle v-if="activity.status === 'running' || activity.status === 'queued'" class="pa-spin" :size="15" />
       <CircleAlert v-else-if="activity.status === 'failed'" :size="15" />
       <Check v-else :size="15" />
-      <span><strong>{{ activity.statusLabel }}</strong><small>{{ activity.tools.length }} 项资料活动 · {{ elapsed }} 秒</small></span>
+      <span><strong>{{ activity.statusLabel }}</strong><small>{{ activity.tools.length }} 次工具调用 · {{ elapsed }} 秒</small></span>
       <ChevronDown :size="15" :class="{ rotated: open }" />
     </button>
-    <div v-if="open" class="pa-action-body">
+    <div v-if="open" :id="panelId" class="pa-action-body" role="region" aria-label="工具调用记录" tabindex="0">
       <div v-for="tool in activity.tools" :key="tool.key" class="pa-tool-row">
         <LoaderCircle v-if="tool.status === 'running'" class="pa-spin" :size="13" />
         <CircleAlert v-else-if="tool.status === 'failed'" :size="13" />

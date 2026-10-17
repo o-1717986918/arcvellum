@@ -130,7 +130,7 @@ Engine 是正式文学工程真相的所有者。Studio 只能通过 `src/litera
 | `advisor` | `services/advisorClient.ts` | 顾问对话、流式消息、动作卡 |
 | `orrery` | `services/orreryClient.ts` | 星仪只读数据与交互命令；渲染拆在 camera/layout/curves/nodes/edges/background/animation |
 | `archive` | `services/archiveClient.ts` | 资产档案、修订、候选晋升 |
-| `character-chat` | `services/characterChatClient.ts` | 独立角色卡、已知资料挂载、场景上下文与自然对话；档案室入口或 `/character-chat` |
+| `character-chat` | `services/characterChatClient.ts` | 独立角色卡、已知资料挂载、场景上下文与自然对话；工作台“阅读与创作”常驻入口、档案人物入口及兼容 `/character-chat` 链接，保留主对话实例 |
 | `archaeology` | `services/archaeologyClient.ts` | 已有作品导入与反推 |
 | `style-atelier` | `services/styleAtelierClient.ts`、`services/stylometryClient.ts` | 正式文风工程；计量语料、可调参数版本、实验主创挂载与正文测量 |
 | `delivery` | `services/deliveryClient.ts` | 交付就绪与导出 |

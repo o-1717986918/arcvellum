@@ -62,7 +62,7 @@ function linkPath(sourceId: string, targetId: string): string {
 }
 
 function styleFor(point: { x: number; y: number; visible: boolean }): Record<string, string> {
-  return { transform: `translate3d(${point.x}px, ${point.y}px, 0)`, opacity: point.visible ? "1" : "0" };
+  return { transform: `translate3d(${point.x}px, ${point.y}px, 0) translate(-50%, -50%)`, opacity: point.visible ? "1" : "0" };
 }
 
 function focusStage(stage: CreativeProgressionStage): void {

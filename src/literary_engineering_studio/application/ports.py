@@ -27,7 +27,10 @@ class LiveEventPublisherPort(Protocol):
 
 
 class ReadModelCachePort(Protocol):
-    def get(self, key: str, project_root: Any, builder: Callable[[], Any]) -> Any: ...
+    def get(self, key: str, project_root: Any, builder: Callable[[], Any], *,
+            selector: Callable[[Any], Any] | None = None) -> Any:
+        """Copy the result of a trusted, read-only selector; default selects the full value."""
+        ...
 
     def invalidate(self, project_root: Any, reason: str = "project-mutated") -> int: ...
 

@@ -69,6 +69,7 @@ GENERIC_PLACEHOLDER_FRAGMENTS = (
 def narrative_rhythm_contract(
     root: Path, scene_path: Path, composition_path: Path | None = None, *,
     plan_payload: dict[str, Any] | None = None, scene_text: str | None = None,
+    scene_payload: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Return the formal rhythm/bridge contract for one scene.
 
@@ -81,7 +82,7 @@ def narrative_rhythm_contract(
     root = root.resolve()
     scene_path = scene_path if scene_path.is_absolute() else root / scene_path
     scene_text = scene_text_source(scene_path, scene_text)
-    scene_id, scene_rhythm, scene_bridge = _scene_contract_values(scene_path, scene_text)
+    scene_id, scene_rhythm, scene_bridge = _scene_contract_values(scene_path, scene_text, scene_payload)
     composition_payload = _read_composition_payload(root, scene_id, composition_path)
     plan_payload = plan_payload_source(root / "plot" / "rhythm_plan.json", plan_payload)
     composition_rhythm = _dict_value(composition_payload.get("narrative_rhythm"))
@@ -261,8 +262,9 @@ def _read_composition_payload(root: Path, scene_id: str, composition_path: Path 
 def _scene_contract_values(
     scene_path: Path,
     scene_text: str,
+    scene_payload: dict[str, Any] | None = None,
 ) -> tuple[str, dict[str, Any], dict[str, Any]]:
-    payload = parse_scene_mapping(scene_text, source=scene_path)
+    payload = scene_payload if scene_payload is not None else parse_scene_mapping(scene_text, source=scene_path)
     scene_id = str(payload.get("scene_id") or scene_path.stem).strip()
     return (
         scene_id,

@@ -33,6 +33,7 @@ def build_scene_creator_briefing(
         ("current_continuity", "workflow/continuity/current.json", "mixed_continuity", "full"),
     ]
     sources = [_entry(root, name, path, status, projection) for name, path, status, projection in fields]
+    sources.extend(_referenced_archive_sources(root, brief.scene_id, refs))
     style_sources = [item for item in refs if item.startswith("style/") or "style-profile" in item]
     return {
         "schema": "arcvellum/scene-creator-briefing/v1",
@@ -56,6 +57,19 @@ def build_scene_creator_briefing(
         "source_refs": list(refs),
         "archive_tool": "list/search/read work archive for full context",
     }
+
+
+def _referenced_archive_sources(root: Path, scene_id: str, refs) -> list[dict[str, Any]]:
+    sources = []
+    for path in dict.fromkeys(refs):
+        if path.startswith('characters/'):
+            name, status = 'character_source', 'registered_character_source'
+        elif path == f'scenes/{scene_id}.yaml':
+            name, status = 'current_scene_source', 'scene_definition'
+        else:
+            continue
+        sources.append(_entry(root, name, path, status, 'full'))
+    return sources
 
 
 def _persona_payload(active: dict[str, Any] | None, persona: dict[str, Any]) -> dict[str, Any]:
@@ -109,7 +123,7 @@ def _projection(body: str, kind: str) -> tuple[str, bool]:
             "premise", "central_question", "ending_choice", "narrative_design", "chapters",
         ) if data.get(key)}
         content = json.dumps(selected, ensure_ascii=False)
-        return content[:4500], len(content) <= 4500 and len(selected) == len(data)
+        return content, len(selected) == len(data)
     if kind == "delta":
         data = json.loads(body)
         selected = {key: data.get(key) for key in (

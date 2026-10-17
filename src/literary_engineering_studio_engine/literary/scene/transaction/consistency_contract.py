@@ -37,9 +37,17 @@ def validate_creator_consistency(payload, prior_delta=None):
         entries = delta.get(group, [])
         if not isinstance(entries, list) or any(not isinstance(row, Mapping) for row in entries):
             raise SceneConsistencyError('scene_delta 各变化类别须是提案对象数组。', ['/scene_delta'])
-    _canon_classification(record, delta)
-    _facts(record, payload['prose'], delta)
-    _cumulative_dispositions(record, prior_delta, delta)
+    issues, fields = [], []
+    for validate, args in ((_canon_classification, (record, delta)),
+                           (_facts, (record, payload['prose'], delta)),
+                           (_cumulative_dispositions, (record, prior_delta, delta))):
+        try:
+            validate(*args)
+        except SceneConsistencyError as error:
+            issues.append(str(error))
+            fields.extend(error.fields)
+    if issues:
+        raise SceneConsistencyError('\n'.join(issues), list(dict.fromkeys(fields)))
 
 
 def _canon_classification(record, delta):
@@ -64,9 +72,13 @@ def _facts(record, prose, delta):
         except SceneConsistencyError as error:
             issues.append(str(error))
             fields.extend(error.fields)
+    try:
+        _canon_fact_coverage(facts, delta)
+    except SceneConsistencyError as error:
+        issues.append(str(error))
+        fields.extend(error.fields)
     if issues:
         raise SceneConsistencyError('\n'.join(issues), list(dict.fromkeys(fields)))
-    _canon_fact_coverage(facts, delta)
 
 
 def _canon_fact_coverage(facts, delta):
@@ -160,30 +172,51 @@ def _cumulative_dispositions(record, prior_delta, delta):
                                     ['/consistency_record', '/scene_delta'])
     current = delta_inventory(delta)
     current_ids = {row['proposal_id'] for row in current}
-    seen = set()
+    seen, issues, fields = set(), [], []
     for row in dispositions:
-        _disposition(row, prior, current, current_ids, seen)
+        try:
+            _disposition(row, prior, current, current_ids, seen)
+        except SceneConsistencyError as error:
+            issues.append(str(error))
+            fields.extend(error.fields)
     if seen != set(prior):
-        raise SceneConsistencyError('累计Delta核对遗漏上一稿提案，不能以“之前已登记”跳过写回。',
-                                    ['/consistency_record', '/scene_delta'])
+        missing = [prior[key] for key in sorted(set(prior) - seen)]
+        issues.append('累计Delta核对遗漏上一稿提案，不能以“之前已登记”跳过写回。'
+                      + json.dumps(missing, ensure_ascii=False))
+        fields.append('/consistency_record/prior_delta_dispositions')
+    if issues:
+        raise SceneConsistencyError('\n'.join(issues), list(dict.fromkeys(fields)))
 
 
 def _disposition(row, prior, current, current_ids, seen):
     identifier = row.get('proposal_id') if isinstance(row, dict) else None
     if identifier not in prior or identifier in seen or not _text(row.get('reason')):
-        raise SceneConsistencyError('上一稿提案处置须覆盖准确编号且说明理由。', ['/consistency_record'])
+        raise SceneConsistencyError('上一稿提案处置须覆盖准确编号且说明理由。'
+                                    + json.dumps(row, ensure_ascii=False),
+                                    ['/consistency_record/prior_delta_dispositions'])
     seen.add(identifier)
     action = row.get('action')
     if action == 'withdraw':
         return
     if action == 'retain' and identifier in current_ids:
         return
-    replacement = row.get('replacement') or {}
+    replacement = row.get('replacement')
+    replacement = replacement if isinstance(replacement, Mapping) else {}
     if action == 'replace' and any(all(proposal.get(key) == replacement.get(key)
             for key in ('group', 'target_ref', 'summary')) for proposal in current):
         return
-    raise SceneConsistencyError('保留或替换的提案必须出现在当前累计Delta中，不能只写札记。',
-                                ['/consistency_record', '/scene_delta'])
+    raise SceneConsistencyError('保留或替换的提案必须出现在当前累计Delta中，不能只写札记。'
+        + _retention_diagnostic(prior[identifier], current),
+        ['/consistency_record/prior_delta_dispositions', '/scene_delta'])
+
+
+def _retention_diagnostic(original, current):
+    candidates = [{key: proposal.get(key) for key in ('proposal_id', 'group', 'target_ref', 'summary', 'operation')}
+                  for proposal in current if proposal.get('group') == original.get('group')
+                  and proposal.get('target_ref') == original.get('target_ref')]
+    return ('上一稿提案=' + json.dumps(original, ensure_ascii=False)
+        + '；本稿同组同目标提案=' + json.dumps(candidates, ensure_ascii=False)
+        + '。retain须保持group、target_ref、summary、operation逐字一致；改变提案时由原主创选择replace并指向本稿实际提案，或明确withdraw。')
 
 
 def _text(value):
