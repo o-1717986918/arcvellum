@@ -15,8 +15,9 @@ from .natural_transport_store import extraction_lock, save_json, save_text
 from .natural_transport_task import extraction_task
 from .natural_actor_transport import seed_actor_response, finish_actor_fields
 from .source_repair_budget import SourceRepairBudget
+from .transport_json_closure import recover_object_terminator
 
-PROCESSOR_VERSION = 'cost-recovery-v4.43'
+PROCESSOR_VERSION = 'cost-recovery-v4.44'
 
 class NaturalTransportPipeline:
     def __init__(self, root, system, invoke, prepare, contracts):
@@ -100,7 +101,7 @@ class NaturalTransportPipeline:
         paths = sorted(directory.glob('*.extraction*.md'), key=lambda path: path.stat().st_mtime, reverse=True)
         for path in paths:
             try:
-                raw = _extraction_payload(path.read_text(encoding='utf-8'))
+                raw = _extraction_payload(path.read_text(encoding='utf-8'), record_path=path)
                 if '[NATURAL_TASK_FIELDS_V2]' in self.system:
                     raw = seed_actor_response(raw, answer, kind, context)
                 candidate = decode_reference_delivery(raw, answer)
@@ -128,7 +129,7 @@ class NaturalTransportPipeline:
             prefix=checkpoint.name.removesuffix('.partial.json')
             for extraction in sorted(directory.glob(prefix+'.extraction*.md'),key=lambda p:p.stat().st_mtime,reverse=True):
                 try:
-                    decoded=decode_reference_delivery(_extraction_payload(extraction.read_text(encoding='utf-8')),answer)
+                    decoded=decode_reference_delivery(_extraction_payload(extraction.read_text(encoding='utf-8'),record_path=extraction),answer)
                     candidate=apply_repair(partial,decoded,paths)
                     candidate=_merge_fields(candidate,local_creator_fields(answer,kind,context))
                     candidate=hydrate_local_cards(candidate,local_cards(answer,context))
@@ -175,7 +176,7 @@ class NaturalTransportPipeline:
             suffix = f'.extraction-{sequence}.md'
             save_text(directory / (key + suffix), response)
             try:
-                raw = seed_actor_response(_extraction_payload(response), answer, kind, context)
+                raw = seed_actor_response(_extraction_payload(response, record_path=directory/(key+suffix)), answer, kind, context)
                 decoded = decode_reference_delivery(raw, answer)
                 partial = apply_repair(partial, decoded, paths) if paths else _merge_fields(decoded, fields)
                 partial = hydrate_local_cards(partial, cards)
@@ -252,9 +253,20 @@ def _whole_json(answer, *, embedded=False):
     return None
 
 
-def _extraction_payload(answer):
+def _extraction_payload(answer, *, record_path=None):
     explicit=_whole_json(answer,embedded=True)
-    return explicit if explicit is not None else _answer_payload(answer)
+    if explicit is not None:
+        return explicit
+    try:
+        return _answer_payload(answer)
+    except ValueError:
+        recovered = recover_object_terminator(answer) if record_path is not None else None
+        if recovered is None:
+            raise
+        payload, receipt = recovered
+        save_json(record_path.with_suffix('.syntax-recovery.json'),
+                  {**receipt, 'source_sha256': record_path.parent.name})
+        return payload
 
 
 def _merge_fields(decoded, fields):
