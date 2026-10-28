@@ -16,7 +16,7 @@ from .natural_transport_task import extraction_task
 from .natural_actor_transport import seed_actor_response, finish_actor_fields
 from .source_repair_budget import SourceRepairBudget
 
-PROCESSOR_VERSION = 'cost-recovery-v4.42'
+PROCESSOR_VERSION = 'cost-recovery-v4.43'
 
 class NaturalTransportPipeline:
     def __init__(self, root, system, invoke, prepare, contracts):
@@ -189,6 +189,9 @@ class NaturalTransportPipeline:
                 raise
             except (ValueError, KeyError, TypeError) as error:
                 issue = str(error)
+                if isinstance(error.__cause__, json.JSONDecodeError):
+                    cause = error.__cause__
+                    issue += f'; JSON syntax: {cause.msg} at line {cause.lineno}, column {cause.colno}'
                 save_json(directory / (key + suffix + '.failure.json'), {'issue': issue})
                 partial, paths = _repair_state(partial, fields, error)
                 if partial and not paths:

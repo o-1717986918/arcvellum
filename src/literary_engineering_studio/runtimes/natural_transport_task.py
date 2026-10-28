@@ -32,7 +32,11 @@ def extraction_task(kind, contract, context, index, answer, fields, cards, *, pa
             task['actor_annotation'] = '只标注目标人物本人实际说出的言语、第一人称动作与私人冲动，保留完整回应与原文顺序。'
     if paths:
         task['repair_paths'] = paths
-        task['transport_feedback'] = {'issue': issue, 'request': '补交 repair_paths 对应的字段，成功记录由程序沿用。'}
+    if issue:
+        task['transport_feedback'] = {'issue': issue, 'request':
+            '补交 repair_paths 对应的字段，成功记录由程序沿用。' if paths else
+            '上一份交付不是有效的完整 JSON 对象。只纠正 JSON 技术格式，重新交付完整对象；'
+            '保持原文引用和文学判断不变，不要重写 source_text，不要输出解释。'}
     return _stable_task_order(task)
 
 
