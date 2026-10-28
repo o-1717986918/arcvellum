@@ -3,6 +3,7 @@ import { mkdir, readFile, writeFile, rename, lstat, realpath, rmdir, unlink } fr
 import { join, resolve, relative, isAbsolute } from "node:path";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { RuntimeEventSink } from "./contracts.ts";
+import { replayInputEstimate, type ReplayContextBudget } from "./conversation-context-budget.ts";
 
 const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value) ?? "undefined").digest("hex");
 const record = (value: unknown): value is Record<string, any> => Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -59,7 +60,7 @@ export class ConversationReplay {
   private lease: string;
   private constructor(dir: string, emit: RuntimeEventSink, lease: string,
       ref: ConversationSessionRef, identity: string, prompt: string, seed: AgentMessage[],
-      projected: boolean, limit: number, old: Checkpoint | null) {
+      projected: boolean, budget: ReplayContextBudget, old: Checkpoint | null) {
     this.dir=dir; this.lease=lease;
     let reason="initial";
     let usable=old?.status==="completed" && old.binding===ref.binding && old.identity===identity;
@@ -67,9 +68,11 @@ export class ConversationReplay {
     if (usable && projected && hash(authorizedProjection(seed))!==hash(authorizedProjection(old!.messages))) {
       usable=false; reason="authorized-history-changed";
     }
-    const size=usable ? Buffer.byteLength(JSON.stringify(old!.messages)+prompt,"utf8") : 0;
-    if (usable && size>limit) { usable=false;reason="context-budget"; }
-    if (!usable && Buffer.byteLength(JSON.stringify(seed)+prompt,"utf8") > limit)
+    const appended = usable && !projected ? contextUpdate(old!.snapshot,prompt,old!.generation).prompt : prompt;
+    let estimate = replayInputEstimate(usable ? old!.messages : seed, appended, budget);
+    if (usable && estimate.tokens > budget.maxInputTokens) { usable=false;reason="context-budget"; }
+    if (!usable) estimate = replayInputEstimate(seed,prompt,budget);
+    if (!usable && estimate.tokens > budget.maxInputTokens)
       throw new Error("authorized conversation snapshot exceeds context budget");
     const generation=usable ? old!.generation : (old?.generation ?? 0)+1;
     this.requestSeriesId="arcvellum-series-"+ref.id.slice(0,24)+"-"+generation;
@@ -84,10 +87,14 @@ export class ConversationReplay {
     }
     emit("runner.conversation.replay",{schema:"arcvellum/conversation-replay-receipt/v1",
       request_series_id:this.requestSeriesId,generation,restored:usable,reason,
-      message_count:this.messages.length,local_answer_reused:this.reusedAnswer!==null});
+      message_count:this.messages.length,local_answer_reused:this.reusedAnswer!==null,
+      budget_unit:"tokens",estimated_input_tokens:estimate.tokens,
+      budget_estimate_source:estimate.source,max_input_tokens:budget.maxInputTokens});
   }
   static async open(root: string, workspace: string, ref: ConversationSessionRef, identity: unknown,
-      prompt: string, seed: AgentMessage[], projected: boolean, limit: number, emit: RuntimeEventSink) {
+      prompt: string, seed: AgentMessage[], projected: boolean, budget: ReplayContextBudget, emit: RuntimeEventSink) {
+    if (!Number.isSafeInteger(budget.maxInputTokens) || budget.maxInputTokens <= 0)
+      throw new Error("conversation input token budget must be positive");
     const target=resolve(root);
     if (inside(resolve(workspace),target)) throw new Error("conversation replay must remain outside the work project");
     await mkdir(target,{recursive:true});
@@ -115,7 +122,7 @@ export class ConversationReplay {
         if (!old || old.schema!=="arcvellum/conversation-replay/v1" || !Array.isArray(old.messages) ||
             !Number.isSafeInteger(old.generation)) throw new Error("invalid conversation replay checkpoint");
       }
-      const replay=new ConversationReplay(dir,emit,lease,ref,hash(identity),prompt,seed,projected,limit,old);
+      const replay=new ConversationReplay(dir,emit,lease,ref,hash(identity),prompt,seed,projected,budget,old);
       if (replay.reusedAnswer===null) await replay.persist();
       return replay;
     } catch (error) { await unlink(join(lease,"pid")); await rmdir(lease);throw error; }

@@ -119,7 +119,8 @@ export async function runConversation(
 			systemPrompt, tools: tools.map(({name,description,parameters})=>({name,description,parameters})),
 			roots: sceneCreator ? [sceneCreator.materialRoot, sceneCreatorV2?.archiveRoot, sceneCreatorV2?.scratchRoot] : [],
 			access_scope: options.authPath }, currentPrompt, seed, Boolean(actorTurn),
-		Math.max(1, model.contextWindow - model.maxTokens), emit) : null;
+		{ maxInputTokens: Math.max(1, model.contextWindow - Math.min(options.conversationMaxTokens ?? model.maxTokens, model.maxTokens)),
+			systemPrompt, tools: tools.map(({name,description,parameters})=>({name,description,parameters})) }, emit) : null;
 	delivered.restore(replay?.messages ?? []);
 	const shapeObserver = new RequestShapeObserver(emit, () => ({ session_id: sessionId,
 		request_series_id: replay?.requestSeriesId, model_request_id: eventAdapter.currentModelRequestId, provider, model: modelId }));
