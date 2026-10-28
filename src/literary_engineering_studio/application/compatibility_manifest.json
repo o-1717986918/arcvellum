@@ -2,7 +2,7 @@
   "schema": "arcvellum/compatibility-manifest/v2",
   "manifest_version": 2,
   "current_release": {
-    "version": "0.99.14",
+    "version": "0.99.15",
     "release_line": "0.99",
     "defaults": {
       "agent_runtime": "pi-worker",

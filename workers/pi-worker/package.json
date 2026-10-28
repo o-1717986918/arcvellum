@@ -1,6 +1,6 @@
 {
   "name": "@arcvellum/pi-worker",
-  "version": "0.99.14",
+  "version": "0.99.15",
   "description": "Bounded Pi Agent Core worker embedded in ArcVellum",
   "type": "module",
   "main": "./dist/main.js",

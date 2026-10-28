@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.99.15 — 2026-10-28
+
+- 压缩自然交付的模型可见引用索引，保留原文、摘要及逐字引用校验。
+- 修正私有会话的 token 预算估算与输出预留，避免中文字节数和 token 数混用。
+- 顶层 Agent 增加轻量状态入口，保留所有完整资料与正式创作校验。
+- 修复桌面安全策略下星仪 WebGL 天幕初始化失败的问题。
+
 All notable ArcVellum changes are documented in this file. Detailed release evidence remains under `docs/releases/`.
 
 ## [0.99.14] - 2026-10-17

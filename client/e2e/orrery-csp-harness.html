@@ -1,0 +1,7 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' ws://127.0.0.1:*; img-src 'self' data:" />
+<title>星仪桌面 CSP 回归</title>
+<style>*{box-sizing:border-box}html,body{margin:0;height:100%;background:#eff4f1;color:#203b33;font-family:system-ui,sans-serif}#stage{position:absolute;inset:0}header{position:absolute;z-index:2;top:24px;left:28px;max-width:560px;padding:18px 22px;background:#f7faf7c9;border:1px solid #b5cabe;border-radius:12px;backdrop-filter:blur(8px)}h1{margin:0;font-size:20px}p{font-size:13px;line-height:1.8;margin:8px 0 0}canvas{display:block}</style>
+</head><body><div id="stage"></div><header><h1>星仪 · 桌面安全策略回归</h1><p>禁止动态脚本执行；实际星仪渲染器与天幕。拖动背景调整视角。</p><p id="status" role="status" data-state="loading">正在初始化…</p></header><script type="module" src="/e2e/orrery-csp-harness.ts"></script></body></html>

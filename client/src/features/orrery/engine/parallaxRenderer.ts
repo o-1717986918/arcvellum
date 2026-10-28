@@ -1,3 +1,5 @@
+// Pixi CSP adapter uses static synchronizers without relaxing desktop policy.
+import "pixi.js/unsafe-eval";
 import { Application, Container } from "pixi.js";
 import { Viewport } from "pixi-viewport";
 import type { SpatialLayout, SpatialNarrativeProjection, WorldPoint } from "@/types/spatial";
