@@ -1,6 +1,7 @@
 """Stable technical contracts precede variable original text and repair feedback."""
 from copy import deepcopy
 from .actor_card_transport import actor_card_contract
+from .natural_source_view import model_source_view
 
 
 def extraction_task(kind, contract, context, index, answer, fields, cards, *, paths=None, issue=''):
@@ -15,9 +16,7 @@ def extraction_task(kind, contract, context, index, answer, fields, cards, *, pa
             'context': context,
             'known_cards': {target: {'schema': card['schema'], 'target': target} for target, card in cards.items()},
             'local_fields': list(fields),
-            'source_text': answer,
-            'source_index': {'sha256': index['sha256'], 'blocks': [
-                [row['id'], row['beginning'], row['ending']] for row in index['blocks']]}}
+            **model_source_view(index, answer)}
     task['delivery_guidance'] = _guidance(kind, context)
     if kind=='review':
         task['delivery_guidance']+=' evidence 直接逐字复制 context.prose 的连续正文，不使用 source_index/$source 定位正文；该索引只定位审读意见自身。不要把未明确委托局部编辑的判断登记为 editor_focus。'
