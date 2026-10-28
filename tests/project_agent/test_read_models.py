@@ -75,6 +75,25 @@ class _ReadModels:
 
 
 class ProjectAgentReadModelTests(unittest.TestCase):
+    def test_status_summary_avoids_story_loading_and_preserves_detail_routes(self):
+        class LeanReadModels(_ReadModels):
+            def library(self, root):
+                raise AssertionError('status must not load full story library')
+            def reader(self, root):
+                raise AssertionError('status must not load full manuscript')
+            def workspace(self, root):
+                return {'dashboard': self.dashboard(root), 'autopilot_status': {'run': {
+                    'run_id': 'run-1', 'status': 'running', 'transcript': '大段历史' * 10000}},
+                    'agent_observability': {'active': 1, 'history': '大段事件' * 10000}}
+        dependencies = dependencies_from_read_models(LeanReadModels())
+        value = dependencies.project_overview(_root(), {'focus': 'status'})
+        self.assertEqual(value['run'], {'run_id': 'run-1', 'status': 'running'})
+        self.assertEqual(value['progress']['overall_percent'], 36.5)
+        self.assertEqual(value['classification'], 'running')
+        self.assertEqual(value['details']['diagnosis'], 'project_diagnose')
+        self.assertLess(len(json.dumps(value, ensure_ascii=False)), 4000)
+        self.assertNotIn('story_brief', value)
+
     def test_bound_session_catalog_does_not_switch_to_the_last_opened_other_work(self):
         with tempfile.TemporaryDirectory() as temporary:
             root=Path(temporary)/'bound';root.mkdir();(root/'project.yaml').write_text('title: 同名作品\n',encoding='utf-8')

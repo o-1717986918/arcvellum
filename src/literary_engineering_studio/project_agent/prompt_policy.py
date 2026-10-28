@@ -81,7 +81,12 @@ def system_prompt(
         else prompt_layer_spec(identifier).default_text)
     template = "project_agent.system.write.protocol" if write_enabled else "project_agent.system.read.protocol"
     base = _render_project(template, (name, str(persona.get("prompt") or "").strip(), direction), natural, prompt_reader)
-    return base + ("\n\n" + creator_persona_guidance if creator_persona_guidance else "")
+    status_guidance = (
+        '需要核对运行状态时，先调用 project_overview(focus="status") 获取状态摘要；'
+        '按摘要指向的工具读取完整决策、档案、正文或控制项，避免为同一问题反复全量读取概况、运行观察和诊断。'
+        '状态摘要不能替代文学判断所需的原文、审查证据或正式 Gate。'
+    )
+    return base + "\n\n" + status_guidance + ("\n\n" + creator_persona_guidance if creator_persona_guidance else "")
 
 
 def delegated_goal_followup_prompt(

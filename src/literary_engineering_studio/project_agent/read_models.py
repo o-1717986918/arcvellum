@@ -12,6 +12,7 @@ from .contracts import ProjectAgentDependencies
 from .formal_output_state import has_unmigrated_formal_work
 from .scope import registered_work_rows, work_id_for_root, work_reference
 from .story_brief import build_story_brief
+from .status_snapshot import status_snapshot
 
 
 def dependencies_from_read_models(
@@ -72,10 +73,12 @@ def dependencies_from_read_models(
         raise ValueError("Project Agent needs a work_id because this conversation is not bound to a registered work")
 
     def overview(root: Path, arguments: Mapping[str, Any]) -> Mapping[str, Any]:
+        focus = str(arguments.get("focus") or "")
+        if focus == "status":
+            return _fit_payload(status_snapshot(diagnostic_payload(root, arguments), read_models.progress(root)))
         dashboard = read_models.dashboard(root)
         library = read_models.library(root)
         reader = read_models.reader(root)
-        focus = str(arguments.get("focus") or "")
         return _fit_payload({
             "work_id": work_id_for_root(root),
             "focus": focus,
@@ -137,6 +140,9 @@ def dependencies_from_read_models(
         return _fit_payload(payload)
 
     def diagnose(root: Path, arguments: Mapping[str, Any]) -> Mapping[str, Any]:
+        return _fit_payload(diagnostic_payload(root, arguments))
+
+    def diagnostic_payload(root: Path, arguments: Mapping[str, Any]) -> Mapping[str, Any]:
         workspace = read_models.workspace(root)
         dashboard = _mapping(workspace.get("dashboard")) or read_models.dashboard(root)
         autopilot = _mapping(workspace.get("autopilot_status"))
@@ -146,7 +152,7 @@ def dependencies_from_read_models(
         decisions = _items(_mapping(decision_payload).get("choices"), 12)
         classification, recoverable, recommendation = _diagnosis(run, decisions, agent_status)
         plan_alignment = _plan_source_alignment(root)
-        return _fit_payload({
+        return {
             "work_id": work_id_for_root(root),
             "focus": str(arguments.get("focus") or ""),
             "classification": classification,
@@ -159,7 +165,7 @@ def dependencies_from_read_models(
             "next_actions": _items(dashboard.get("next_actions"), 12),
             "route_audits": _items(dashboard.get("route_audits"), 12),
             "agents": agent_status,
-        })
+        }
 
     def read_actor_personas(root: Path, arguments: Mapping[str, Any]) -> Mapping[str, Any]:
         if actor_personas is None:
