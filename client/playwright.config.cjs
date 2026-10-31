@@ -50,6 +50,9 @@ module.exports = defineConfig({
       env: {
         ...process.env,
         LES_DATA_ROOT: path.join(visualRoot, "data"),
+        LES_CONFIG_PATH: path.join(visualRoot, "config.json"),
+        LES_RUNS_ROOT: path.join(visualRoot, "runs"),
+        LES_PROJECTS_ROOT: path.join(visualRoot, "library"),
         // A developer may have another ArcVellum checkout installed in editable
         // mode. Visual acceptance must always exercise this exact worktree.
         PYTHONPATH: repositoryPythonPath,

@@ -126,7 +126,7 @@ export const useAppStore = defineStore("app", () => {
     if (!currentProjectPath.value) return;
     const requestedRoot = currentProjectPath.value;
     if (workspaceRefresh && workspaceRefreshRoot === requestedRoot) {
-      await workspaceRefresh;
+      await workspaceRefresh.catch(() => undefined);
       return;
     }
     const pending = loadWorkspaceSnapshot(requestedRoot);
@@ -134,6 +134,8 @@ export const useAppStore = defineStore("app", () => {
     workspaceRefreshRoot = requestedRoot;
     try {
       await pending;
+    } catch (cause) {
+      if (requestedRoot === currentProjectPath.value) error.value = friendlyError(cause, "作品状态暂未更新，请重新连接。");
     } finally {
       if (workspaceRefresh === pending) {
         workspaceRefresh = null;
@@ -177,8 +179,10 @@ export const useAppStore = defineStore("app", () => {
   }
 
   async function loadAutopilotStatus(): Promise<void> {
-    if (!currentProjectPath.value) return;
-    autopilotStatus.value = await workflowClient.autopilotStatus(currentProjectPath.value);
+    const root = currentProjectPath.value;
+    if (!root) return;
+    const snapshot = await workflowClient.autopilotStatus(root);
+    if (root === currentProjectPath.value) autopilotStatus.value = snapshot;
   }
 
   function setAutopilotStatus(value: AutopilotStatus | null): void {
@@ -191,33 +195,45 @@ export const useAppStore = defineStore("app", () => {
   }
 
   async function loadDashboard(): Promise<void> {
-    if (!currentProjectPath.value) return;
-    dashboard.value = await workflowClient.dashboard(currentProjectPath.value);
+    const root = currentProjectPath.value;
+    if (!root) return;
+    const snapshot = await workflowClient.dashboard(root);
+    if (root === currentProjectPath.value) dashboard.value = snapshot;
   }
 
   async function loadLibrary(): Promise<void> {
-    if (!currentProjectPath.value) return;
-    library.value = await deliveryClient.library(currentProjectPath.value);
+    const root = currentProjectPath.value;
+    if (!root) return;
+    const snapshot = await deliveryClient.library(root);
+    if (root === currentProjectPath.value) library.value = snapshot;
   }
 
   async function loadDelivery(): Promise<void> {
-    if (!currentProjectPath.value) return;
-    delivery.value = await deliveryClient.delivery(currentProjectPath.value);
+    const root = currentProjectPath.value;
+    if (!root) return;
+    const snapshot = await deliveryClient.delivery(root);
+    if (root === currentProjectPath.value) delivery.value = snapshot;
   }
 
   async function loadReaderManifest(): Promise<void> {
-    if (!currentProjectPath.value) return;
-    readerManifest.value = await deliveryClient.readerManifest(currentProjectPath.value);
+    const root = currentProjectPath.value;
+    if (!root) return;
+    const snapshot = await deliveryClient.readerManifest(root);
+    if (root === currentProjectPath.value) readerManifest.value = snapshot;
   }
 
   async function loadProjectProgress(): Promise<void> {
-    if (!currentProjectPath.value) return;
-    projectProgress.value = await deliveryClient.progress(currentProjectPath.value);
+    const root = currentProjectPath.value;
+    if (!root) return;
+    const snapshot = await deliveryClient.progress(root);
+    if (root === currentProjectPath.value) projectProgress.value = snapshot;
   }
 
   async function loadAgentObservability(): Promise<void> {
-    if (!currentProjectPath.value) return;
-    applyAgentObservability(await workflowClient.observability(currentProjectPath.value));
+    const root = currentProjectPath.value;
+    if (!root) return;
+    const snapshot = await workflowClient.observability(root);
+    if (root === currentProjectPath.value) applyAgentObservability(snapshot);
   }
 
   function applyAgentObservability(snapshot: AgentObservability | null): void {
@@ -231,7 +247,9 @@ export const useAppStore = defineStore("app", () => {
     const summary = readerManifest.value?.units.find((item) => item.unit_id === unitId);
     const cached = readerBodies.value[unitId];
     if (cached && summary && cached.hash === summary.content_hash) return cached.body;
-    const response = await deliveryClient.readerUnit(currentProjectPath.value, unitId);
+    const root = currentProjectPath.value;
+    const response = await deliveryClient.readerUnit(root, unitId);
+    if (root !== currentProjectPath.value) return response.body;
     readerBodies.value = {
       ...readerBodies.value,
       [unitId]: { hash: response.unit.content_hash, body: response.body },
@@ -308,6 +326,17 @@ export const useAppStore = defineStore("app", () => {
     notice.value = "";
   }
 
+  async function recheckConnection(): Promise<void> {
+    error.value = "";
+    try {
+      if (!initialized.value) { await initialize(); return; }
+      bootstrap.value = await settingsClient.bootstrap();
+      await loadModelCatalog(true);
+      await refreshWorkspace();
+      if (!error.value) notice.value = "连接与作品状态已更新。";
+    } catch (cause) { error.value = friendlyError(cause, "本地服务暂未连接，请重试。"); }
+  }
+
   function reportStartupError(message: string): void {
     error.value = message.trim() || "本地创作服务没有成功启动，请重试。";
     loading.value = false;
@@ -354,6 +383,7 @@ export const useAppStore = defineStore("app", () => {
     loadModelCatalog,
     applyModelCatalog,
     clearMessages,
+    recheckConnection,
     reportStartupError,
     stopProjectStreams,
   };

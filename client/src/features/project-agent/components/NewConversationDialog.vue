@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
+import { useDialogFocus } from "@/components/useDialogFocus";
 import { BookOpenText, FolderPlus, X } from "lucide-vue-next";
 import type { ProjectSummary } from "@/types/api";
 
@@ -15,6 +16,11 @@ const duplicateTitles = computed(() => {
   for (const project of props.projects) counts.set(project.title, (counts.get(project.title) || 0) + 1);
   return new Set([...counts].filter(([, count]) => count > 1).map(([title]) => title));
 });
+const panel = ref<HTMLElement | null>(null);
+const query = ref("");
+const visibleProjects = computed(() => props.projects.filter(project =>
+  `${project.title} ${project.premise || ""}`.toLocaleLowerCase().includes(query.value.trim().toLocaleLowerCase())));
+const trapFocus = useDialogFocus(panel, () => emit("close"));
 
 function projectMeta(project: ProjectSummary): string {
   const kind = project.genre || project.work_type || "文学作品";
@@ -28,16 +34,18 @@ function projectMeta(project: ProjectSummary): string {
 
 <template>
   <div class="pa-dialog-backdrop" @click.self="emit('close')">
-    <section class="pa-new-conversation-dialog" role="dialog" aria-modal="true" aria-labelledby="new-conversation-title">
+    <section ref="panel" class="pa-new-conversation-dialog" role="dialog" aria-modal="true" aria-labelledby="new-conversation-title" tabindex="-1" @keydown="trapFocus">
       <header>
         <div><span>新对话</span><h2 id="new-conversation-title">这次想写哪部作品？</h2><p>对话会归属于你选择的作品。之后从会话里进入它的星仪、正文和档案。</p></div>
         <button class="pa-icon-button" title="关闭" @click="emit('close')"><X :size="18" /></button>
       </header>
+      <label v-if="projects.length > 4" class="pa-project-search"><span>查找作品</span><input v-model="query" placeholder="作品名称或故事梗概" /></label>
       <div class="pa-dialog-projects">
-        <button v-for="project in projects" :key="project.path" :disabled="busy" @click="emit('choose', project)">
+        <button v-for="project in visibleProjects" :key="project.path" :disabled="busy" @click="emit('choose', project)">
           <BookOpenText :size="18" /><span><strong>{{ project.title }}</strong><small>{{ project.premise || (project.read_only ? '只读演示作品' : '继续这部作品') }}</small><small class="pa-dialog-project-meta">{{ projectMeta(project) }}</small></span>
         </button>
         <p v-if="!projects.length">还没有作品。先建立一部作品，就可以开始专属对话。</p>
+        <p v-else-if="!visibleProjects.length">没有找到这部作品，试试其他名称。</p>
       </div>
       <footer><button class="pa-dialog-create" @click="emit('createProject')"><FolderPlus :size="16" />建立或导入作品</button></footer>
     </section>

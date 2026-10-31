@@ -7,7 +7,7 @@
   --archive-green: var(--pa-green); --archive-brass: var(--pa-ochre); --archive-red: var(--pa-red);
   height: 100%; min-height: 100%; overflow: hidden; font-size: 13px; line-height: 1.65;
   grid-template-rows: max-content max-content auto minmax(0,1fr);
-  background: color-mix(in srgb,var(--pa-surface) 82%,transparent); color-scheme: light;
+  background: color-mix(in srgb,var(--pa-surface) 28%,transparent); color-scheme: light;
   scrollbar-color: var(--pa-line-strong) transparent;
 }
 .studio-shell :is(.pa-theme-dark,.pa-theme-contrast) .pa-subworkspace[data-workspace="archive"] .archive-ide-view { color-scheme: dark; }

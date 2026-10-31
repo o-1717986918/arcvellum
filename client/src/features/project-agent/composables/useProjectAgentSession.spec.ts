@@ -6,6 +6,31 @@ import type { ProjectAgentSession } from "@/features/project-agent/types";
 import { useProjectAgentSession } from "./useProjectAgentSession";
 
 describe("useProjectAgentSession", () => {
+  it.each([["completed", "complete", "回答完成"], ["cancelled", "cancelled", "已停止回答"], ["runtime_failed", "failed", "回答未完成"]])(
+    "presents the actual terminal state %s without turning interruptions into success", async (result, expected, label) => {
+      const client = fakeClient({ observeJob: vi.fn(async (_id, _signal, consume) => {
+        consume({ event: "project_agent.result", cursor: 1, data: { status: result, answer: "" } });
+      }) });
+      const { wrapper, agent } = mountSession(client);
+      await agent.createSession();
+      const accepted = vi.fn();
+      await agent.ask("继续", accepted);
+      expect(accepted).toHaveBeenCalledOnce();
+      expect(agent.activity.value?.status).toBe(expected);
+      expect(agent.activity.value?.statusLabel).toBe(label);
+      wrapper.unmount();
+    },
+  );
+  it("keeps a rejected submission unacknowledged so the composer can retain its draft", async () => {
+    const client = fakeClient({ startTurn: vi.fn().mockRejectedValue(new Error("offline")) });
+    const { wrapper, agent } = mountSession(client);
+    await agent.createSession();
+    const accepted = vi.fn();
+    await agent.ask("草稿不能丢", accepted);
+    expect(accepted).not.toHaveBeenCalled();
+    expect(agent.activity.value?.status).toBe("failed");
+    wrapper.unmount();
+  });
   it("joins the durable job stream and restores the persisted conversation", async () => {
     let publish: Parameters<ProjectAgentClient["observeJob"]>[2] | undefined;
     let finish: (() => void) | undefined;

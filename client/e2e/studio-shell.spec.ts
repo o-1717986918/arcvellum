@@ -204,9 +204,9 @@ test("character dialogue is discoverable and returns to its origin without losin
 
     await navigate(page, session, "archive");
     if (width === 390) await page.getByRole("button", { name: "资料索引", exact: true }).click();
-    const character = page.locator(".archive-tree-scroll").getByRole("button", { name: /character:character_002/ });
-    await character.click();
+    const character = page.locator(".archive-tree-scroll").getByRole("button", { name: /character:character_002/, includeHidden: true });
     const name = await character.locator("strong").innerText();
+    await character.click();
     const archiveEntry = page.getByRole("link", { name: "与角色交谈", exact: true });
     await expect.poll(async () => new URLSearchParams((await archiveEntry.getAttribute("href"))!.split("?")[1]).get("target")).toBe(name);
     await archiveEntry.click();

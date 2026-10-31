@@ -22,5 +22,6 @@ import "./styles/studioArchive.css";
 import "./styles/studioCharacter.css";
 import "./styles/studioResponsive.css";
 import "./styles/studioMotion.css";
+import "./styles/studioExperience.css";
 
 createApp(App).use(createPinia()).use(router).mount("#app");

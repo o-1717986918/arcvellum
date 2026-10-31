@@ -1,14 +1,21 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { onErrorCaptured, ref, watch } from "vue";
 import { ArrowLeft, Maximize2, Minimize2, RefreshCw } from "lucide-vue-next";
 import type { ProjectAgentWorkspaceDescriptor, ProjectAgentWorkspaceId } from "@/workspaces/projectAgentWorkspaceRegistry";
 
-defineProps<{
+const props = defineProps<{
   workspace: ProjectAgentWorkspaceDescriptor;
   fullscreen: boolean;
 }>();
 const emit = defineEmits<{ close: []; fullscreen: []; navigate: [workspace: ProjectAgentWorkspaceId] }>();
 const revision = ref(0);
+const loadError = ref("");
+onErrorCaptured((cause) => {
+  loadError.value = cause instanceof Error ? cause.message : "工作区暂时没有打开。";
+  return false;
+});
+watch(() => props.workspace.id, () => { loadError.value = ""; });
+function reload(): void { loadError.value = ""; revision.value += 1; }
 </script>
 
 <template>
@@ -20,7 +27,7 @@ const revision = ref(0);
         <strong>{{ workspace.title }}</strong>
       </div>
       <div class="pa-subworkspace-actions">
-        <button class="pa-icon-button" type="button" title="重新读取当前工作区" @click="revision += 1"><RefreshCw :size="16" /></button>
+        <button class="pa-icon-button" type="button" title="重新读取当前工作区" @click="reload"><RefreshCw :size="16" /></button>
         <button class="pa-icon-button" type="button" :title="fullscreen ? '退出全屏' : '全屏查看'" @click="emit('fullscreen')">
           <Minimize2 v-if="fullscreen" :size="16" />
           <Maximize2 v-else :size="16" />
@@ -28,7 +35,8 @@ const revision = ref(0);
       </div>
     </header>
     <div class="pa-subworkspace-scroll">
-      <Suspense>
+      <div v-if="loadError" class="pa-workspace-error" role="alert"><strong>{{ workspace.title }}暂时没有打开</strong><p>{{ loadError }}</p><button class="primary-button" @click="reload">重新打开</button><button class="secondary-button" @click="emit('close')">返回对话</button></div>
+      <Suspense v-else>
         <KeepAlive :max="9">
           <component
             :is="workspace.component"

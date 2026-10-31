@@ -1,13 +1,21 @@
 <script setup lang="ts">
-import { computed, ref, useId } from "vue";
-import { Check, ChevronDown, CircleAlert, CircleDashed, LoaderCircle } from "lucide-vue-next";
+import { computed, onBeforeUnmount, ref, useId, watch } from "vue";
+import { Check, ChevronDown, CircleAlert, CircleDashed, LoaderCircle, Square } from "lucide-vue-next";
 import SafeMarkdown from "@/components/SafeMarkdown.vue";
 import type { ProjectAgentTurnActivity } from "@/features/project-agent/types";
 
 const props = defineProps<{ activity: ProjectAgentTurnActivity }>();
 const open = ref(false);
 const panelId = useId();
-const elapsed = computed(() => Math.max(0, Math.round((Date.now() - props.activity.startedAt) / 1000)));
+const now = ref(Date.now());
+const elapsed = computed(() => Math.max(0, Math.round((now.value - props.activity.startedAt) / 1000)));
+let timer = 0;
+watch(() => [props.activity.status, props.activity.startedAt], () => {
+  window.clearInterval(timer);
+  now.value = Date.now();
+  if (["queued", "running"].includes(props.activity.status)) timer = window.setInterval(() => { now.value = Date.now(); }, 1000);
+}, { immediate: true });
+onBeforeUnmount(() => window.clearInterval(timer));
 </script>
 
 <template>
@@ -15,6 +23,7 @@ const elapsed = computed(() => Math.max(0, Math.round((Date.now() - props.activi
     <button class="pa-action-head" type="button" :aria-expanded="open" :aria-controls="panelId" @click="open = !open">
       <LoaderCircle v-if="activity.status === 'running' || activity.status === 'queued'" class="pa-spin" :size="15" />
       <CircleAlert v-else-if="activity.status === 'failed'" :size="15" />
+      <Square v-else-if="activity.status === 'cancelled'" :size="14" />
       <Check v-else :size="15" />
       <span><strong>{{ activity.statusLabel }}</strong><small>{{ activity.tools.length }} 次工具调用 · {{ elapsed }} 秒</small></span>
       <ChevronDown :size="15" :class="{ rotated: open }" />
@@ -23,6 +32,7 @@ const elapsed = computed(() => Math.max(0, Math.round((Date.now() - props.activi
       <div v-for="tool in activity.tools" :key="tool.key" class="pa-tool-row">
         <LoaderCircle v-if="tool.status === 'running'" class="pa-spin" :size="13" />
         <CircleAlert v-else-if="tool.status === 'failed'" :size="13" />
+        <Square v-else-if="tool.status === 'cancelled'" :size="12" />
         <Check v-else :size="13" />
         <span><strong>{{ tool.label }}</strong><small>{{ tool.name }}</small></span>
       </div>

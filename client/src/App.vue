@@ -2,6 +2,7 @@
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { RouterView, useRoute, useRouter } from "vue-router";
 import StartupScene from "@/components/StartupScene.vue";
+import ApplicationFeedback from "@/components/ApplicationFeedback.vue";
 import OnboardingTour from "@/components/OnboardingTour.vue";
 import { projectsClient } from "@/features/projects/services/projectsClient";
 import { workflowClient } from "@/features/workflow/services/workflowClient";
@@ -132,10 +133,7 @@ async function waitForBackendReady(): Promise<void> {
 
   <div class="app-shell" :class="{ 'startup-obscured': showStartup, 'orrery-mode': route.name === 'overview', 'agent-stage-mode': route.name === 'project-agent' }">
     <main class="workspace">
-      <div v-if="store.error" class="global-message danger" role="alert">
-        <span>{{ store.error }}</span>
-        <button @click="store.clearMessages">关闭</button>
-      </div>
+      <ApplicationFeedback v-if="!showStartup" />
       <RouterView v-slot="{ Component }">
         <Transition name="page" mode="out-in">
           <component :is="Component" />

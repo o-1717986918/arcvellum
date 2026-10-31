@@ -36,13 +36,14 @@ export function useProjectAgentSession(options: ProjectAgentSessionOptions) {
   const sending = ref(false);
   const activity = ref<ProjectAgentTurnActivity | null>(null);
   const transientMessages = ref<ProjectAgentMessage[]>([]);
+  const messageLimit = ref(MAX_RENDERED_MESSAGES);
   const messages = computed(() => {
     const source = transientMessages.value.length ? transientMessages.value : session.value?.messages || [];
-    return source.slice(-MAX_RENDERED_MESSAGES);
+    return source.slice(-messageLimit.value);
   });
   const omittedMessageCount = computed(() => {
     const count = transientMessages.value.length || session.value?.messages.length || 0;
-    return Math.max(0, count - MAX_RENDERED_MESSAGES);
+    return Math.max(0, count - messageLimit.value);
   });
   let eventController: AbortController | null = null;
   let observedJobId = "";
@@ -86,6 +87,7 @@ export function useProjectAgentSession(options: ProjectAgentSessionOptions) {
       if (revision !== selectionRevision) return null;
       sessions.value = [sessionSummary(created), ...sessions.value.filter((item) => item.session_id !== created.session_id)];
       session.value = created;
+      messageLimit.value = MAX_RENDERED_MESSAGES;
       await options.onSessionOpened?.(created);
       transientMessages.value = [];
       activity.value = null;
@@ -107,6 +109,7 @@ export function useProjectAgentSession(options: ProjectAgentSessionOptions) {
       if (revision !== selectionRevision) return null;
       if (opened.session_id !== sessionId) throw new Error("会话响应与所选对话不一致");
       session.value = opened;
+      messageLimit.value = MAX_RENDERED_MESSAGES;
       await options.onSessionOpened?.(opened);
       if (revision !== selectionRevision) return null;
       transientMessages.value = [];
@@ -120,7 +123,7 @@ export function useProjectAgentSession(options: ProjectAgentSessionOptions) {
     }
   }
 
-  async function ask(message: string): Promise<void> {
+  async function ask(message: string, accepted?: () => void): Promise<void> {
     const value = message.trim();
     if (!value || sending.value) return;
     const active = session.value;
@@ -136,6 +139,7 @@ export function useProjectAgentSession(options: ProjectAgentSessionOptions) {
     await notifyRendered();
     try {
       const turn = await client.startTurn(active.session_id, value);
+      accepted?.();
       activity.value = {
         ...emptyActivity(),
         jobId: turn.job_id,
@@ -175,6 +179,12 @@ export function useProjectAgentSession(options: ProjectAgentSessionOptions) {
       const restored = await client.readSession(sessionId);
       if (revision !== selectionRevision || session.value?.session_id !== sessionId) return false;
       session.value = restored;
+      if (!restored.active_turn?.job_id) {
+        transientMessages.value = [];
+        activity.value = null;
+        await notifyRendered();
+        return true;
+      }
       return await recoverActiveTurn(restored.active_turn);
     } catch (cause) {
       options.onError?.(cause, "项目 Agent 暂时无法恢复进行中的回答。");
@@ -267,14 +277,21 @@ export function useProjectAgentSession(options: ProjectAgentSessionOptions) {
       if (answer) answer.payload.text = "";
       patchActivity({ status: "running", statusLabel: "正在核验最终结果" });
     } else if (value.event === "project_agent.result") {
-      flushDelta();
-      const answer = currentTransientAnswer();
-      if (answer) answer.payload.text = String(data.answer || answer.payload.text || "");
-      patchActivity({ status: "complete", statusLabel: "回答完成" });
+      applyTurnResult(data);
     } else if (value.event === "project_agent.error") {
       patchActivity({ status: "failed", statusLabel: String(data.message || "回答失败") });
     }
     void notifyRendered();
+  }
+
+  function applyTurnResult(data: Record<string, unknown>): void {
+    flushDelta();
+    const answer = currentTransientAnswer();
+    if (answer) answer.payload.text = String(data.answer || answer.payload.text || "");
+    const state = String(data.status || "completed");
+    const status = state === "completed" ? "complete" : state === "cancelled" ? "cancelled" : "failed";
+    patchActivity({ status, statusLabel: status === "complete" ? "回答完成" : status === "cancelled" ? "已停止回答" : "回答未完成" });
+    if (status !== "complete") activity.value?.tools.forEach(tool => { if (tool.status === "running") tool.status = "cancelled"; });
   }
 
   function chapterLabel(value: string): string {
@@ -338,6 +355,7 @@ export function useProjectAgentSession(options: ProjectAgentSessionOptions) {
     observedJobId = "";
     if (!preserveSessions) sessions.value = [];
     session.value = null;
+    messageLimit.value = MAX_RENDERED_MESSAGES;
     transientMessages.value = [];
     activity.value = null;
     loading.value = false;
@@ -385,6 +403,7 @@ export function useProjectAgentSession(options: ProjectAgentSessionOptions) {
     load,
     loading,
     messages,
+    showEarlier: () => { messageLimit.value += MAX_RENDERED_MESSAGES; },
     omittedMessageCount,
     openSession,
     recover,

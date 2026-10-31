@@ -66,13 +66,13 @@ export interface ProjectAgentToolActivity {
   key: string;
   name: string;
   label: string;
-  status: "running" | "complete" | "failed";
+  status: "running" | "complete" | "failed" | "cancelled";
 }
 
 export interface ProjectAgentTurnActivity {
   jobId: string;
   turnId: string;
-  status: "queued" | "running" | "complete" | "failed";
+  status: "queued" | "running" | "complete" | "failed" | "cancelled";
   statusLabel: string;
   reasoning: string;
   tools: ProjectAgentToolActivity[];

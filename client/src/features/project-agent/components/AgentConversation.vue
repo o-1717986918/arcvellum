@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from "vue";
-import { ArrowUpRight, BookOpenText, CircleDashed, Radio, Search, Waypoints } from "lucide-vue-next";
+import { ArrowDown, ArrowUpRight, BookOpenText, Check, CircleDashed, Copy, PencilLine, Radio, Search, Waypoints } from "lucide-vue-next";
 import StudioGlyph from "@/components/StudioGlyph.vue";
 import SafeMarkdown from "@/components/SafeMarkdown.vue";
 import AgentActionGroup from "@/features/project-agent/components/AgentActionGroup.vue";
@@ -12,12 +12,44 @@ const props = defineProps<{
   loading: boolean;
   omittedCount: number;
   hasSession?: boolean;
+  sessionId?: string;
   creativeStatus?: string;
   creativeTask?: string;
   creativePhase?: "active" | "waiting" | "attention" | null;
 }>();
-const emit = defineEmits<{ starter: [message: string]; newConversation: []; openLive: [] }>();
+const emit = defineEmits<{ starter: [message: string]; newConversation: []; openLive: []; earlier: []; edit: [message: string]; recover: [] }>();
 const scroller = ref<HTMLElement | null>(null);
+const following = ref(true);
+const unread = ref(false);
+const copied = ref(-1);
+const copyNotice = ref("");
+let previousHeight = 0;
+
+function trackScroll(): void {
+  const el = scroller.value;
+  if (!el) return;
+  following.value = el.scrollHeight - el.scrollTop - el.clientHeight < 90;
+  if (following.value) unread.value = false;
+}
+
+function jumpToLatest(): void {
+  following.value = true;
+  unread.value = false;
+  scroller.value?.scrollTo({ top: scroller.value.scrollHeight, behavior: "instant" });
+}
+
+function earlier(): void {
+  previousHeight = scroller.value?.scrollHeight || 0;
+  emit("earlier");
+}
+
+async function copyMessage(message: ProjectAgentMessage, index: number): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(messageText(message));
+    copied.value = index;
+    copyNotice.value = "已复制消息";
+  } catch { copyNotice.value = "复制没有完成，可以选择文字后复制。"; }
+}
 const activityMessageIndex = computed(() => {
   const activity = props.activity;
   if (!activity) return -1;
@@ -33,11 +65,23 @@ const activityMessageIndex = computed(() => {
     ? lastAssistant : -1;
 });
 
+watch(() => props.sessionId, async () => {
+  following.value = true;
+  unread.value = false;
+  copied.value = -1;
+  await nextTick();
+  jumpToLatest();
+});
+
 watch(
   () => [props.messages.length, props.messages.at(-1)?.payload.text, props.activity?.tools.length],
   async () => {
     await nextTick();
-    scroller.value?.scrollTo({ top: scroller.value.scrollHeight, behavior: "smooth" });
+    if (previousHeight && scroller.value) {
+      scroller.value.scrollTop += scroller.value.scrollHeight - previousHeight;
+      previousHeight = 0;
+    } else if (following.value) jumpToLatest();
+    else unread.value = true;
   },
 );
 
@@ -47,10 +91,11 @@ function messageText(message: ProjectAgentMessage): string {
 </script>
 
 <template>
-  <div ref="scroller" class="pa-conversation">
+  <div class="pa-conversation-frame">
+  <div ref="scroller" class="pa-conversation" aria-label="作品对话" @scroll.passive="trackScroll">
     <div class="pa-conversation-inner">
       <div class="pa-manuscript-spine" aria-hidden="true"></div>
-      <p v-if="omittedCount" class="pa-history-note">较早的 {{ omittedCount }} 条消息已收起，完整记录仍保存在当前会话中。</p>
+      <button v-if="omittedCount" class="pa-history-note pa-history-more" @click="earlier">查看较早的对话 · 还有 {{ omittedCount }} 条</button>
       <section v-if="!messages.length && !loading" class="pa-welcome">
         <div class="pa-welcome-signature"><StudioGlyph class="pa-welcome-mark" /><span>ArcVellum <i>与你一起，让作品向前。</i></span></div>
         <h1>{{ hasSession ? '从这部作品继续。' : '选择一部作品，开始交谈。' }}</h1>
@@ -69,16 +114,20 @@ function messageText(message: ProjectAgentMessage): string {
         <article v-if="message.role === 'user'" class="pa-turn pa-turn-user">
           <header><strong>你</strong><time v-if="message.at">{{ new Date(message.at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) }}</time></header>
           <p>{{ messageText(message) }}</p>
+          <div class="pa-message-actions"><button title="重新编辑这条消息" @click="emit('edit', messageText(message))"><PencilLine :size="13" />重新编辑</button></div>
         </article>
         <article v-else-if="message.role === 'assistant'" class="pa-turn pa-turn-agent">
           <header><span class="pa-mini-mark"><BookOpenText :size="13" /></span><strong>ArcVellum</strong><time v-if="message.at">{{ new Date(message.at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) }}</time></header>
           <AgentActionGroup v-if="activity && activityMessageIndex === index" :key="activity.jobId || activity.turnId || 'pending'" :activity="activity" />
           <SafeMarkdown v-if="messageText(message)" :source="messageText(message)" variant="chat" />
-          <div v-else class="pa-thinking"><i></i><i></i><i></i><span>正在阅读作品并形成回答</span></div>
+          <div v-else-if="activity && ['queued', 'running'].includes(activity.status) && activityMessageIndex === index" class="pa-thinking"><i></i><i></i><i></i><span>正在阅读作品并形成回答</span></div>
+          <p v-else class="pa-history-note">{{ activity?.status === 'cancelled' ? '这次回答已停止，可以继续编辑你的想法。' : '这条记录没有回答正文。' }}</p>
+          <div v-if="messageText(message)" class="pa-message-actions"><button :title="copied === index ? '已复制' : '复制回答'" @click="copyMessage(message, index)"><Check v-if="copied === index" :size="13" /><Copy v-else :size="13" />{{ copied === index ? '已复制' : '复制' }}</button></div>
         </article>
       </template>
 
       <AgentActionGroup v-if="activity && activityMessageIndex < 0" :key="activity.jobId || activity.turnId || 'pending'" :activity="activity" />
+      <div v-if="activity?.status === 'failed'" class="pa-recovery-note" role="status"><span>这次回答未完成。可以重新连接查看已保存的进展，或编辑上方消息。</span><button @click="emit('recover')">重新连接</button></div>
 
       <button v-if="hasSession && creativePhase" class="pa-creative-live-card" :class="creativePhase" @click="emit('openLive')">
         <span class="pa-live-indicator"><Radio :size="17" /></span>
@@ -87,5 +136,8 @@ function messageText(message: ProjectAgentMessage): string {
       </button>
 
     </div>
+  </div>
+    <button v-if="!following" class="pa-jump-latest" @click="jumpToLatest"><ArrowDown :size="14" />{{ unread ? '有新内容 · 回到最新' : '回到最新' }}</button>
+    <span class="sr-only" role="status">{{ copyNotice }}</span>
   </div>
 </template>

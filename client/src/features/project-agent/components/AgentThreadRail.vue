@@ -35,6 +35,7 @@ const emit = defineEmits<{
   create: [];
   select: [sessionId: string];
   workspace: [workspace: ProjectAgentWorkspaceId];
+  command: [];
 }>();
 const query = ref("");
 const showAllSessions = ref(false);
@@ -66,17 +67,19 @@ function relativeDate(value: string): string {
 </script>
 
 <template>
-  <aside class="pa-thread-rail">
+  <aside id="studio-navigation" class="pa-thread-rail" aria-label="工作室导航">
     <div class="pa-brand"><StudioGlyph class="pa-brand-glyph" /><div><strong>ArcVellum</strong><small>文学创作工作室</small></div></div>
     <button class="pa-new-thread" data-tour-id="navigation" :disabled="disabled" @click="emit('create')"><MessageSquarePlus :size="16" />新对话</button>
-    <label class="pa-thread-search"><Search :size="14" /><input v-model="query" placeholder="搜索会话" /></label>
+    <button class="pa-command-entry" @click="emit('command')"><Search :size="14" /><span>快速切换</span><kbd>⌘ / Ctrl K</kbd></button>
+    <div class="pa-navigation-scroll">
+    <label class="pa-thread-search"><Search :size="14" /><input v-model="query" aria-label="搜索会话" placeholder="搜索会话" /></label>
 
     <div class="pa-thread-section-label">最近对话</div>
     <div class="pa-thread-list">
       <button v-for="item in visibleSessions" :key="item.session_id" :class="{ active: item.session_id === activeSessionId }" :disabled="disabled" @click="emit('select', item.session_id)">
         <span class="pa-thread-dot"></span><span><strong>{{ item.title }}</strong><small>{{ projectLabels?.[item.project_root] || '作品库会话' }} · {{ relativeDate(item.updated_at) }}</small></span>
       </button>
-      <p v-if="!filteredSessions.length" class="pa-thread-empty">还没有项目对话。</p>
+      <p v-if="!filteredSessions.length" class="pa-thread-empty">{{ query ? '没有匹配的会话，试试作品名称。' : '还没有项目对话。' }}</p>
       <button v-if="hiddenSessionCount > 0" class="pa-thread-more" type="button" @click="showAllSessions = true">显示其余 {{ hiddenSessionCount }} 个对话</button>
       <button v-else-if="showAllSessions && !query.trim() && filteredSessions.length > defaultSessionLimit" class="pa-thread-more" type="button" @click="showAllSessions = false">收起历史对话</button>
     </div>
@@ -103,6 +106,7 @@ function relativeDate(value: string): string {
       <button :class="{ active: activeWorkspace === 'legal' }" @click="emit('workspace', 'legal')"><Scale :size="14" />协议与隐私</button>
     </div>
 
+    </div>
     <button class="pa-project-chip" data-tour-id="project" title="打开作品库" @click="emit('workspace', 'projects')">
       <span>{{ hasProject ? projectTitle.slice(0, 1) : '＋' }}</span><div><strong>{{ hasProject ? projectTitle : '作品库' }}</strong><small>{{ hasProject ? (projectProgress == null ? '正在读取正文进度' : `正文 ${Math.round(projectProgress)}% · 切换作品`) : '建立或打开一部作品' }}</small></div>
     </button>

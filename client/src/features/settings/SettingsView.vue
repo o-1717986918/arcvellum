@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { saveResponseFile } from "@/services/saveResponseFile";
 import { computed, onMounted, reactive, ref } from "vue";
 import { Bot, Check, CloudCog, Download, FileJson, FolderCog, Gauge, Info, KeyRound, Layers3, LoaderCircle, Palette, RefreshCw, RotateCcw, Settings, Unplug, WandSparkles } from "lucide-vue-next";
 import { projectsClient } from "@/features/projects/services/projectsClient";
@@ -244,16 +245,7 @@ async function exportDiagnostics(): Promise<void> {
   busy.value = true;
   try {
     const response = await settingsClient.exportDiagnostics();
-    if (!response.ok) throw new Error("诊断报告没有生成。 ");
-    const blob = await response.blob();
-    const disposition = response.headers.get("content-disposition") || "";
-    const name = disposition.match(/filename="?([^";]+)"?/)?.[1] || "arcvellum-diagnostic.json";
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = name;
-    anchor.click();
-    URL.revokeObjectURL(url);
+    await saveResponseFile(response, "arcvellum-diagnostic.json");
     feedback.value = "脱敏诊断报告已经导出。";
   } catch (cause) {
     feedback.value = cause instanceof Error ? cause.message : "诊断报告没有生成。";

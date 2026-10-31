@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from "vue";
 import { CheckCircle2, Download, FileText, PackageOpen, RefreshCw, ShieldCheck } from "lucide-vue-next";
 import { deliveryClient } from "@/features/delivery/services/deliveryClient";
 import { deliveryReadiness } from "@/features/delivery/deliveryReadiness";
+import { downloadDelivery } from "./downloadDelivery";
 import { workflowClient } from "@/features/workflow/services/workflowClient";
 import { asList, displayValue } from "@/services/presentation";
 import { readCreativeRuntime } from "@/services/runtimePreference";
@@ -12,6 +13,8 @@ const store = useAppStore();
 const preparing = ref(false);
 const snapshotting = ref(false);
 const message = ref("");
+const downloading = ref("");
+const failed = ref(false);
 const ready = computed(() => store.delivery?.status === "ready");
 const blockers = computed(() => asList<Record<string, unknown>>(store.delivery?.blockers));
 const incompleteIntegrityChecks = computed(() => {
@@ -34,8 +37,17 @@ function refreshDelivery(): void {
 
 onMounted(refreshDelivery);
 
-function downloadUrl(path: string): string {
-  return deliveryClient.downloadUrl(store.currentProjectPath, path);
+async function downloadFile(path: string, name?: string): Promise<void> {
+  downloading.value = path;
+  message.value = "";
+  failed.value = false;
+  try {
+    await downloadDelivery(store.currentProjectPath, path, name);
+    message.value = "文件已交给下载器，可以在下载记录中查看。";
+  } catch (cause) {
+    failed.value = true;
+    message.value = cause instanceof Error ? cause.message : "下载没有完成，请重试。";
+  } finally { downloading.value = ""; }
 }
 
 function fileSize(size?: number): string {
@@ -88,7 +100,7 @@ async function createSnapshot(): Promise<void> {
         </div>
         <small class="delivery-readiness-note" :class="{ blocked: !readiness.allowed }">{{ readiness.message }}</small>
         <small>未完稿也可导出当前稿；只收录已晋升正文，不代表全书正式发布。</small>
-        <small v-if="message">{{ message }}</small>
+        <small v-if="message" class="delivery-feedback" :class="{ failed }" :role="failed ? 'alert' : 'status'">{{ message }}</small>
       </div>
       <div class="delivery-seal" :class="{ ready }">
         <ShieldCheck :size="32" />
@@ -103,7 +115,7 @@ async function createSnapshot(): Promise<void> {
         <article v-for="file in store.delivery.files" :key="file.path">
           <span class="file-icon"><FileText :size="22" /></span>
           <div><strong>{{ file.name || file.path.split('/').at(-1) }}</strong><p>{{ file.source || "导出文件" }} · {{ (file.format || file.path.split('.').at(-1) || '文件').toUpperCase() }} {{ fileSize(file.size_bytes || file.size) }}</p></div>
-          <a class="icon-button download-button" :href="downloadUrl(file.path)" title="下载"><Download :size="18" /></a>
+          <button class="icon-button download-button" :disabled="Boolean(downloading)" :title="downloading === file.path ? '正在下载' : '下载'" :aria-label="`下载 ${file.name || file.path.split('/').at(-1)}`" @click="downloadFile(file.path, file.name)"><RefreshCw v-if="downloading === file.path" :size="18" class="spin" /><Download v-else :size="18" /></button>
         </article>
       </div>
       <div v-else class="delivery-empty"><PackageOpen :size="30" /><strong>还没有正式交付文件</strong><p>完成正文审查和导出路线后，文件会出现在这里。</p></div>

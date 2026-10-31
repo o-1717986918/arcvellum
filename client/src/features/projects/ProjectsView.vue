@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import StudioGlyph from "@/components/StudioGlyph.vue";
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { ArrowRight, BookOpenText, BookPlus, Check, Copy, FolderOpen, LocateFixed, ShieldCheck, Sparkles } from "lucide-vue-next";
 import { projectsClient } from "@/features/projects/services/projectsClient";
@@ -16,7 +16,7 @@ const busy = ref(false);
 const directoryBusy = ref<"create" | "open" | "">("");
 const feedback = ref("");
 const demos = ref<DemoBundleSummary[]>([]);
-const advancedPaths = ref(!DesktopBridge.isDesktop);
+const advancedPaths = ref(false);
 const manualOpenPath = ref(!DesktopBridge.isDesktop);
 const createForm = reactive({
   title: "",
@@ -30,6 +30,28 @@ const createForm = reactive({
   genre: "",
 });
 const openPath = ref(localStorage.getItem("arcvellum.openDirectory") || "");
+
+const projectQuery = ref("");
+const visibleProjects = computed(() => store.projects.filter(project =>
+  `${project.title} ${project.premise || ""} ${project.genre || ""}`.toLocaleLowerCase().includes(projectQuery.value.trim().toLocaleLowerCase())));
+const titleInput = ref<HTMLInputElement | null>(null);
+try {
+  const draft = JSON.parse(localStorage.getItem("arcvellum.project-creation-draft") || "null");
+  if (draft && typeof draft === "object") {
+    for (const key of ["title", "premise", "genre", "folder_name"] as const) if (typeof draft[key] === "string") createForm[key] = draft[key];
+    for (const key of ["target_length", "target_chapters", "target_scenes"] as const) if (Number.isFinite(draft[key])) createForm[key] = draft[key];
+    if (["novel", "script", "pseudo-record"].includes(draft.work_type)) createForm.work_type = draft.work_type;
+  }
+} catch { /* A new project can still be created without a stored draft. */ }
+watch(createForm, value => {
+  try { localStorage.setItem("arcvellum.project-creation-draft", JSON.stringify(value)); }
+  catch { feedback.value = "创建草稿暂未保存在本机，请保持页面打开。"; }
+});
+function focusNewProject(): void {
+  titleInput.value?.scrollIntoView({ block: "center", behavior: "smooth" });
+  titleInput.value?.focus({ preventScroll: true });
+}
+
 
 onMounted(async () => {
   try {
@@ -98,7 +120,9 @@ async function createProject(): Promise<void> {
       folder_name: createForm.folder_name || createForm.title,
     });
     if (!check.valid) throw new Error(check.conflicts.join(" "));
+    const submittedDraft = JSON.stringify(createForm);
     await store.createProject({ ...createForm });
+    if (JSON.stringify(createForm) === submittedDraft) localStorage.removeItem("arcvellum.project-creation-draft");
     localStorage.setItem("arcvellum.createDirectory", createForm.parent_directory);
     await router.push({ name: "project-agent", query: { new: "1" } });
   } catch (cause) {
@@ -176,7 +200,7 @@ async function copyDemoForWriting(): Promise<void> {
         <h1>你的作品</h1>
         <p>建立一部新作品，或回到已有作品继续与 Agent 交谈。</p>
       </div>
-      <StudioGlyph class="intro-emblem" />
+      <button v-if="store.projects.length" class="primary-button" @click="focusNewProject"><BookPlus :size="16" />建立新作品</button>
     </section>
 
     <p v-if="feedback" class="inline-feedback danger" role="alert">{{ feedback }}</p>
@@ -195,6 +219,20 @@ async function copyDemoForWriting(): Promise<void> {
       </div>
     </section>
 
+    <section v-if="store.projects.length" class="recent-works">
+      <header><div><span class="eyebrow">最近作品</span><h2>继续上次停下的地方</h2></div><span>{{ store.projects.length }} 部作品</span></header>
+      <label v-if="store.projects.length > 4" class="project-library-search"><span>查找作品</span><input v-model="projectQuery" placeholder="按名称、简介或类型查找" /></label>
+      <div v-if="visibleProjects.length" class="work-shelf">
+        <button v-for="project in visibleProjects" :key="project.path" class="work-spine" :class="{ current: project.path === store.currentProjectPath }" @click="continueProject(project.path)">
+          <StudioGlyph class="work-cover-mark" aria-hidden="true" /><span v-if="project.path === store.currentProjectPath" class="work-current-label">当前作品</span><span class="spine-status">{{ project.is_demo ? "授权演示 · 只读" : labelFor(project.status || "drafting") }}</span>
+          <strong>{{ project.title }}</strong>
+          <p>{{ project.premise || "尚未填写作品简介" }}</p>
+          <div><span>{{ project.demo_author || project.genre || project.work_type }}</span><span>{{ project.is_demo ? "按原作实际篇幅" : `${Math.round((project.target_length || 0) / 10000)} 万字目标` }}</span></div>
+        </button>
+      </div>
+      <div v-else class="empty-shelf">没有找到匹配的作品。试试其他名称或类型。</div>
+    </section>
+
     <section class="project-maker">
       <form class="creation-form" @submit.prevent="createProject">
         <div class="section-heading">
@@ -204,12 +242,13 @@ async function copyDemoForWriting(): Promise<void> {
 
         <label class="field field-prominent">
           <span>作品名称</span>
-          <input v-model.trim="createForm.title" required placeholder="例如：潮汐档案" autocomplete="off" />
+          <input ref="titleInput" v-model.trim="createForm.title" required placeholder="例如：潮汐档案" autocomplete="off" />
         </label>
         <label class="field">
           <span>最初创作方向</span>
           <textarea v-model.trim="createForm.premise" rows="5" placeholder="这是一部关于什么的作品？你希望读者记住什么？"></textarea>
         </label>
+        <div class="project-scale-presets" aria-label="目标篇幅预设"><span>打算写多长？</span><button v-for="preset in [{ label: '短篇 · 5 千字', value: 5000 }, { label: '中篇 · 3 万字', value: 30000 }, { label: '长篇 · 30 万字', value: 300000 }]" :key="preset.value" type="button" :aria-pressed="createForm.target_length === preset.value" @click="createForm.target_length = preset.value">{{ preset.label }}</button></div>
         <div class="field-row three">
           <label class="field"><span>类型</span><input v-model.trim="createForm.genre" placeholder="历史、悬疑、科幻……" /></label>
           <label class="field">
@@ -220,11 +259,13 @@ async function copyDemoForWriting(): Promise<void> {
           </label>
           <label class="field"><span>目标规模 · {{ targetLabel }}</span><input v-model.number="createForm.target_length" type="number" :min="TARGET_LENGTH_MIN" :step="TARGET_LENGTH_STEP" /></label>
         </div>
+        <details class="project-structure-options"><summary>章节与场景数量 <small>由 Agent 规划，也可自行指定</small></summary>
         <div class="field-row">
           <label class="field"><span>目标章数（可选）</span><input v-model.number="createForm.target_chapters" type="number" min="0" step="1" placeholder="自动规划" /></label>
           <label class="field"><span>目标场景数（可选）</span><input v-model.number="createForm.target_scenes" type="number" min="0" step="1" placeholder="自动规划" /></label>
         </div>
 
+        </details>
         <div class="directory-picker">
           <div><span>保存位置</span><strong>{{ createForm.parent_directory || "选择一个常用文件夹" }}</strong></div>
           <button v-if="DesktopBridge.isDesktop" type="button" class="secondary-button" :disabled="Boolean(directoryBusy)" @click="chooseCreateDirectory">
@@ -262,17 +303,6 @@ async function copyDemoForWriting(): Promise<void> {
       </aside>
     </section>
 
-    <section class="recent-works">
-      <header><div><span class="eyebrow">最近作品</span><h2>继续上次停下的地方</h2></div><span>{{ store.projects.length }} 部作品</span></header>
-      <div v-if="store.projects.length" class="work-shelf">
-        <button v-for="project in store.projects" :key="project.path" class="work-spine" @click="continueProject(project.path)">
-          <span class="spine-status">{{ project.is_demo ? "授权演示 · 只读" : labelFor(project.status || "drafting") }}</span>
-          <strong>{{ project.title }}</strong>
-          <p>{{ project.premise || "尚未填写作品简介" }}</p>
-          <div><span>{{ project.demo_author || project.genre || project.work_type }}</span><span>{{ project.is_demo ? "按原作实际篇幅" : `${Math.round((project.target_length || 0) / 10000)} 万字目标` }}</span></div>
-        </button>
-      </div>
-      <div v-else class="empty-shelf">第一部作品建立后，会固定在这里。</div>
-    </section>
+
   </div>
 </template>

@@ -1,3 +1,3 @@
 """Literary Engineering Studio."""
 
-__version__ = "0.99.15"
+__version__ = "0.99.16"

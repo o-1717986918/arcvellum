@@ -38,14 +38,14 @@
 | `archive` | 24 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `character-chat` | 6 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `creative-live` | 34 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
-| `delivery` | 5 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
+| `delivery` | 7 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `details` | 2 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `help` | 1 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `orrery` | 89 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
-| `project-agent` | 16 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
+| `project-agent` | 18 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `projects` | 4 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `quality` | 6 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
-| `reader` | 1 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
+| `reader` | 4 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `settings` | 11 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `spatial-os` | 2 | 只通过 feature client、共享只读合同或命令总线跨域协作 |
 | `style-atelier` | 36 | 只通过 feature client、共享只读合同或命令总线跨域协作 |

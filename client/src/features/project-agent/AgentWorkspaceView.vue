@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { KeyRound, Orbit, PanelLeft, PanelRight, Settings2, SunMoon } from "lucide-vue-next";
+import { KeyRound, Orbit, PanelLeft, PanelRight, Search, Settings2, SunMoon } from "lucide-vue-next";
 import { useRoute, useRouter } from "vue-router";
 import StudioGlyph from "@/components/StudioGlyph.vue";
 import AgentComposer from "@/features/project-agent/components/AgentComposer.vue";
@@ -11,6 +11,7 @@ import AgentThreadRail from "@/features/project-agent/components/AgentThreadRail
 import NewConversationDialog from "@/features/project-agent/components/NewConversationDialog.vue";
 import CreativeLiveSpatialWindow from "@/components/workspace/CreativeLiveSpatialWindow.vue";
 import SceneRehearsalSpatialWindow from "@/components/workspace/SceneRehearsalSpatialWindow.vue";
+import StudioCommandPalette from "@/components/workspace/StudioCommandPalette.vue";
 import { useProjectAgentSession } from "@/features/project-agent/composables/useProjectAgentSession";
 import {
   projectAgentWorkspaces,
@@ -18,7 +19,7 @@ import {
 } from "@/workspaces/projectAgentWorkspaceRegistry";
 import { asList, asRecord, describeWorkflowAction, workflowStepLabel } from "@/services/presentation";
 import { friendlyError, useAppStore } from "@/stores/app";
-import type { SpatialWindow, SpatialWindowPosition, SpatialWindowSize } from "@/types/spatialWindows";
+import { useAgentSpatialWindow } from "./composables/useAgentSpatialWindow";
 
 const store = useAppStore();
 const route = useRoute();
@@ -26,6 +27,8 @@ const router = useRouter();
 const railOpen = ref(false);
 const inspectorOpen = ref(false);
 const newConversationOpen = ref(false);
+const composer = ref<InstanceType<typeof AgentComposer> | null>(null);
+const commandOpen = ref(false);
 type AppearanceMode = "system" | "light" | "dark" | "contrast";
 const savedAppearance = localStorage.getItem("arcvellum.projectAgentTheme");
 const appearance = ref<AppearanceMode>(
@@ -36,10 +39,14 @@ const appearance = ref<AppearanceMode>(
 const systemDark = ref(false);
 const activeWorkspace = ref<ProjectAgentWorkspaceId | null>(null);
 const workspaceFullscreen = ref(false);
-const liveWindow = ref<SpatialWindow | null>(null);
-const rehearsalWindow = ref<SpatialWindow | null>(null);
+
 let colorScheme: MediaQueryList | null = null;
 const projectRoot = computed(() => store.currentProjectPath || "");
+const live = useAgentSpatialWindow(projectRoot, { id: "agent:creative-live", title: "创作现场", width: 980, height: 690, layer: 70 });
+const rehearsal = useAgentSpatialWindow(projectRoot, { id: "agent:scene-rehearsal", title: "推演观察", width: 900, height: 700, layer: 72 });
+const liveWindow = live.item, rehearsalWindow = rehearsal.item;
+const resizeLiveWindow = live.resize, moveLiveWindow = live.move, setLiveWindowMode = live.setMode;
+const resizeRehearsalWindow = rehearsal.resize, moveRehearsalWindow = rehearsal.move, setRehearsalWindowMode = rehearsal.setMode;
 const projectTitle = computed(() => store.currentProject?.title || "作品库");
 const projectRoots = computed(() => store.projects.map((project) => project.path));
 const projectLabels = computed(() => Object.fromEntries(store.projects.map((project) => [project.path, project.title])));
@@ -116,6 +123,7 @@ onMounted(() => {
   window.addEventListener("arcvellum:onboarding", returnToConversation);
   window.addEventListener("focus", recoverAgentOnForeground);
   document.addEventListener("visibilitychange", recoverAgentOnForeground);
+  window.addEventListener("keydown", workspaceKeys);
 });
 let initialSessionLoaded = false;
 watch(() => store.initialized, async (ready) => {
@@ -131,14 +139,14 @@ watch(() => store.initialized, async (ready) => {
   if (route.query.workspace === "live" || route.query.workspace === "rehearsal") openWorkspaceFromQuery(route.query.workspace);
   if (projectRoot.value && projectRoot.value === initialRoot) await store.refreshWorkspace();
   if (!store.modelCatalog) await store.loadModelCatalog().catch(() => undefined);
-  if (needsModelConnection.value && !route.query.workspace) openWorkspace("settings");
-  else if (route.query.new === "1" || (!agent.session.value && !route.query.workspace)) newConversationOpen.value = true;
+  if (route.query.new === "1") newConversationOpen.value = true;
 }, { immediate: true });
 onBeforeUnmount(() => {
   colorScheme?.removeEventListener("change", updateSystemAppearance);
   window.removeEventListener("arcvellum:onboarding", returnToConversation);
   window.removeEventListener("focus", recoverAgentOnForeground);
   document.removeEventListener("visibilitychange", recoverAgentOnForeground);
+  window.removeEventListener("keydown", workspaceKeys);
 });
 watch([projectRoot, activeWorkspace], async ([root, visibleWorkspace]) => {
   const boundRoot = agent.session.value?.project_root;
@@ -151,10 +159,6 @@ watch([projectRoot, activeWorkspace], async ([root, visibleWorkspace]) => {
     newConversationOpen.value = true;
     await router.replace({ name: "project-agent", query: { new: "1" } });
     return;
-  }
-  if (root && activeWorkspace.value === "projects" && !agent.session.value) {
-    closeWorkspace();
-    newConversationOpen.value = true;
   }
   if (root) await store.refreshWorkspace();
 });
@@ -261,85 +265,23 @@ function openWorkspace(next: ProjectAgentWorkspaceId): void {
   inspectorOpen.value = false;
 }
 
-function openLiveWindow(): boolean {
-  if (!projectRoot.value) return false;
+function prepareWindow(): void {
   railOpen.value = inspectorOpen.value = false;
   activeWorkspace.value = null;
   workspaceFullscreen.value = false;
   syncWorkspaceQuery(null);
-  if (liveWindow.value) { liveWindow.value.collapsed = false; return true; }
-  const size = { width: Math.min(980, Math.max(320, window.innerWidth - 36)), height: Math.min(690, Math.max(420, window.innerHeight - 36)) };
-  liveWindow.value = {
-    id: "agent:creative-live", kind: "observatory", title: "创作现场",
-    position: { left: Math.max(12, Math.round((window.innerWidth - size.width) / 2)), top: Math.max(12, Math.round((window.innerHeight - size.height) / 2)) },
-    size, layer: 70, collapsed: false, workspace_mode: window.innerWidth <= 760 ? "fullscreen" : "float",
-  };
-  return true;
+}
+
+function openLiveWindow(): boolean {
+  if (!projectRoot.value) return false;
+  prepareWindow();
+  return live.open();
 }
 
 function openRehearsalWindow(): boolean {
   if (!projectRoot.value) return false;
-  railOpen.value = false;
-  inspectorOpen.value = false;
-  activeWorkspace.value = null;
-  workspaceFullscreen.value = false;
-  syncWorkspaceQuery(null);
-  if (rehearsalWindow.value) { rehearsalWindow.value.collapsed = false; return true; }
-  const size = { width: Math.min(900, Math.max(320, window.innerWidth - 36)), height: Math.min(700, Math.max(420, window.innerHeight - 36)) };
-  rehearsalWindow.value = {
-    id: "agent:scene-rehearsal", kind: "observatory", title: "推演观察",
-    position: { left: Math.max(12, Math.round((window.innerWidth - size.width) / 2)), top: Math.max(12, Math.round((window.innerHeight - size.height) / 2)) },
-    size, layer: 72, collapsed: false, workspace_mode: window.innerWidth <= 760 ? "fullscreen" : "float",
-  };
-  return true;
-}
-
-function resizeLiveWindow(size: SpatialWindowSize): void {
-  if (!liveWindow.value) return;
-  liveWindow.value.size = {
-    width: Math.max(320, Math.min(size.width, window.innerWidth - 24)),
-    height: Math.max(420, Math.min(size.height, window.innerHeight - 24)),
-  };
-}
-
-function moveLiveWindow(position: SpatialWindowPosition): void {
-  if (liveWindow.value) liveWindow.value.position = position;
-}
-
-function setLiveWindowMode(mode: "float" | "fullscreen"): void {
-  const item = liveWindow.value;
-  if (!item) return;
-  if (mode === "fullscreen") item.workspace_return = { position: { ...item.position }, size: { ...item.size } };
-  else if (item.workspace_return) {
-    item.position = item.workspace_return.position;
-    item.size = item.workspace_return.size;
-    item.workspace_return = undefined;
-  }
-  item.workspace_mode = mode;
-}
-
-function resizeRehearsalWindow(size: SpatialWindowSize): void {
-  if (!rehearsalWindow.value) return;
-  rehearsalWindow.value.size = {
-    width: Math.max(320, Math.min(size.width, window.innerWidth - 24)),
-    height: Math.max(420, Math.min(size.height, window.innerHeight - 24)),
-  };
-}
-
-function moveRehearsalWindow(position: SpatialWindowPosition): void {
-  if (rehearsalWindow.value) rehearsalWindow.value.position = position;
-}
-
-function setRehearsalWindowMode(mode: "float" | "fullscreen"): void {
-  const item = rehearsalWindow.value;
-  if (!item) return;
-  if (mode === "fullscreen") item.workspace_return = { position: { ...item.position }, size: { ...item.size } };
-  else if (item.workspace_return) {
-    item.position = item.workspace_return.position;
-    item.size = item.workspace_return.size;
-    item.workspace_return = undefined;
-  }
-  item.workspace_mode = mode;
+  prepareWindow();
+  return rehearsal.open();
 }
 
 function syncWorkspaceQuery(workspace: ProjectAgentWorkspaceId | null): void {
@@ -360,6 +302,22 @@ function closeWorkspace(): void {
 
 function returnToConversation(): void {
   closeWorkspace();
+  railOpen.value = inspectorOpen.value = false;
+  window.requestAnimationFrame(() => composer.value?.focus());
+}
+
+function workspaceKeys(event: KeyboardEvent): void {
+  if (route.name !== "project-agent" || event.isComposing) return;
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+    event.preventDefault();
+    if (!newConversationOpen.value && activeWorkspace.value !== "character-chat") commandOpen.value = !commandOpen.value;
+  } else if (event.key === "Escape" && !event.defaultPrevented && !commandOpen.value && !newConversationOpen.value) {
+    if (railOpen.value || inspectorOpen.value) {
+      railOpen.value = inspectorOpen.value = false;
+      event.preventDefault();
+      window.requestAnimationFrame(() => composer.value?.focus());
+    }
+  }
 }
 
 function recoverAgentOnForeground(): void {
@@ -393,11 +351,12 @@ function recoverAgentOnForeground(): void {
       @create="newConversationOpen = true"
       @select="openHistorySession"
       @workspace="openWorkspace"
+      @command="commandOpen = true"
     />
 
     <main class="pa-workbench">
       <header class="pa-workbench-head">
-        <button class="pa-icon-button pa-rail-toggle" title="打开会话" @click="railOpen = !railOpen"><PanelLeft :size="17" /></button>
+        <button class="pa-icon-button pa-rail-toggle" title="打开会话" :aria-expanded="railOpen" aria-controls="studio-navigation" @click="railOpen = !railOpen"><PanelLeft :size="17" /></button>
         <span class="pa-agent-avatar"><StudioGlyph /></span>
         <div class="pa-conversation-title">
           <strong>{{ workspace ? (applicationWorkspace ? 'ArcVellum' : projectTitle) : (agent.session.value?.title || '与 ArcVellum 对话') }}</strong>
@@ -405,6 +364,7 @@ function recoverAgentOnForeground(): void {
         </div>
         <button v-if="sessionProject" class="pa-orrery-entry" data-tour-id="orrery" :title="`进入 ${sessionProject.title} 的星仪`" :aria-label="`进入 ${sessionProject.title} 的星仪`" @click="openOrrery"><Orbit :size="16" /><span>进入星仪</span></button>
         <span v-else class="pa-head-spacer"></span>
+        <button class="pa-icon-button pa-command-toggle" title="快速切换（Ctrl / ⌘ K）" @click="commandOpen = true"><Search :size="17" /></button>
         <label class="pa-appearance-select" title="工作台外观">
           <SunMoon :size="16" />
           <select v-model="appearance" aria-label="工作台外观">
@@ -415,18 +375,19 @@ function recoverAgentOnForeground(): void {
           </select>
         </label>
         <button class="pa-icon-button" title="设置" @click="openWorkspace('settings')"><Settings2 :size="17" /></button>
-        <button v-if="!workspace && !workspaceFullscreen" class="pa-icon-button pa-inspector-toggle" title="查看作品上下文" @click="inspectorOpen = !inspectorOpen"><PanelRight :size="17" /></button>
+        <button v-if="sessionProject && !workspace && !workspaceFullscreen" class="pa-icon-button pa-inspector-toggle" title="查看作品上下文" @click="inspectorOpen = !inspectorOpen"><PanelRight :size="17" /></button>
       </header>
 
-      <AgentSubworkspace
+      <KeepAlive :max="1"><AgentSubworkspace
         v-if="workspace"
+        :key="projectRoot"
         :workspace="workspace"
         :fullscreen="workspaceFullscreen"
-        @close="closeWorkspace"
+        @close="returnToConversation"
         @fullscreen="workspaceFullscreen = !workspaceFullscreen"
         @navigate="openWorkspace"
-      />
-      <div v-show="!workspace" class="pa-conversation-surface" style="display: contents">
+      /></KeepAlive>
+      <div v-show="!workspace" class="pa-conversation-surface">
         <div v-if="needsModelConnection" class="pa-connection-prompt" role="status"><KeyRound :size="18" /><span><strong>先连接模型，再开始创作</strong><small>阅读演示作品无需密钥；发送消息与创作需要你自己的模型服务。</small></span><button @click="openWorkspace('settings')">配置 API Key</button></div>
         <div v-if="sessionOutsideCatalog" class="pa-connection-prompt" role="status"><Orbit :size="18" /><span><strong>这段对话未关联当前作品库中的单部作品</strong><small>会话会保留原有范围，不会自动转到当前选中的作品。若原作品已移走，可在作品库中重新导入。</small></span><button @click="openProjectChooser">查看作品库</button></div>
         <AgentConversation
@@ -435,14 +396,20 @@ function recoverAgentOnForeground(): void {
           :loading="agent.loading.value"
           :omitted-count="agent.omittedMessageCount.value"
           :has-session="Boolean(agent.session.value)"
+          :session-id="agent.session.value?.session_id"
           :creative-status="creativeStatus"
           :creative-task="currentTask"
           :creative-phase="creativePhase"
-          @starter="agent.ask"
+          @starter="composer?.edit($event)"
+          @edit="composer?.edit($event)"
+          @earlier="agent.showEarlier"
+          @recover="agent.recover"
           @new-conversation="newConversationOpen = true"
           @open-live="openLiveWindow"
         />
         <AgentComposer
+          ref="composer"
+          :session-id="agent.session.value?.session_id"
           data-tour-id="advisor"
           :disabled="agent.loading.value || !agent.session.value || needsModelConnection"
           :busy="agent.sending.value"
@@ -474,6 +441,9 @@ function recoverAgentOnForeground(): void {
       @create-project="openProjectChooser"
       @close="newConversationOpen = false"
     />
+    <StudioCommandPalette v-if="commandOpen" :sessions="agent.sessions.value" :project-labels="projectLabels" :has-project="Boolean(sessionProject)"
+      @close="commandOpen = false" @workspace="openWorkspace" @session="openHistorySession" @conversation="returnToConversation"
+      @create="newConversationOpen = true" @orrery="openOrrery" />
     <CreativeLiveSpatialWindow
       v-if="liveWindow && projectRoot"
       class="pa-live-window"

@@ -25,10 +25,10 @@ describe("legacy project viewing routes", () => {
     expect(router.currentRoute.value.query.new).toBe("1");
   });
 
-  it("returns the old observatory route to the conversation with its right rail", async () => {
+  it("opens the creative live workspace from the old observatory route", async () => {
     await router.push("/observatory");
     expect(router.currentRoute.value.name).toBe("project-agent");
-    expect(router.currentRoute.value.query.workspace).toBeUndefined();
+    expect(router.currentRoute.value.query.workspace).toBe("live");
   });
 
   it("keeps the narrative orrery as a first-class mode", async () => {
@@ -36,4 +36,14 @@ describe("legacy project viewing routes", () => {
     expect(router.currentRoute.value.name).toBe("overview");
     expect(router.currentRoute.value.redirectedFrom).toBeUndefined();
   });
+});
+
+describe("workspace links", () => {
+  it.each([["reader", "reader"], ["library", "archive"], ["delivery", "delivery"], ["observatory", "live"], ["character-chat", "character-chat"]])(
+    "keeps the originating session through /%s", async (path, workspace) => {
+      await router.push(`/${path}?session=work-session&target=记录员`);
+      expect(router.currentRoute.value.name).toBe("project-agent");
+      expect(router.currentRoute.value.query).toMatchObject({ session: "work-session", workspace, target: "记录员" });
+    },
+  );
 });

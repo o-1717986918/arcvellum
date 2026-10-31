@@ -22,6 +22,8 @@ import { displayValue } from "@/services/presentation";
 import { useAppStore } from "@/stores/app";
 import { useReaderNavigationStore } from "@/stores/readerNavigation";
 import type { ReaderWindowMode } from "@/types/spatialWindows";
+import { useReaderSearch } from "@/features/reader/useReaderSearch";
+import ReaderText from "@/features/reader/ReaderText.vue";
 
 const props = withDefaults(
   defineProps<{ items?: Record<string, unknown>[]; compact?: boolean; immersive?: boolean; mode?: ReaderWindowMode }>(),
@@ -35,9 +37,12 @@ const index = ref(0);
 const localMode = ref<ReaderWindowMode>(props.mode || (props.immersive ? "immersive" : "reading"));
 const tocOpen = ref(props.immersive && !window.matchMedia?.("(max-width: 760px)")?.matches);
 const searchOpen = ref(false);
-const searchText = ref("");
-const searchResults = ref<Record<string, unknown>[]>([]);
-const searching = ref(false);
+const searchInput = ref<HTMLInputElement | null>(null);
+watch(searchOpen, async (open) => { if (open) { await nextTick(); searchInput.value?.focus(); } });
+const { searchText, searchResults, searching, searched, searchError, searchProse } = useReaderSearch(computed(() => store.currentProjectPath));
+const highlightText = ref("");
+const readerError = ref("");
+const readerNotice = ref("");
 const loading = ref(false);
 const body = ref("");
 const readingMode = ref<"section" | "continuous">((localStorage.getItem("arcvellum.reader.mode") as "section" | "continuous") || "section");
@@ -49,10 +54,13 @@ const fontSize = ref(Number(localStorage.getItem("arcvellum.reader.fontSize") ||
 const lineHeight = ref(Number(localStorage.getItem("arcvellum.reader.lineHeight") || 2));
 const theme = ref(localStorage.getItem("arcvellum.reader.theme") || "mineral");
 const followProgress = ref(localStorage.getItem("arcvellum.reader.follow") === "true");
-const bookmarks = ref<string[]>(JSON.parse(localStorage.getItem("arcvellum.reader.bookmarks") || "[]"));
+const bookmarks = ref<string[]>([]);
+const bookmarking = ref(false);
 const newUnitCount = ref(0);
 const savedPosition = ref({ unit_id: "", scroll_ratio: 0 });
 let positionTimer: number | null = null;
+let loadRevision = 0;
+let navigationRevision = 0;
 
 const manifestUnits = computed(() => (store.readerManifest?.units || []) as unknown as Record<string, unknown>[]);
 const units = computed(() => (manifestUnits.value.length ? manifestUnits.value : props.items));
@@ -75,11 +83,19 @@ watch(
   },
 );
 
-watch(currentId, (unitId) => {
+watch([currentId, () => String(current.value?.content_hash || "")], ([unitId]) => {
   readerNavigation.activate(unitId);
   void loadCurrent();
 }, { immediate: true });
-watch(() => store.currentProjectPath, (root) => { if (root) void creativeLive.connect(root); }, { immediate: true });
+watch(() => store.currentProjectPath, (root) => {
+  loadRevision += 1;
+  body.value = "";
+  loading.value = false;
+  continuousBodies.value = {};
+  bookmarks.value = [];
+  highlightText.value = "";
+  if (root) void creativeLive.connect(root);
+});
 watch([() => readerNavigation.requestSequence, () => units.value.length], () => {
   const requested = readerNavigation.requestedUnitId;
   if (!requested) return;
@@ -110,10 +126,16 @@ watch(readingMode, (value) => {
 watch(continuousUnits, () => void loadContinuous());
 
 onMounted(async () => {
+  const navigation = navigationRevision;
+  if (store.currentProjectPath) void creativeLive.connect(store.currentProjectPath);
+  const root = store.currentProjectPath;
+  try { const local = JSON.parse(localStorage.getItem(`arcvellum.reader.bookmarks.${root}`) || "[]"); bookmarks.value = Array.isArray(local) ? local.filter(item => typeof item === "string") : []; }
+  catch { bookmarks.value = []; }
   let remembered = localStorage.getItem(`arcvellum.reader.unit.${store.currentProjectPath}`) || "";
   if (store.currentProjectPath) {
     try {
       const state = await deliveryClient.readerState(store.currentProjectPath);
+      if (root !== store.currentProjectPath) return;
       savedPosition.value = state.position || savedPosition.value;
       remembered = state.position?.unit_id || remembered;
       bookmarks.value = (state.bookmarks || []).map((item) => item.unit_id);
@@ -122,8 +144,10 @@ onMounted(async () => {
     }
   }
   const requested = readerNavigation.requestedUnitId;
+  if (navigation !== navigationRevision) return;
   const restored = units.value.findIndex((unit) => String(unit.unit_id || unit.id || "") === (requested || remembered));
   if (restored >= 0) index.value = restored;
+  await loadCurrent();
   if (readingMode.value === "continuous") {
     continuousStart.value = Math.max(0, index.value - 1);
     await loadContinuous();
@@ -131,29 +155,42 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+  loadRevision += 1;
   if (positionTimer !== null) window.clearTimeout(positionTimer);
 });
 
 async function loadCurrent(): Promise<void> {
   const item = current.value;
+  const revision = ++loadRevision;
+  const root = store.currentProjectPath, id = currentId.value;
+  readerError.value = "";
   if (!item) {
     body.value = "";
+    loading.value = false;
     return;
   }
   loading.value = true;
   try {
-    body.value = item.unit_id ? await store.loadReaderUnit(String(item.unit_id)) : String(item.body || item.excerpt || "");
-    localStorage.setItem(`arcvellum.reader.unit.${store.currentProjectPath}`, currentId.value);
+    const text = item.unit_id ? await store.loadReaderUnit(String(item.unit_id)) : String(item.body || item.excerpt || "");
+    if (revision !== loadRevision || root !== store.currentProjectPath) return;
+    body.value = text;
+    localStorage.setItem(`arcvellum.reader.unit.${root}`, id);
+    loading.value = false;
     await nextTick();
+    if (revision !== loadRevision || root !== store.currentProjectPath) return;
     const localProgress = Number(localStorage.getItem(`arcvellum.reader.scroll.${store.currentProjectPath}.${currentId.value}`) || 0);
     const progress = savedPosition.value.unit_id === currentId.value ? savedPosition.value.scroll_ratio : localProgress;
     if (readerScroll.value) readerScroll.value.scrollTop = progress * Math.max(0, readerScroll.value.scrollHeight - readerScroll.value.clientHeight);
+    if (highlightText.value) readerScroll.value?.querySelector("mark")?.scrollIntoView({ block: "center" });
+  } catch (cause) {
+    if (revision === loadRevision) readerError.value = cause instanceof Error ? cause.message : "这节正文暂未读取，请重试。";
   } finally {
-    loading.value = false;
+    if (revision === loadRevision) loading.value = false;
   }
 }
 
 function goTo(target: number): void {
+  navigationRevision += 1;
   index.value = Math.max(0, Math.min(units.value.length - 1, target));
   newUnitCount.value = 0;
   if (readingMode.value === "continuous") {
@@ -177,32 +214,48 @@ function rememberScroll(): void {
   if (!element || !currentId.value) return;
   const total = Math.max(1, element.scrollHeight - element.clientHeight);
   const ratio = element.scrollTop / total;
+  const root = store.currentProjectPath, unitId = currentId.value;
   localStorage.setItem(`arcvellum.reader.scroll.${store.currentProjectPath}.${currentId.value}`, String(ratio));
   if (readingMode.value === "continuous" && element.scrollHeight - element.scrollTop - element.clientHeight < 360) void expandContinuous();
   if (positionTimer !== null) window.clearTimeout(positionTimer);
   positionTimer = window.setTimeout(() => {
-    if (!store.currentProjectPath) return;
-    void deliveryClient.saveReaderPosition(store.currentProjectPath, currentId.value, ratio);
+    if (!root) return;
+    void deliveryClient.saveReaderPosition(root, unitId, ratio).catch(() => { readerNotice.value = "阅读位置已保存在本机，稍后同步。"; });
   }, 350);
 }
 
 async function toggleBookmark(): Promise<void> {
   const id = currentId.value;
-  if (!id) return;
+  const root = store.currentProjectPath;
+  if (!id || bookmarking.value) return;
+  const previous = [...bookmarks.value];
+  bookmarking.value = true;
   bookmarks.value = isBookmarked.value ? bookmarks.value.filter((item) => item !== id) : [...bookmarks.value, id];
-  localStorage.setItem("arcvellum.reader.bookmarks", JSON.stringify(bookmarks.value));
+  localStorage.setItem(`arcvellum.reader.bookmarks.${root}`, JSON.stringify(bookmarks.value));
   if (store.currentProjectPath) {
-    await deliveryClient.setBookmark(store.currentProjectPath, id, bookmarks.value.includes(id));
+    try {
+      await deliveryClient.setBookmark(root, id, bookmarks.value.includes(id));
+      readerNotice.value = bookmarks.value.includes(id) ? "已添加书签" : "已取消书签";
+    } catch {
+      if (root === store.currentProjectPath) bookmarks.value = previous;
+      localStorage.setItem(`arcvellum.reader.bookmarks.${root}`, JSON.stringify(previous));
+      readerNotice.value = "书签没有同步成功，请再试一次。";
+    }
   }
+  bookmarking.value = false;
 }
 
 async function loadContinuous(): Promise<void> {
-  const missing = continuousUnits.value.filter((unit) => !continuousBodies.value[String(unit.unit_id || unit.id)]);
+  readerError.value = "";
+  const root = store.currentProjectPath;
+  const missing = continuousUnits.value.filter((unit) => !continuousBodies.value[unitCacheKey(unit)]);
   if (!missing.length) return;
-  const loaded = await Promise.all(
-    missing.map(async (unit) => [String(unit.unit_id || unit.id), unit.unit_id ? await store.loadReaderUnit(String(unit.unit_id)) : String(unit.body || unit.excerpt || "")] as const),
-  );
-  continuousBodies.value = { ...continuousBodies.value, ...Object.fromEntries(loaded) };
+  try {
+    const loaded = await Promise.all(
+      missing.map(async (unit) => [unitCacheKey(unit), unit.unit_id ? await store.loadReaderUnit(String(unit.unit_id)) : String(unit.body || unit.excerpt || "")] as const),
+    );
+    if (root === store.currentProjectPath) continuousBodies.value = { ...continuousBodies.value, ...Object.fromEntries(loaded) };
+  } catch (cause) { if (root === store.currentProjectPath) readerError.value = cause instanceof Error ? cause.message : "后文暂未展开，请重试。"; }
 }
 
 async function expandContinuous(): Promise<void> {
@@ -212,24 +265,17 @@ async function expandContinuous(): Promise<void> {
 }
 
 function bodyParagraphs(unit: Record<string, unknown>): string[] {
-  return String(continuousBodies.value[String(unit.unit_id || unit.id)] || "").split(/\n+/).map((item) => item.trim()).filter(Boolean);
+  return String(continuousBodies.value[unitCacheKey(unit)] || "").split(/\n+/).map((item) => item.trim()).filter(Boolean);
 }
 
-async function searchProse(): Promise<void> {
-  if (!searchText.value.trim() || !store.currentProjectPath) return;
-  searching.value = true;
-  try {
-    const result = await deliveryClient.search(store.currentProjectPath, searchText.value.trim());
-    searchResults.value = result.items || [];
-  } finally {
-    searching.value = false;
-  }
-}
+function unitCacheKey(unit: Record<string, unknown>): string { return `${unit.unit_id || unit.id}:${unit.content_hash || ""}`; }
 
 function openSearchResult(result: Record<string, unknown>): void {
+  highlightText.value = searchText.value.trim();
   const target = units.value.findIndex((unit) => String(unit.unit_id || unit.id) === String(result.unit_id));
   if (target >= 0) goTo(target);
   searchOpen.value = false;
+  void nextTick(() => readerScroll.value?.querySelector("mark")?.scrollIntoView({ block: "center" }));
 }
 
 function chapterLabel(value: unknown): string {
@@ -241,7 +287,14 @@ function chapterLabel(value: unknown): string {
 }
 
 function openCreativeLive(): void {
-  window.location.hash = "#/observatory";
+  const query = new URLSearchParams(window.location.hash.split("?")[1] || "");
+  query.set("workspace", "live");
+  window.location.hash = `/agent?${query}`;
+}
+
+function readerKeys(event: KeyboardEvent): void {
+  if (event.target instanceof Element && event.target.closest("input,textarea,select,button,[contenteditable=true]")) return;
+  if (event.key === "ArrowLeft" || event.key === "ArrowRight") { event.preventDefault(); goTo(index.value + (event.key === "ArrowLeft" ? -1 : 1)); }
 }
 </script>
 
@@ -249,8 +302,7 @@ function openCreativeLive(): void {
   <section
     class="manuscript-reader"
     :class="[{ compact, immersive: immersive || readerMode === 'immersive' }, `reader-state-${readerMode}`, `reader-theme-${theme}`]"
-    @keydown.left="goTo(index - 1)"
-    @keydown.right="goTo(index + 1)"
+    @keydown="readerKeys"
   >
     <header class="reader-header">
       <div class="reader-title-block">
@@ -264,7 +316,7 @@ function openCreativeLive(): void {
       <div class="reader-actions" v-if="current">
         <button v-if="readerMode !== 'peek'" class="icon-button" title="目录" @click="tocOpen = !tocOpen"><ListTree :size="18" /></button>
         <button v-if="readerMode !== 'peek'" class="icon-button" title="搜索正文" @click="searchOpen = !searchOpen"><Search :size="17" /></button>
-        <button v-if="readerMode !== 'peek'" class="icon-button" :title="isBookmarked ? '取消书签' : '添加书签'" @click="toggleBookmark">
+        <button v-if="readerMode !== 'peek'" class="icon-button" :disabled="bookmarking" :title="isBookmarked ? '取消书签' : '添加书签'" @click="toggleBookmark">
           <BookmarkCheck v-if="isBookmarked" :size="17" /><Bookmark v-else :size="17" />
         </button>
         <span v-if="readerMode !== 'peek'" class="reader-position">{{ index + 1 }} / {{ units.length }}</span>
@@ -332,7 +384,8 @@ function openCreativeLive(): void {
       </aside>
 
       <main ref="readerScroll" class="reader-scroll" tabindex="0" @scroll.passive="rememberScroll">
-        <div v-if="loading && readingMode === 'section'" class="reader-loading"><BookOpenText :size="24" /><span>正在展开这一节……</span></div>
+        <div v-if="readerError" class="reader-loading reader-error" role="alert"><BookOpenText :size="24" /><strong>正文暂未展开</strong><p>{{ readerError }}</p><button class="secondary-button" @click="readingMode === 'continuous' ? loadContinuous() : loadCurrent()">重新读取</button></div>
+        <div v-else-if="loading && readingMode === 'section'" class="reader-loading"><BookOpenText :size="24" /><span>正在展开这一节……</span></div>
         <div v-else-if="current && readingMode === 'continuous'" class="continuous-manuscript">
           <article
             v-for="unit in continuousUnits"
@@ -341,31 +394,34 @@ function openCreativeLive(): void {
             :style="{ fontSize: `${fontSize}px`, lineHeight }"
           >
             <h1>{{ unit.title }}</h1>
-            <p v-for="(paragraph, paragraphIndex) in bodyParagraphs(unit)" :key="paragraphIndex" :class="{ 'first-paragraph': paragraphIndex === 0 }">{{ paragraph.replace(/^#+\s*/, '') }}</p>
+            <p v-for="(paragraph, paragraphIndex) in bodyParagraphs(unit)" :key="paragraphIndex" :class="{ 'first-paragraph': paragraphIndex === 0 }"><ReaderText :text="paragraph.replace(/^#+\s*/, '')" :query="highlightText" /></p>
           </article>
           <button v-if="continuousStart + continuousCount < units.length" class="continuous-more" @click="expandContinuous">继续展开后文</button>
         </div>
         <article v-else-if="current" :style="{ fontSize: `${fontSize}px`, lineHeight }">
           <h1>{{ current.title }}</h1>
           <p v-for="(paragraph, paragraphIndex) in paragraphs" :key="paragraphIndex" :class="{ 'first-paragraph': paragraphIndex === 0 }">
-            {{ paragraph.replace(/^#+\s*/, "") }}
+            <ReaderText :text="paragraph.replace(/^#+\s*/, '')" :query="highlightText" />
           </p>
         </article>
         <div v-else class="empty-manuscript">
           <span>稿</span>
           <strong>正文会在通过审查后出现在这里</strong>
           <p>候选稿、流程记录和设定更新不会混入阅读区域。</p>
+          <button class="secondary-button" @click="openCreativeLive">去创作现场看看</button>
         </div>
       </main>
     </div>
 
-    <div v-if="searchOpen && readerMode !== 'peek'" class="reader-search-panel">
-      <header><strong>在正式正文中搜索</strong><button class="icon-button" @click="searchOpen = false"><X :size="16" /></button></header>
-      <form @submit.prevent="searchProse"><Search :size="17" /><input v-model="searchText" autofocus placeholder="输入人物、地点或一句话" /><button class="primary-button">{{ searching ? '搜索中' : '搜索' }}</button></form>
+    <p v-if="readerNotice" class="reader-feedback" role="status">{{ readerNotice }}</p>
+    <div v-if="searchOpen && readerMode !== 'peek'" class="reader-search-panel" @keydown.esc.stop="searchOpen = false">
+      <header><strong>在正式正文中搜索</strong><button class="icon-button" title="关闭搜索" @click="searchOpen = false"><X :size="16" /></button></header>
+      <form @submit.prevent="searchProse"><Search :size="17" /><input ref="searchInput" v-model="searchText" aria-label="搜索正文内容" placeholder="输入人物、地点或一句话" /><button class="primary-button" :disabled="searching || !searchText.trim()">{{ searching ? '搜索中' : '搜索' }}</button></form>
+      <p v-if="searchError" role="alert">{{ searchError }} <button @click="searchProse">重试搜索</button></p>
       <button v-for="result in searchResults" :key="String(result.unit_id)" class="reader-search-result" @click="openSearchResult(result)">
         <strong>{{ result.title }}</strong><p>{{ result.excerpt }}</p>
       </button>
-      <p v-if="searchText && !searching && !searchResults.length" class="reader-no-result">还没有找到匹配正文。</p>
+      <p v-if="searched && !searching && !searchResults.length" class="reader-no-result" role="status">没有找到「{{ searchText }}」。试试更短的词句。</p>
     </div>
   </section>
 </template>
