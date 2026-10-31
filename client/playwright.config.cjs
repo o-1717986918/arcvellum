@@ -45,7 +45,7 @@ module.exports = defineConfig({
       command: `${visualPython} -m literary_engineering_studio serve --port ${apiPort}`,
       cwd: repositoryRoot,
       url: `http://127.0.0.1:${apiPort}/application/bootstrap`,
-      reuseExistingServer: true,
+      reuseExistingServer: false,
       timeout: 120_000,
       env: {
         ...process.env,
@@ -64,7 +64,7 @@ module.exports = defineConfig({
       command: "npm run client:dev",
       cwd: repositoryRoot,
       url: `http://127.0.0.1:${clientPort}/ui/`,
-      reuseExistingServer: true,
+      reuseExistingServer: false,
       timeout: 120_000,
       env: { ...process.env, ARCVELLUM_API_ORIGIN: `http://127.0.0.1:${apiPort}`, ARCVELLUM_CLIENT_PORT: String(clientPort) },
     },
